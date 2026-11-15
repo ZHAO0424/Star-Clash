@@ -1,0 +1,12 @@
+{
+  "name": "star-orbit-duel",
+  "private": true,
+  "type": "module",
+  "description": "星轨对决 · WebXR 实时对战卡牌游戏(零依赖 Node 服务器 + 静态前端)",
+  "scripts": {
+    "start": "node server/server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

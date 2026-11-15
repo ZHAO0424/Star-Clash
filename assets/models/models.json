@@ -1,0 +1,453 @@
+{
+ "steel_infantry": {
+  "file": "steel_infantry.glb",
+  "rig": "biped",
+  "clips": [
+   "fall",
+   "hurt",
+   "idle",
+   "slash",
+   "walk"
+  ],
+  "yaw": -1.5708,
+  "weapons": [
+   {
+    "id": "steel_rifle",
+    "hand": "R",
+    "len": 0.55,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     -4,
+     -3,
+     162
+    ],
+    "aim": "forward"
+   }
+  ]
+ },
+ "steel_tank": {
+  "file": "steel_tank.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "steel_shield": {
+  "file": "steel_shield.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "steel_shield",
+    "hand": "L",
+    "len": 0.5,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     177,
+     -48,
+     176
+    ],
+    "aim": "shield"
+   }
+  ]
+ },
+ "swarm_warrior": {
+  "file": "swarm_warrior.glb",
+  "rig": "biped",
+  "clips": [
+   "fall",
+   "hurt",
+   "idle",
+   "slash",
+   "walk"
+  ],
+  "yaw": -1.5708
+ },
+ "steel_banner": {
+  "file": "steel_banner.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "steel_banner",
+    "hand": "R",
+    "len": 1.3,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     122,
+     -43,
+     3
+    ],
+    "aim": "up"
+   }
+  ]
+ },
+ "swarm_devourer": {
+  "file": "swarm_devourer.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708,
+  "note": "人形骨架套在虫子上效果差,改用静态模型 + 程序化动画"
+ },
+ "swarm_spitter": {
+  "file": "swarm_spitter.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708,
+  "note": "人形骨架套在虫子上效果差,改用静态模型 + 程序化动画"
+ },
+ "mecha_walker": {
+  "file": "mecha_walker.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy"
+ },
+ "swarm_larva": {
+  "file": "swarm_larva.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "swarm_worker": {
+  "file": "swarm_worker.glb",
+  "rig": "hexapod",
+  "clips": [
+   "preset:hexapod:walk"
+  ],
+  "yaw": -1.5708
+ },
+ "mecha_arc": {
+  "file": "mecha_arc.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy"
+ },
+ "swarm_mother": {
+  "file": "swarm_mother.glb",
+  "rig": "hexapod",
+  "clips": [
+   "preset:hexapod:walk"
+  ],
+  "yaw": -1.5708
+ },
+ "swarm_brood": {
+  "file": "swarm_brood.glb",
+  "rig": "serpentine",
+  "clips": [
+   "preset:serpentine:march"
+  ],
+  "yaw": -1.5708
+ },
+ "mecha_sniper": {
+  "file": "mecha_sniper.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "mecha_rail",
+    "hand": "R",
+    "len": 0.95,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     -67,
+     48,
+     -81
+    ],
+    "aim": "forward"
+   }
+  ]
+ },
+ "chaos_warrior": {
+  "file": "chaos_warrior.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "chaos_scythe",
+    "hand": "R",
+    "len": 1.1,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     114,
+     -48,
+     -8
+    ],
+    "aim": "up"
+   }
+  ]
+ },
+ "chaos_wraith": {
+  "file": "chaos_wraith.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy"
+ },
+ "chaos_construct": {
+  "file": "chaos_construct.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy"
+ },
+ "chaos_zealot": {
+  "file": "chaos_zealot.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "zealot_orb",
+    "fx": "orb",
+    "color": 6356848,
+    "hand": "R",
+    "len": 0.35,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     116,
+     -47,
+     -5
+    ],
+    "aim": "up"
+   }
+  ]
+ },
+ "chaos_soulreaver": {
+  "file": "chaos_soulreaver.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "chaos_staff",
+    "hand": "R",
+    "len": 1.1,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     124,
+     -42,
+     6
+    ],
+    "aim": "up"
+   }
+  ]
+ },
+ "chaos_berserker": {
+  "file": "chaos_berserker.glb",
+  "rig": "biped",
+  "clips": [
+   "walk",
+   "idle",
+   "attack",
+   "hurt",
+   "die"
+  ],
+  "yaw": 0,
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "chaos_axe",
+    "hand": "R",
+    "len": 0.5,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     108,
+     -49,
+     -16
+    ],
+    "aim": "up"
+   },
+   {
+    "id": "chaos_axe",
+    "hand": "L",
+    "len": 0.5,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     90,
+     3,
+     125
+    ],
+    "aim": "up"
+   }
+  ]
+ },
+ "steel_turret": {
+  "file": "steel_turret.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "mecha_factory": {
+  "file": "mecha_factory.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "swarm_hive": {
+  "file": "swarm_hive.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "chaos_obelisk": {
+  "file": "chaos_obelisk.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "swarm_cocoon": {
+  "file": "swarm_cocoon.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "steel_artillery": {
+  "file": "steel_artillery.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "steel_siege": {
+  "file": "steel_siege.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "mecha_drone": {
+  "file": "mecha_drone.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "mecha_sentry": {
+  "file": "mecha_sentry.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "mecha_swarmdrone": {
+  "file": "mecha_swarmdrone.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "swarm_flyer": {
+  "file": "swarm_flyer.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ },
+ "chaos_bats": {
+  "file": "chaos_bats.glb",
+  "rig": "rigid",
+  "clips": [],
+  "yaw": -1.5708
+ }
+}
