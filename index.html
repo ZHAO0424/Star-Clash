@@ -253,24 +253,26 @@
 <div id="home-screen" class="screen front-screen" style="display:none">
   <main class="home-content">
     <h1 class="brand-heading" id="home-title" tabindex="-1"><img class="brand-wordmark" alt="" hidden><span data-i18n="title">星轨对决</span></h1>
-    <div class="home-options">
-      <section class="home-quick">
-        <img id="home-portrait" alt="" hidden>
-        <div class="home-quick-copy">
-          <h2 id="home-faction"></h2>
-          <p id="home-config"></p>
-          <button class="btn primary" id="btn-quick" disabled data-i18n="quickBattle">快速开局</button>
-          <p id="first-match-home" data-i18n="firstMatchHome">首次开局会带你完成第一次部署。</p>
-        </div>
-      </section>
-      <nav class="home-nav">
-        <button class="btn" id="btn-prepare" data-i18n="battleSetup">对战准备</button>
-        <button class="btn" id="btn-home-deck" data-i18n="editDeck">编辑卡组</button>
-        <button class="btn" id="btn-home-xr" aria-describedby="xr-availability" data-i18n="xrHome">空间大厅</button>
-        <span id="xr-availability" class="xr-availability" role="status"></span>
-        <button class="btn" id="btn-codex" data-i18n="codex">图鉴</button>
-        <button class="btn" id="btn-settings" data-i18n="settings">设置</button>
-      </nav>
+    <section class="home-quick" aria-labelledby="home-faction">
+      <img id="home-faction-art" alt="" width="900" height="600" decoding="async">
+      <div class="home-quick-copy">
+        <h2 id="home-faction"></h2>
+        <p id="home-config"></p>
+      </div>
+    </section>
+    <div class="home-battle-actions">
+      <button class="btn home-action home-action-primary" id="btn-quick" disabled data-i18n="quickBattle">快速开局</button>
+      <button class="btn home-action home-action-setup" id="btn-prepare" data-i18n="battleSetup">对战准备</button>
+    </div>
+    <p id="first-match-home" data-i18n="firstMatchHome">首次开局会带你完成第一次部署。</p>
+    <nav class="home-nav">
+      <button class="btn home-action" id="btn-home-deck" data-i18n="editDeck">编辑卡组</button>
+      <button class="btn home-action" id="btn-codex" data-i18n="codex">图鉴</button>
+      <button class="btn home-action" id="btn-settings" data-i18n="settings">设置</button>
+    </nav>
+    <div class="home-space">
+      <button class="btn home-action home-action-xr" id="btn-home-xr" aria-describedby="xr-availability" data-i18n="xrHome">空间大厅</button>
+      <span id="xr-availability" class="xr-availability" role="status"></span>
     </div>
   </main>
 </div>

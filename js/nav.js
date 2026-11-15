@@ -4,7 +4,7 @@
 //   · 边成本 = 距离 × 两端逆速度倍率的平均值:裂隙里速度 ×0.5 → 成本 ×2,所以会权衡绕开还是穿过
 //   · 终点不是目标中心,而是"站在这里就能打到目标"的格子(目标在塔中心也能找到落脚点)
 //   · 静态障碍建一次;塔被摧毁、建筑卡出现 / 消失时只重建动态层
-import { MAP, wallGap, blockingWall } from './map.js';
+import { MAP, ROCK_CLEARANCE, wallGap, blockingWall } from './map.js';
 
 const STEP = 0.2;
 const CLEAR = 0.24;   // 留空:地面单位半径 0.22 + 一点余量
@@ -22,7 +22,7 @@ export class NavGrid {
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
         const k = j * this.cols + i, x = this.x0 + i * STEP, z = this.z0 + j * STEP;
-        const blocked = wallGap(x, z, map) < CLEAR || map.obstacles.some(o => Math.hypot(x - o.x, z - o.z) < o.r + CLEAR);
+        const blocked = wallGap(x, z, map) < CLEAR || map.obstacles.some(o => Math.hypot(x - o.x, z - o.z) < o.r + CLEAR + ROCK_CLEARANCE);
         this.staticBlock[k] = blocked ? 1 : 0;
         let slow = 1;
         for (const r of map.rifts) if (Math.hypot(x - r.x, z - r.z) < r.r) slow = Math.min(slow, r.slow);

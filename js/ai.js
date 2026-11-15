@@ -12,6 +12,7 @@
 //   'normal' 战略 AI 的减速版:每 ~2 秒评估一次,25% 概率随手出牌(普通难度)
 //   'basic' 旧版:每 2.5~4 秒出一张牌,只按费用挑牌(简单难度,也是强度对照)
 
+import { CARDS } from './cards.js';
 import { dist2, FIELD_W, FIELD_HALF } from './game.js';
 import { wallGap } from './map.js';
 
@@ -48,7 +49,7 @@ export class SimpleAI {
       const px = clamp(x0 + Math.cos(a) * r, -FIELD_W + 0.3, FIELD_W - 0.3);
       const pd = clamp(d0 + Math.sin(a) * r, this.game.map.DEPLOY_LINE + 0.1, FIELD_HALF - 0.5);
       const pz = this.dir * pd;
-      if (this.game.map.obstacles.every(o => Math.hypot(px - o.x, pz - o.z) >= o.r + 0.3) && wallGap(px, pz, this.game.map) >= 0.5) return { x: px, z: pz };
+      if (this.game.canDeployAt(this.who, CARDS.steel_infantry, px, pz) && wallGap(px, pz, this.game.map) >= 0.5) return { x: px, z: pz };
     }
     return { x: 0, z: this.dir * (FIELD_HALF - 1.5) };
   }

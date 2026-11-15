@@ -396,19 +396,19 @@ export class BattleScene {
     for (const o of this.map.obstacles) {
       const g = new THREE.Group();
       // 主岩 + 几块碎岩 + 一根发光晶簇
-      const main = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r * 0.85, 0), rockMat);
+      const main = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r * 0.75, 0), rockMat);
       main.scale.set(1, 0.7, 1);
       main.position.y = o.r * 0.45;
       g.add(main);
       for (let i = 0; i < 4; i++) {
         const a = i / 4 * Math.PI * 2 + o.x;
-        const r = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r * 0.32, 0), rockMat);
-        r.position.set(Math.cos(a) * o.r * 0.75, o.r * 0.18, Math.sin(a) * o.r * 0.75);
+        const r = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r * 0.20, 0), rockMat);
+        r.position.set(Math.cos(a) * o.r * 0.55, o.r * 0.12, Math.sin(a) * o.r * 0.55);
         r.rotation.set(a, a * 2, 0);
         g.add(r);
       }
-      const cr = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.18, o.r * 1.3, 5), crystalMat);
-      cr.position.set(o.r * 0.2, o.r * 1.1, -o.r * 0.1);
+      const cr = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.16, o.r * 0.75, 5), crystalMat);
+      cr.position.set(o.r * 0.2, o.r * 0.67, -o.r * 0.1);
       cr.rotation.z = -0.25;
       g.add(cr);
       g.position.set(o.x, 0, o.z);

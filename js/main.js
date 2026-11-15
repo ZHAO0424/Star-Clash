@@ -66,13 +66,6 @@ function cardElement(card, { discard = false, compact = false } = {}) {
 }
 
 // ── 主菜单 ──
-const factionPortraits = {
-  steel: 'steel_infantry',
-  mecha: 'mecha_walker',
-  swarm: 'swarm_warrior',
-  chaos: 'chaos_construct',
-};
-
 function buildMenu() {
   const stats = loadStats();
   const tot = stats.total;
@@ -100,9 +93,8 @@ function buildMenu() {
     div.style.setProperty('--fc', hex(fac.color));
     const em = emblem(fac.id);
     const fs = stats.byFaction[fac.id];
-    const portrait = cardArt(CARDS[factionPortraits[fac.id]]);
     div.innerHTML = `<span class="faction-portrait">
-      ${portrait ? `<img class="faction-unit" src="${portrait.url}" alt="">` : ''}
+      <img class="faction-key-art" src="assets/ui/factions/${fac.id}.webp" width="900" height="600" alt="" decoding="async" draggable="false">
       ${em ? `<img class="emblem" src="${em.url}" alt="">` : ''}
     </span>
     <span class="faction-name">${factionName(fac.id, fac.name)}</span>
@@ -135,9 +127,7 @@ function buildMenu() {
     difficulty: t(difficulty),
     n: deck.length,
   });
-  const portrait = cardArt(CARDS[factionPortraits[selFaction]]);
-  $('#home-portrait').hidden = !portrait;
-  if (portrait) $('#home-portrait').src = portrait.url;
+  $('#home-faction-art').src = `assets/ui/factions/${selFaction}.webp`;
   $('.home-quick').style.setProperty('--fc', hex(selected.color));
 }
 

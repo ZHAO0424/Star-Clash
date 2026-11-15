@@ -7,7 +7,7 @@
 // 机制字段说明见 cards.js 顶部
 
 import { CARDS, PRESET_DECKS, validateDeck, rollUpgrades, shuffle } from './cards.js';
-import { MAP, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour } from './map.js';
+import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour } from './map.js';
 import { NavGrid } from './nav.js';
 
 export const FIELD_W = MAP.W;           // 半宽
@@ -126,7 +126,8 @@ export class Game {
     const isB = card.type === 'building';
     // 不能放进岩石;建筑按自身半径检查,且不能与塔/核心/其他建筑卡重叠
     const margin = isB ? BUILDING_RADIUS : 0.15;
-    if (this.map.obstacles.some(o => Math.hypot(x - o.x, z - o.z) < o.r + margin)) return 'deployRock';
+    const rockMargin = card.type === 'unit' && !card.air ? UNIT_RADIUS + ROCK_CLEARANCE : margin;
+    if (this.map.obstacles.some(o => Math.hypot(x - o.x, z - o.z) < o.r + rockMargin)) return 'deployRock';
     if (wallGap(x, z, this.map) < margin) return 'deployWall';   // 分路长墙上不能部署
     if (isB) {
       if (this.structures.some(s => !s.dead && Math.hypot(x - s.x, z - s.z) < s.radius + BUILDING_RADIUS)) return 'deployOccupied';
@@ -236,7 +237,7 @@ export class Game {
       if (!card.air) {
         const q = pushOutOfWalls(px, pz, UNIT_RADIUS, this.map); if (q) { px = q.x; pz = q.z; }
         for (const o of this.map.obstacles) {   // 也别生成在岩石里
-          const d = Math.hypot(px - o.x, pz - o.z), min = o.r + UNIT_RADIUS;
+          const d = Math.hypot(px - o.x, pz - o.z), min = o.r + (card.type === 'building' ? BUILDING_RADIUS : UNIT_RADIUS + ROCK_CLEARANCE);
           if (d < min) { const k = d > 1e-4 ? min / d : 0; px = d > 1e-4 ? o.x + (px - o.x) * k : o.x + min; pz = d > 1e-4 ? o.z + (pz - o.z) * k : pz; }
         }
       }
@@ -965,7 +966,7 @@ export class Game {
         const q = pushOutOfWalls(u.x, u.z, u.radius, this.map);
         if (q) { u.x = q.x; u.z = q.z; }
         for (const o of this.map.obstacles) {
-          const d = Math.hypot(u.x - o.x, u.z - o.z), min = u.radius + o.r;
+          const d = Math.hypot(u.x - o.x, u.z - o.z), min = u.radius + o.r + (u.building ? 0 : ROCK_CLEARANCE);
           if (d < min) {
             if (d <= 1e-4) { u.x = o.x + min; continue; }   // 正好在中心:随便选个方向推出去
             u.x = o.x + (u.x - o.x) / d * min;
