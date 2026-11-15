@@ -204,6 +204,11 @@ export const ready = (async () => {
   for (const id of manifest.emblems) {
     jobs.push(loadImage(`assets/emblems/${id}.png`).then(img => img && images.set('emblem:' + id.replace('emblem_', ''), img)));
   }
+  // 首屏进度:网络慢时(如国内访问 github.io)让玩家看到在加载、加载到哪了
+  let done = 0;
+  const report = () => globalThis.dispatchEvent?.(new CustomEvent('bg-assets-progress', { detail: { done, total: jobs.length } }));
+  jobs.forEach(j => j.finally(() => { done++; report(); }));
+  report();
   await Promise.all(jobs);
   return { units: textures.size, spells: manifest.spells.length, emblems: manifest.emblems.length };
 })();

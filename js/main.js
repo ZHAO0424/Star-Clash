@@ -1255,6 +1255,10 @@ async function openXR() {
 $('#btn-xr').onclick = openXR;
 $('#btn-home-xr').onclick = openXR;
 
+addEventListener('bg-assets-progress', e => {
+  const { done, total } = e.detail;
+  if (activeScreen === '#front-loading' && total) $('#front-loading').textContent = `${t('loading')} ${Math.round(done / total * 100)}%`;
+});
 assetsReady.then(() => {
   // 主菜单背景图(只用在浏览器菜单里,不进眼镜)
   const bg = uiArt('bg_menu');
