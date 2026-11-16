@@ -29,6 +29,7 @@ function rng(seedStr) {   // mulberry32,同 props3d.js
 // ── L0:墙 ──
 // 一道墙 = 每段一个直段(三列错位柱,中列高、两侧低)+ 每个内拐点一个接头(拐角外侧补一圈柱 + 中心高柱)+ 两端收头(柱子渐低)
 function wallColumns(wall, R, out) {
+  const ROW_W = ROW + (wall.r - 0.285);   // 侧列离折线的距离随胶囊半径走(冰川的岩脊 r = 0.30)
   const segs = wallSegments(wall);
   const add = (x, z, h, rot, heat = 0, r0 = COL_R) => out.push({ x, z, R: r0 * (0.94 + R() * 0.08), h, rot: rot + Math.PI / 6 + (R() - 0.5) * 0.1,   // 尖角朝外:侧面是平的柱面,外缘更齐
     tilt: [(R() - 0.5) * 0.08, (R() - 0.5) * 0.08], heat, layer: 'wall' });
@@ -39,14 +40,14 @@ function wallColumns(wall, R, out) {
     const yaw = Math.atan2(uz, ux), N = Math.max(2, Math.ceil(L / STEP));
     for (let i = 0; i <= N; i++) for (const side of [-1, 1]) {   // 两侧柱列(含端点)
       const t = i / N * L, h = 0.22 + R() * 0.12;
-      add(s.x1 + ux * t + nx * ROW * side, s.z1 + uz * t + nz * ROW * side, h, yaw, hot());
+      add(s.x1 + ux * t + nx * ROW_W * side, s.z1 + uz * t + nz * ROW_W * side, h, yaw, hot());
     }
     for (let i = 0; i < N; i++) {   // 中列错开半格,更高:墙的脊线
       const t = (i + 0.5) / N * L, h = 0.36 + R() * 0.12;
       add(s.x1 + ux * t, s.z1 + uz * t, h, yaw, hot() * 0.7);
     }
   });
-  // 拐角接头:中心一根高柱 + 外侧沿 ROW 半径的圆弧补柱(两段的侧列在外侧会张开一个楔形缺口)
+  // 拐角接头:中心一根高柱 + 外侧沿 ROW_W 半径的圆弧补柱(两段的侧列在外侧会张开一个楔形缺口)
   for (let k = 1; k < wall.pts.length - 1; k++) {
     const [vx, vz] = wall.pts[k], a = segs[k - 1], b = segs[k];
     const a1 = Math.atan2(a.z2 - a.z1, a.x2 - a.x1), a2 = Math.atan2(b.z2 - b.z1, b.x2 - b.x1);
@@ -55,13 +56,13 @@ function wallColumns(wall, R, out) {
     while (turn < -Math.PI) turn += 2 * Math.PI;
     add(vx, vz, 0.44 + R() * 0.05, a1, 0);
     // 外侧:左转(turn>0)时外侧在右手边(法线 -1)
-    const n0 = a1 + (turn > 0 ? -Math.PI / 2 : Math.PI / 2), steps = Math.max(1, Math.ceil(Math.abs(turn) * ROW / STEP));
+    const n0 = a1 + (turn > 0 ? -Math.PI / 2 : Math.PI / 2), steps = Math.max(1, Math.ceil(Math.abs(turn) * ROW_W / STEP));
     for (let i = 1; i < steps; i++) {
       const ang = n0 + turn * i / steps;
-      add(vx + Math.cos(ang) * ROW, vz + Math.sin(ang) * ROW, 0.3 + R() * 0.08, ang);
+      add(vx + Math.cos(ang) * ROW_W, vz + Math.sin(ang) * ROW_W, 0.3 + R() * 0.08, ang);
     }
     // 内侧:两段侧列在拐点内侧的交点补一根(否则内角有个三角缺口)
-    const inA = n0 + Math.PI + turn / 2, inD = ROW / Math.cos(turn / 2);
+    const inA = n0 + Math.PI + turn / 2, inD = ROW_W / Math.cos(turn / 2);
     add(vx + Math.cos(inA) * inD, vz + Math.sin(inA) * inD, 0.26 + R() * 0.08, inA);
   }
   // 收头:端点一根 + 外侧半圆上 5 根(半径 0.14,略粗),越往外越低
@@ -204,13 +205,14 @@ function subtractRect(rects, h) {
 
 // 台地块:{ name, top, polys: [凸多边形...](取交集), lattice: 'T' };块与块可以重叠,重叠处高的盖住低的
 //   台沿(ledge)= 外框矩形 − 战场 − 河床 − 落水口,切成若干矩形;河床、落水口是台沿上低一级的块
-export function terraceBlocks(map) {
+// opt.beds:台沿上切出边河河床(只有熔岩锻炉有边河;星核 / 冰川的台沿是整块)
+export function terraceBlocks(map, { beds: withBeds = true } = {}) {
   const F = ARENA.frame, X = F.x - RIM_INSET, Z = F.z - RIM_INSET, W = map.W, H = map.HALF;
   const blocks = [];
   const add = (name, top, ...polys) => blocks.push({ name, top, polys });   // 河床块(name = 'bed')渲染时不抖高度、再压低一点,柱顶不会冒出熔岩面
   // 河床:长边台沿上的槽(左河从锻炉落下处开始,右河从锻炉台前缘开始)+ 锻炉瀑布穿过外侧窄条的缺口 + 场内熔岩河的两个出水口
   const beds = [];
-  for (const sx of [-1, 1]) {
+  if (withBeds) for (const sx of [-1, 1]) {
     const [a, b] = sx > 0 ? [BED_LO, BED_HI] : [-BED_HI, -BED_LO];
     beds.push([a, sx < 0 ? FORGE.z - 0.3 : -PLATEAU_Z, b, APRON_Z]);
     if (map.lava) {   // 出水口:河道中心线在边线处的 z(= 0)
@@ -218,7 +220,7 @@ export function terraceBlocks(map) {
       beds.push(sx > 0 ? [W, zm - 0.2, BED_LO, zm + 0.2] : [-BED_LO, zm - 0.2, -W, zm + 0.2]);
     }
   }
-  beds.push([-BENCH_X, FORGE.z - 0.3, -BED_HI, FORGE.z + 0.3]);
+  if (withBeds) beds.push([-BENCH_X, FORGE.z - 0.3, -BED_HI, FORGE.z + 0.3]);
   let ledge = subtractRect([[-X, -Z, X, APRON_Z]], [-W, -H, W, H]);
   for (const b of beds) ledge = subtractRect(ledge, b);
   for (const r of ledge) add('ledge', TIER.ledge, rectPoly(...r));
@@ -226,9 +228,9 @@ export function terraceBlocks(map) {
   // 矮台(近端,带倒角)中间也切出两条河床
   const apronOct = chamferPoly(-X, APRON_Z - APRON_IN, X, Z, 0.45);
   let apron = [[-X, APRON_Z - APRON_IN, X, Z]];
-  for (const sx of [-1, 1]) apron = subtractRect(apron, sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END]);
+  if (withBeds) for (const sx of [-1, 1]) apron = subtractRect(apron, sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END]);
   for (const r of apron) add('apron', TIER.apron, rectPoly(...r), apronOct);
-  for (const sx of [-1, 1]) add('bed', APRON_BED, rectPoly(...(sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END])));
+  if (withBeds) for (const sx of [-1, 1]) add('bed', APRON_BED, rectPoly(...(sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END])));
   for (const sx of [-1, 1]) {
     const [a, b] = sx > 0 ? [BENCH_X, X] : [-X, -BENCH_X];
     add('bench', TIER.bench, chamferPoly(a, -Z, b, BENCH_END, 0.14));
@@ -256,7 +258,7 @@ function lavaSurfaceAt(map, x, z) {
     return Math.abs(z - lavaCenterZ(L, map.W, x)) < L.half + 0.02 ? LAVA_SURFACE : null;
   }
   const ax = Math.abs(x);
-  if (ax > BED_LO && ax < BED_HI && z > (x < 0 ? FORGE.z - 0.3 : -PLATEAU_Z) && z < APRON_BED_END) return (z < APRON_Z ? LEDGE_BED : APRON_BED) + 0.008;
+  if (L && ax > BED_LO && ax < BED_HI && z > (x < 0 ? FORGE.z - 0.3 : -PLATEAU_Z) && z < APRON_BED_END) return (z < APRON_Z ? LEDGE_BED : APRON_BED) + 0.008;
   return null;
 }
 
@@ -273,7 +275,7 @@ function latticeCells(polys, R, fn) {
   const j0 = Math.floor(Math.min(...zs) / dz) - 1, j1 = Math.ceil(Math.max(...zs) / dz) + 1;
   for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) fn(i, j, i * 1.5 * R, j * dz + (i & 1 ? dz / 2 : 0));
 }
-function cutColumns(polys, { R, top, bottom, kind, seed, jitter = 0.01, skip, heat, raise, map }, out) {
+function cutColumns(polys, { R, top, bottom, kind, seed, jitter = 0.01, skip, heat, raise, raiseHeat = 0, map }, out) {
   latticeCells(polys, R, (i, j, cx, cz) => {
     let poly = hexAt(cx, cz, R);
     for (const p of polys) poly = clipPoly(poly, p);
@@ -293,13 +295,15 @@ function cutColumns(polys, { R, top, bottom, kind, seed, jitter = 0.01, skip, he
     }
     const full = n === 6 && !cut.some(Boolean);
     const h = hash2(i, j, seed);
-    const t = top + (h - 0.5) * 2 * jitter + (raise ? raise(cx, cz, full, i, j) : 0);
-    out.push({ poly, cut, glow, cx, cz, R, top: t, bottom, kind, heat: heat ? heat(cx, cz, h) : 0 });
+    const up = raise ? raise(cx, cz, full, i, j) : 0;
+    const t = top + (h - 0.5) * 2 * jitter + up;
+    out.push({ poly, cut, glow, cx, cz, R, top: t, bottom, kind, heat: heat ? heat(cx, cz, h) : up > 0 ? raiseHeat : 0 });
   });
 }
 
 // 台地 + 场内(河岸 / 岩桥 / 祭坛台)的全部切割柱
-export function cutColumnsLayout(map, blocks, keepOut) {
+// opt.raiseHeat:抬高的石柱群柱顶发光强度(星核:晶簇;熔岩 / 冰川:0)
+export function cutColumnsLayout(map, blocks, keepOut, { raiseHeat = 0 } = {}) {
   const out = [], base = ARENA.top - 0.004, F = ARENA.frame, X = F.x - RIM_INSET, Z = F.z - RIM_INSET;
   // 台地:被更高的块整个盖住的格子不生成(省三角形);部分盖住的照常生成(多出的部分藏在高块里面)
   // 石柱群:只在外圈、离边界至少一格的完整格子上抬高(不碰切面,外缘那条线保持干净);避开配景 / 轨道 / 锻炉
@@ -318,7 +322,7 @@ export function cutColumnsLayout(map, blocks, keepOut) {
     const bed = b.name === 'bed';
     cutColumns(b.polys, { R: HEX_T, top: b.top - (bed ? 0.015 : 0), jitter: bed ? 0 : 0.01, bottom: base, kind: b.name, seed: 7, map,
       skip: poly => higher.some(o => poly.every(([x, z]) => inBlock(o, x, z))),
-      raise: ['bench', 'plateau', 'apron'].includes(b.name) ? raiseFor(b.name) : null }, out);
+      raise: ['bench', 'plateau', 'apron'].includes(b.name) ? raiseFor(b.name) : null, raiseHeat }, out);
   }
   const L = map.lava;
   if (!L) return out;
@@ -417,6 +421,33 @@ export function volcanoLayout(map) {
   return { columns: dedupe(columns), cutColumns: cutColumnsLayout(map, terraces, keepOut), props, rails,
     rivers: riverPaths(), fieldRivers: fieldRiverPaths(map), riverWidth: RIVER_W, riverRibbon: BED_HI - BED_LO - 0.03, forge: FORGE, terraces };
 }
+
+// ── 星核荒原 / 冰封裂谷(2026-11-16,熔岩样板推广):同一套切割柱台地 + 墙柱套件,只换主题;没有边河 / 锻炉 ──
+//   星核:「星石台地」——砂岩色台地,外圈抬高的整格柱是发紫光的晶簇;地标 = 远端台地上的平顶山 + 方尖碑,石台上的钻机 / 货箱 / 信标
+//   冰川:「冰崖台地」——冰层色台地(浅冰蓝顶、深蓝切面),墙是深色岩芯柱带冰晶顶;地标 = 远端冰峰 + 方尖碑,石台上的雪橇 / 信标 / 雪松
+//   配景用各图已有的 Tripo 套件(按名字摆放),交战区零装饰;玩法元素(裂隙 / 冰路)不动
+const BX = (BENCH_X + ARENA.frame.x - RIM_INSET) / 2;   // 长边石台中线
+function themedLayout(map, seedStr, props, opts) {
+  const R = rng(seedStr), columns = [];
+  for (const w of map.walls) wallColumns(w, R, columns);
+  for (const o of map.obstacles) rockColumns(o, R, columns);
+  for (const rf of map.rifts) crustColumns(rf, R, columns);
+  const keepOut = props.map(p => [p.x, p.z, p.keep ?? 0.4]);
+  const terraces = terraceBlocks(map, { beds: false });
+  return { columns: dedupe(columns), cutColumns: cutColumnsLayout(map, terraces, keepOut, opts), props, rails: [], rivers: [], fieldRivers: [],
+    riverWidth: RIVER_W, forge: null, terraces, ice: map.ice ?? null };
+}
+const P = (name, x, z, rot, k, keep) => ({ name, x, z, rot, k, keep });
+export const starcoreLayout = map => themedLayout(map, 'starcore-kit', [
+  P('mesa', 4.55, -8.3, 0.4, 0.26, 0.8), P('monolith', -4.7, -8.3, 0.2, 0.5, 0.5),
+  P('drill', BX, -2.4, Math.PI / 2, 0.62, 0.5), P('crates', BX, -1.5, 0.3, 0.9), P('beacon', -BX, -4.6, 0, 0.8), P('beacon', BX, 3.2, 0, 0.8),
+  P('crates', -BX, 2.2, 1.1, 0.9), P('drill', -BX, 0.2, -Math.PI / 2, 0.62, 0.5),
+], { raiseHeat: 0.85 });
+export const glacierLayout = map => themedLayout(map, 'glacier-kit', [
+  P('icepeak', 4.5, -8.3, 0.5, 0.27, 0.8), P('obelisk', -4.7, -8.3, 0.1, 0.5, 0.5),
+  P('sled', -BX, -2.0, Math.PI / 2, 0.95), P('beacon', BX, 3.2, 0, 0.8), P('beacon', -BX, -4.6, 0, 0.8),
+  P('pine', BX, -5.4, 0, 0.5), P('pine', -BX, 4.6, 1.3, 0.45), P('hut', BX, -0.6, -Math.PI / 2, 0.55, 0.5),
+], { raiseHeat: 0 });
 
 // 去重:圆心距 < 0.35R(几乎重合)的墙柱只留先放的
 function dedupe(cols) {

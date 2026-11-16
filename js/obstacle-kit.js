@@ -10,17 +10,32 @@
 //   · 眼镜是光学透视的:黑 = 透明。玄武岩用中灰(不压成黑),熔光是主要的亮部
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { volcanoLayout, terraceTop, fieldHeight, FLOOR } from './obstacle-layout.js';
+import { volcanoLayout, starcoreLayout, glacierLayout, terraceTop, fieldHeight, FLOOR } from './obstacle-layout.js';
 import { ARENA } from './arena-dims.js';
 import { LOOK, applyEnv } from './render-look.js';
 
 // 有程序化套件的场景;这些场景不再用 props3d 的区域摆放,地形 GLB 里的 Rocks / Crystals 网格也隐藏(套件替代)
-const DRESSINGS = { volcano: volcanoLayout };
+const DRESSINGS = { volcano: volcanoLayout, starcore: starcoreLayout, glacier: glacierLayout };
 export const hasDressing = id => !!DRESSINGS[id];
 export const HIDDEN_TERRAIN_MESHES = /^(Rocks|Crystals)/;
 
 const SINK = 0.08;   // 柱子埋进地面的深度(地形起伏时底部不悬空)
 const LAVA = new THREE.Color(1.0, 0.3, 0.05);
+// 主题配色(sRGB 基色;眼镜里黑 = 透明,台地和墙都保持中高亮度):
+//   wall / crust:墙柱 / 池沿柱;glow:柱顶熔光 / 晶光 / 冰光的颜色(线性);hotBase:发光柱顶的底色;
+//   kinds:切割柱各级台地的柱顶色;cut / side:切面 / 原生柱面相对柱顶的色调
+const THEME_LOOK = {
+  volcano: { wall: [0.38, 0.35, 0.34], crust: [0.36, 0.27, 0.24], glow: [1.0, 0.3, 0.05], hotBase: [0.45, 0.1, 0.03], cut: [1.05, 1.0, 0.96], side: [0.93, 0.92, 0.95],
+    kinds: { ledge: [0.4, 0.35, 0.32], apron: [0.39, 0.34, 0.31], step: [0.42, 0.37, 0.34], bench: [0.44, 0.39, 0.35], plateau: [0.47, 0.41, 0.37],
+      bed: [0.3, 0.2, 0.16], bank: [0.36, 0.29, 0.26], bridge: [0.31, 0.25, 0.22], altar: [0.45, 0.4, 0.38] } },
+  // 星核 · 星石台地:暖砂岩色,越高越亮;墙柱 = 砂岩柱,约两成柱顶嵌紫色星晶;裂隙池沿 = 紫晶岩壳
+  starcore: { wall: [0.6, 0.47, 0.38], crust: [0.5, 0.42, 0.55], glow: [0.62, 0.25, 1.0], hotBase: [0.42, 0.22, 0.6], cut: [1.06, 0.98, 0.92], side: [0.9, 0.86, 0.86],
+    kinds: { ledge: [0.58, 0.46, 0.37], apron: [0.56, 0.45, 0.36], step: [0.6, 0.48, 0.39], bench: [0.63, 0.5, 0.4], plateau: [0.66, 0.53, 0.42] } },
+  // 冰川 · 冰崖台地:浅冰蓝柱顶、深蓝切面(冰层截面);墙柱 = 深色岩芯 + 冰晶顶(解决「白墙配白地」)
+  glacier: { wall: [0.36, 0.4, 0.5], crust: [0.55, 0.68, 0.82], glow: [0.35, 0.8, 1.0], hotBase: [0.55, 0.8, 0.95], cut: [0.82, 0.92, 1.08], side: [0.86, 0.92, 1.02],
+    kinds: { ledge: [0.76, 0.85, 0.93], apron: [0.78, 0.87, 0.95], step: [0.74, 0.84, 0.93], bench: [0.72, 0.83, 0.93], plateau: [0.82, 0.9, 0.97] } },
+};
+const lin = a => new THREE.Color().setRGB(...a, THREE.SRGBColorSpace);
 
 // 六棱柱:LatheGeometry 6 段,顶面带一圈倒角;y ∈ [0,1]、外接圆半径 1,第一个顶点在 +X
 //   顶点色:顶面亮、侧面上亮下暗(假 AO,地面交界不是一刀切)
@@ -46,21 +61,22 @@ function timeUniform(group) {
   return uTime;
 }
 
-function columnsMesh(cols, heightAt, envMap, uTime) {
+function columnsMesh(cols, heightAt, envMap, uTime, look = THEME_LOOK.volcano) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.06, flatShading: true });
   applyEnv(mat, envMap, LOOK.propEnvIntensity);
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = uTime;
-    sh.uniforms.uLava = { value: LAVA };
+    sh.uniforms.uLava = { value: new THREE.Color(...look.glow) };
+    sh.uniforms.uHotBase = { value: lin(look.hotBase) };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aHeat; varying float vHeat; varying float vTop;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeat = aHeat; vTop = step(0.999, position.y) * (1.0 - length(position.xz) / 0.88);');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime; uniform vec3 uLava; varying float vHeat; varying float vTop;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime; uniform vec3 uLava; uniform vec3 uHotBase; varying float vHeat; varying float vTop;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 float hot = vHeat * smoothstep(0.05, 0.75, vTop);
 totalEmissiveRadiance += uLava * hot * 1.35 * (0.82 + 0.18 * sin(uTime * 1.7 + vHeat * 23.0));
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.45, 0.1, 0.03), hot * 0.8);`);
+diffuseColor.rgb = mix(diffuseColor.rgb, uHotBase, hot * 0.8);`);
   };
   mat.customProgramCacheKey = () => 'hexColumn1';
   const geo = hexColumnGeometry();
@@ -75,8 +91,8 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.45, 0.1, 0.03), hot * 0.8);`);
     inst.setMatrixAt(i, m.compose(p, q, s));
     // 玄武岩:中灰偏暖,逐根轻微明暗 / 色相抖动;池沿岩壳更暖更暗(刚冷却)
     const v = 0.86 + ((i * 7919) % 97) / 97 * 0.28;
-    if (col.layer === 'crust') c.setRGB(0.36 * v, 0.27 * v, 0.24 * v, THREE.SRGBColorSpace);
-    else c.setRGB(0.38 * v, 0.35 * v, 0.34 * v, THREE.SRGBColorSpace);
+    const b = col.layer === 'crust' ? look.crust : look.wall;
+    c.setRGB(b[0] * v, b[1] * v, b[2] * v, THREE.SRGBColorSpace);
     inst.setColorAt(i, c);
     heat[i] = col.heat;
   });
@@ -222,6 +238,70 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
   return pts;
 }
 
+// ── 冰封裂谷 · 冰路:沿冰路折线的带子,逐顶点贴地;冰面着色 = 浅冰蓝 + 随视角游走的反光带 + 冰裂纹网 + 霜白边 ──
+const ICE_GLSL = /* glsl */`
+float iHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
+float iNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(iHash(i), iHash(i + vec2(1, 0)), u.x), mix(iHash(i + vec2(0, 1)), iHash(i + vec2(1, 1)), u.x), u.y);
+}
+// 冰裂纹:到最近格点的距离差(Voronoi 边)
+float iCrack(vec2 p) {
+  vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(x, y), o = vec2(iHash(i + g), iHash(i + g + 7.3));
+    float d = length(g + o - f);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return 1.0 - smoothstep(0.0, 0.06, d2 - d1);
+}`;
+function iceMesh(ice, heightAt, uTime) {
+  const geos = ice.paths.map(path => {
+    const curve = new THREE.CatmullRomCurve3(path.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal', 0.2);
+    const len = curve.getLength(), N = Math.max(80, Math.round(len / 0.05)), pos = [], uv = [], idx = [], w = ice.half + 0.03;
+    for (let i = 0; i <= N; i++) {
+      const p = curve.getPointAt(i / N), d = curve.getTangentAt(i / N), hl = Math.hypot(d.x, d.z) || 1;
+      for (const sd of [-1, 1]) {
+        const x = p.x - d.z / hl * w * sd, z = p.z + d.x / hl * w * sd;
+        pos.push(x, heightAt(x, z) + 0.012, z);
+        uv.push(i / N * len, sd < 0 ? 0 : 1);
+      }
+      if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    return g;
+  });
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime }, transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; varying vec3 vV;
+void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vW = position; vV = cameraPosition - wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
+    fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv; varying vec3 vW; varying vec3 vV;
+${ICE_GLSL}
+void main() {
+  float edge = min(vUv.y, 1.0 - vUv.y);
+  float a = smoothstep(0.0, 0.08, edge);
+  vec3 base = vec3(0.26, 0.6, 0.95);                                     // 线性:sRGB ≈ (0.55, 0.8, 0.98),比雪地更蓝
+  float n = iNoise(vW.xz * 3.0);
+  float crack = iCrack(vW.xz * 2.6) * 0.8 + iCrack(vW.xz * 6.5) * 0.35;
+  vec3 v = normalize(vV);
+  float sheen = pow(max(0.0, 1.0 - abs(fract(dot(vW.xz, vec2(0.6, 0.8)) * 0.35 + v.x * 0.6 + v.z * 0.4 + uTime * 0.03) * 2.0 - 1.0)), 6.0);   // 反光带:随视角游走
+  vec3 c = base * (0.9 + 0.15 * n) + vec3(0.85, 0.95, 1.0) * (crack * 0.55 + sheen * 0.45);
+  c = mix(c, vec3(0.08, 0.3, 0.75), smoothstep(0.13, 0.04, edge) * 0.75);   // 深蓝描边:在白色雪地上读得出冰路的边界
+  gl_FragColor = vec4(c, 0.9 * a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+  });
+  const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+  mesh.name = 'icePaths';
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
 // ── 矿车轨道:两根铁轨 + 枕木 ──
 function railsMesh(rails, envMap) {
   const boxes = [];
@@ -314,7 +394,7 @@ float cNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(cHash(i), cHash(i + vec2(1, 0)), u.x), mix(cHash(i + vec2(0, 1)), cHash(i + vec2(1, 1)), u.x), u.y);
 }`;
-function cutColumnsMesh(cols, envMap, uTime) {
+function cutColumnsMesh(cols, envMap, uTime, look = THEME_LOOK.volcano) {
   let nv = 0;
   for (const c of cols) nv += c.poly.length * 3 + c.poly.length * 6;
   const P = new Float32Array(nv * 3), Nn = new Float32Array(nv * 3), C = new Float32Array(nv * 3), I = new Float32Array(nv * 4), Hh = new Float32Array(nv * 2);
@@ -325,7 +405,7 @@ function cutColumnsMesh(cols, envMap, uTime) {
   };
   const A = Math.sqrt(3) / 2;
   cols.forEach((c, ci) => {
-    const base = KIND_COLOR[c.kind] ?? KIND_COLOR.ledge, k = 0.88 + ((ci * 7919) % 97) / 97 * 0.24;
+    const base = look.kinds[c.kind] ?? KIND_COLOR[c.kind] ?? look.kinds.ledge, k = 0.88 + ((ci * 7919) % 97) / 97 * 0.24;
     const lift = c.kind === 'bench' || c.kind === 'plateau' || c.kind === 'apron' ? Math.min(1.15, 1 + Math.max(0, c.top - ({ bench: 0.34, plateau: 0.54, apron: 0.05 })[c.kind]) * 0.4) : 1;   // 抬高的石柱群略亮
     col.setRGB(base[0] * k * lift, base[1] * k * lift, base[2] * k * lift, THREE.SRGBColorSpace);
     const rimK = RIM_K[c.kind] ?? 1;   // 细柱(场内)柱缝收窄,岩桥读成一整块桥面而不是格栅
@@ -369,12 +449,14 @@ function cutColumnsMesh(cols, envMap, uTime) {
   applyEnv(mat, envMap, LOOK.propEnvIntensity);
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = uTime;
-    sh.uniforms.uLava = { value: LAVA };
+    sh.uniforms.uLava = { value: new THREE.Color(...look.glow) };
+    sh.uniforms.uCutTint = { value: new THREE.Vector3(...look.cut) };
+    sh.uniforms.uSideTint = { value: new THREE.Vector3(...look.side) };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aInfo; attribute vec2 aH; varying vec4 vInfo; varying vec2 vH; varying vec3 vCP; varying vec3 vCN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInfo = aInfo; vH = aH; vCP = position; vCN = normal;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime; uniform vec3 uLava; varying vec4 vInfo; varying vec2 vH; varying vec3 vCP; varying vec3 vCN;\n${CUT_GLSL}`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime; uniform vec3 uLava; uniform vec3 uCutTint; uniform vec3 uSideTint; varying vec4 vInfo; varying vec2 vH; varying vec3 vCP; varying vec3 vCN;\n${CUT_GLSL}`)
       .replace('#include <map_fragment>', `
 float isTop = step(0.6, normalize(vCN).y);
 float rim = vInfo.x, cutF = vInfo.y, u = vInfo.z;
@@ -390,7 +472,7 @@ float speck = cNoise(vec2(vCP.x + vCP.z, vCP.y) * 60.0);
 float kCut = 1.05 * (0.86 + 0.2 * speck) * (0.42 + 0.58 * edgeS) * (1.0 + 0.22 * smoothstep(0.94, 1.0, vH.x));
 float ao = mix(0.5, 1.0, smoothstep(0.0, 0.5, vH.x));
 float kk = isTop > 0.5 ? kTop : mix(kSide, kCut, cutF) * ao;
-vec3 tint = isTop > 0.5 ? vec3(1.0) : mix(vec3(0.93, 0.92, 0.95), vec3(1.05, 1.0, 0.96), cutF);
+vec3 tint = isTop > 0.5 ? vec3(1.0) : mix(uSideTint, uCutTint, cutF);
 diffuseColor.rgb *= kk * tint;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 // 切面外侧是熔岩:越靠近熔岩面越红(熔岩光打在崖壁 / 岸壁上)
@@ -471,13 +553,19 @@ export function buildDressing(sceneId, { map, heightAt, envMap }) {
   const group = new THREE.Group();
   group.name = 'obstacleKit';
   const uTime = timeUniform(group);
-  group.add(cutColumnsMesh(layout.cutColumns, envMap, uTime));
-  group.add(columnsMesh(layout.columns, surfaceAt, envMap, uTime));
+  const look = THEME_LOOK[sceneId] ?? THEME_LOOK.volcano;
+  group.add(cutColumnsMesh(layout.cutColumns, envMap, uTime, look));
+  const cols = columnsMesh(layout.columns, surfaceAt, envMap, uTime, look);
+  cols.onBeforeRender = () => { uTime.value = performance.now() / 1000; };   // 没有熔岩河的图也要推进共享时间
+  group.add(cols);
   const rivers = [...layout.rivers, ...layout.fieldRivers];
-  group.add(riverMesh(rivers, layout.riverRibbon ?? layout.riverWidth, uTime));   // 边河带子铺满河床
+  if (rivers.length) {
+    group.add(riverMesh(rivers, layout.riverRibbon ?? layout.riverWidth, uTime));
+    group.add(emberPoints(rivers, uTime));
+  }
   if (layout.fieldRivers.length) group.add(heatSheet(layout.fieldRivers, uTime));
-  group.add(emberPoints(rivers, uTime));
-  group.add(railsMesh(layout.rails, envMap));
-  group.add(forgeGroup(layout.forge, surfaceAt, envMap, uTime));
+  if (layout.ice) group.add(iceMesh(layout.ice, heightAt, uTime));
+  if (layout.rails.length) group.add(railsMesh(layout.rails, envMap));
+  if (layout.forge) group.add(forgeGroup(layout.forge, surfaceAt, envMap, uTime));
   return { group, props: layout.props, surfaceAt };
 }

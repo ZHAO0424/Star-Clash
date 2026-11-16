@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { FACTIONS, deployFxRadius, deployFxScale } from './cards.js';
 import { FIELD_W, FIELD_HALF, DEPLOY_LINE } from './game.js';
 import { t } from './i18n.js';
-import { mapForScene, wallSegments, inLava, lavaCenterZ } from './map.js';
+import { mapForScene, wallSegments, inLava, lavaCenterZ, onIce } from './map.js';
 import { unitTexture, structTexture, unitModel, structModel } from './assets.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { VFX } from './vfx.js';
@@ -204,6 +204,7 @@ function setBar(bar, hp, maxHp, viewRotation, now, { visible = true, shield = 0 
 }
 
 const BURN_TINT = 0xff4a10;   // 熔岩烧灼的单位染色
+const ICE_CHIP = new THREE.Color(0.75, 0.92, 1.0);   // 冰屑
 const EMBER_HOT = new THREE.Color(1.0, 0.55, 0.12), EMBER_RED = new THREE.Color(1.0, 0.25, 0.04);
 const DEFAULT_VIEW = Object.freeze({ yaw: 0, pitch: 0, zoom: 1, panX: 0, panZ: 0 });
 
@@ -304,6 +305,7 @@ export class BattleScene {
     this.map = map;
     this.activeLinks?.clear();
     this.damageBursts.clear();
+    this.meteorVis = null;   // 预警圈 / 星石挂在 board 上,下面清 board 时一起释放
     this.dropIns.clear();
     for (const fx of this.fx) fx.objs.forEach(o => this.drop(o));
     this.fx.length = 0;
@@ -540,6 +542,7 @@ export class BattleScene {
     this.riftPreview = null;
     this.lavaHint = this.lavaWarn = this.lavaPreview = null;
     if (this.map.lava) this.buildLavaWarn();
+    else if (this.map.ice) this.buildIceWarn();
     for (const rift of this.map.rifts) {
       const edge = ringMesh(rift.r, 0xc4a1ed, 0.65, 0.045);
       const hatching = new THREE.Mesh(new THREE.RingGeometry(rift.r * 0.82, rift.r * 0.96, 48),
@@ -594,6 +597,79 @@ export class BattleScene {
       this.board.add(m);
       this.nodeVis.core.visible = false;
     }, undefined, () => { /* 没有祭坛模型:保留程序化内核 */ });
+  }
+
+  // 星核荒原 · 陨星:按游戏状态(本地模拟或联机快照)每帧同步
+  //   预警圈:亮金色外环 + 脉动的橙色圈面(越临近越快)+ 顺时针收缩的倒计时弧;最后 1.4 秒陨星带拖尾斜着砸下来
+  //   星石:发光脉动、上下浮动的星晶(八面体 + 光晕)
+  syncMeteor(game) {
+    const M = game?.meteor;
+    if (!this.meteorVis) this.meteorVis = { warns: new Map(), shards: new Map() };
+    const vis = this.meteorVis, now = performance.now() / 1000, warnT = M?.cfg.warn ?? 3;
+    const seenW = new Set(), seenS = new Set();
+    for (const w of M?.warns ?? []) {
+      const key = w.x.toFixed(2) + ',' + w.z.toFixed(2);
+      seenW.add(key);
+      let o = vis.warns.get(key);
+      if (!o) { o = this.makeMeteorWarn(w, M.cfg.radius); vis.warns.set(key, o); }
+      const k = Math.max(0, w.left / warnT);
+      o.disk.material.opacity = 0.16 + 0.2 * Math.abs(Math.sin(now * (4 + (1 - k) * 10)));
+      o.arc.geometry.dispose();
+      o.arc.geometry = new THREE.RingGeometry(M.cfg.radius * 0.84, M.cfg.radius * 0.95, 48, 1, Math.PI / 2, Math.max(0.001, k * Math.PI * 2));
+      const fall = Math.max(0, 1 - w.left / 1.4);   // 0 → 1:最后 1.4 秒
+      o.rock.visible = o.trail.visible = fall > 0;
+      if (fall > 0) {
+        const d = (1 - fall) * 6.5;
+        o.rock.position.set(0.55 * d, o.y + 0.15 + d, 0.3 * d);
+        o.rock.rotation.set(now * 5, now * 3, 0);
+        o.trail.position.copy(o.rock.position).add(new THREE.Vector3(0.55, 1, 0.3).multiplyScalar(0.6));
+      }
+    }
+    for (const [key, o] of vis.warns) if (!seenW.has(key)) { this.drop(o.group); vis.warns.delete(key); }
+    for (const s of M?.shards ?? []) {
+      seenS.add(s.id);
+      let o = vis.shards.get(s.id);
+      if (!o) { o = this.makeShard(s); vis.shards.set(s.id, o); }
+      const fade = Math.min(1, s.left / 2);
+      o.gem.position.y = o.y + 0.3 + Math.sin(now * 2.4 + s.id) * 0.05;
+      o.gem.rotation.y = now * 1.6;
+      o.gem.material.emissiveIntensity = 0.9 + 0.5 * Math.sin(now * 5 + s.id);
+      o.halo.material.opacity = (0.35 + 0.2 * Math.sin(now * 5 + s.id)) * fade;
+      o.gem.scale.setScalar(0.6 + 0.4 * fade);
+    }
+    for (const [id, o] of vis.shards) if (!seenS.has(id)) { this.drop(o.group); vis.shards.delete(id); }
+  }
+
+  makeMeteorWarn(w, r) {
+    const group = new THREE.Group(), y = this.heightAt(w.x, w.z);
+    group.position.set(w.x, 0, w.z);
+    const ring = ringMesh(r, 0xffcf4a, 0.95, 0.07);
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+    disk.rotation.x = -Math.PI / 2;
+    const arc = new THREE.Mesh(new THREE.RingGeometry(r * 0.84, r * 0.95, 48), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
+    arc.rotation.x = -Math.PI / 2;
+    for (const m of [ring, disk, arc]) { m.position.y = y + 0.05; m.renderOrder = 7; group.add(m); }
+    ring.position.y = y + 0.06;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: 0x8a6a5a, emissive: 0xff9a40, emissiveIntensity: 1.4, flatShading: true }));
+    const trail = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.09, 1.0, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.55, 1, 0.3).normalize());
+    rock.visible = trail.visible = false;
+    group.add(rock, trail);
+    this.board.add(group);
+    return { group, ring, disk, arc, rock, trail, y };
+  }
+
+  makeShard(s) {
+    const group = new THREE.Group(), y = this.heightAt(s.x, s.z);
+    group.position.set(s.x, 0, s.z);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x6fc8ff, emissiveIntensity: 1.2, roughness: 0.2, metalness: 0.1, flatShading: true }));
+    gem.scale.y = 1.6;
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(0.32, 32), new THREE.MeshBasicMaterial({ color: 0x8fd8ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = y + 0.04;
+    group.add(gem, halo);
+    this.board.add(group);
+    return { group, gem, halo, y };
   }
 
   // 星核进度/归属表现
@@ -680,6 +756,22 @@ export class BattleScene {
     this.lavaWarn = mesh;
   }
 
+  // 冰封裂谷:拖牌时在冰路上显示两个「冰面 · 减速」标签(两条冰路各一个,中心对称)
+  buildIceWarn() {
+    const g = new THREE.Group();
+    g.visible = false;
+    for (const [x, z] of [[-3.3, 1.0], [3.3, -1.0]]) {
+      const label = boardLabel();
+      label.scale.multiplyScalar(0.9);
+      label.position.set(x, this.heightAt(x, z) + 0.42, z);
+      label.userData.setText(t('iceZone'), '#bfe9ff');
+      g.add(label);
+    }
+    g.material = { opacity: 1 };   // 和熔岩亮边共用 showLavaHint 的透明度写法
+    this.board.add(g);
+    this.lavaWarn = g;
+  }
+
   // 拖地面单位时:预览它会走的路线(9 格),第一次踩进熔岩的位置;没有返回 null。120ms 内同一张牌复用结果
   lavaAlongPreview({ x, z, card, game }) {
     const now = performance.now(), prev = this.lavaPreview;
@@ -690,7 +782,7 @@ export class BattleScene {
       const a = path[i - 1], b = path[i], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.08));
       for (let k = 1; k <= n; k++) {
         const px = a.x + (b.x - a.x) * k / n, pz = a.z + (b.z - a.z) * k / n;
-        if (inLava(this.map, px, pz)) { hit = { x: px, z: pz }; break; }
+        if (this.map.lava ? inLava(this.map, px, pz) : onIce(this.map, px, pz)) { hit = { x: px, z: pz }; break; }
       }
     }
     this.lavaPreview = { card, at: now, x, z, hit };
@@ -708,7 +800,8 @@ export class BattleScene {
     if (this.lavaHint) this.lavaHint.visible = !!hit;
     if (hit) {
       this.lavaHint.position.set(hit.x, this.heightAt(hit.x, hit.z) + 0.85, hit.z);   // 比两侧「会烧灼」标签高一截,不互相盖住
-      this.lavaHint.userData.setText(t('lavaBurnAhead', { n: this.map.lava.dps }), '#ffb27a');
+      if (this.map.lava) this.lavaHint.userData.setText(t('lavaBurnAhead', { n: this.map.lava.dps }), '#ffb27a');
+      else this.lavaHint.userData.setText(t('iceSlowAhead', { n: Math.round((1 - this.map.ice.slow) * 100) }), '#bfe9ff');
     }
   }
 
@@ -746,7 +839,7 @@ export class BattleScene {
     if (showZone) this.updateDeployMask(opts.game, opts.card);
     const ground = show && opts.valid && opts.card?.type === 'unit' && !opts.card.air;
     if (!ground) this.riftPreview = null;
-    if (this.map.lava) this.showLavaHint(opts, ground, showZone);
+    if (this.map.lava || this.map.ice) this.showLavaHint(opts, ground, showZone);
     const here = ground ? this.map.rifts.find(r => Math.hypot(opts.x - r.x, opts.z - r.z) < r.r) : null;
     const rift = here || (ground && opts.game ? this.riftAlongPreview(opts) : null);
     if (rift && !this.riftHint) {
@@ -1159,6 +1252,19 @@ export class BattleScene {
     }
   }
 
+  // 冰面:脚下溅冰屑(移动时每 0.15 秒 2 颗,贴地向后飞),身体随步伐轻微左右滑(滑行感)
+  iceSkid(u, g, gy, now, moving) {
+    const ud = g.userData, v = this.vfx;
+    if (moving) g.position.x += Math.sin(now / 140 + u.id) * 0.025;
+    if (!v || !moving || now - (ud.iceFxAt || 0) < 150) return;
+    ud.iceFxAt = now;
+    const back = (ud.moveDir ?? 0) + Math.PI;
+    for (let i = 0; i < 2; i++) {
+      const a = back + (Math.random() - 0.5) * 1.2;
+      v.glow.emit(u.x, gy + 0.04, u.z, Math.sin(a) * 0.5, 0.35 + Math.random() * 0.3, Math.cos(a) * 0.5, ICE_CHIP, 0.05 + Math.random() * 0.03, 0.45, { grav: 2.5, drag: 1 });
+    }
+  }
+
   // 熔岩烧灼:身上往上冒火星(每 0.12 秒两颗,寿命 0.6 秒),脚下偶尔溅一点火花
   burnEmbers(u, g, gy, now) {
     const ud = g.userData, v = this.vfx;
@@ -1176,7 +1282,7 @@ export class BattleScene {
   updateRiftMarker(unit, group, now) {
     const ud = group.userData;
     const inside = !unit.air && !unit.building && !unit.dead
-      && this.map.rifts.some(rift => Math.hypot(unit.x - rift.x, unit.z - rift.z) < rift.r);
+      && (this.map.rifts.some(rift => Math.hypot(unit.x - rift.x, unit.z - rift.z) < rift.r) || (!!this.map.ice && onIce(this.map, unit.x, unit.z)));
     if (inside && !ud.inRift) {
       if (!this.riftMarkerTexture) {
         const canvas = document.createElement('canvas');
@@ -1245,6 +1351,7 @@ export class BattleScene {
       g.position.set(u.x, gy, u.z);
       this.updateRiftMarker(u, g, now);
       if (u.status.burn > 0 && !u.air) this.burnEmbers(u, g, gy, now);
+      if (this.map.ice && !u.air && !u.building && onIce(this.map, u.x, u.z)) this.iceSkid(u, g, gy, now, moving);
       // 出场:弹出(带一点回弹)
       const age = (now - ud.born) / 1000;
       if (age < 0.35) {
@@ -1540,9 +1647,9 @@ export class BattleScene {
     const sprite = boardLabel(style);
     sprite.material.depthTest = true;
     sprite.scale.set(style === 'blood' ? 1.42 : 1.18, style === 'blood' ? 0.355 : 0.295, 1);
-    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : style === 'burn' ? '#ff9a4a' : '#ffdc94';
+    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : style === 'burn' ? '#ff9a4a' : style === 'mana' ? '#9fe0ff' : '#ffdc94';
     if (style === 'burn') sprite.scale.multiplyScalar(0.78);   // 烧灼跳字小一号:每 0.5 秒一跳,不抢正常伤害的读数
-    sprite.userData.setText(`−${value}`, color);
+    sprite.userData.setText(style === 'mana' ? t('manaGain', { n: value }) : `−${value}`, color);
     sprite.position.copy(position);
     const baseY = position.y;
     this.addFx([sprite], style === 'blood' ? 0.82 : 0.62, k => {
@@ -2156,6 +2263,19 @@ export class BattleScene {
           }
           break;
         }
+        case 'meteor_hit': {   // 撞击:闪光 + 两道冲击波 + 碎石 12 + 火花 14(≤ 30 颗粒子);不震屏(XR 里也一样)
+          const y = this.heightAt(ev.x, ev.z);
+          v.flash(ev.x, y + 0.3, ev.z, 0xffe6a8, 2.4, 0.3);
+          v.ring(ev.x, ev.z, 0.1, ev.r * 1.7, 0xffd070, 0.5, 0.95, 0.06);
+          v.ring(ev.x, ev.z, 0.1, ev.r * 1.1, 0xffffff, 0.3, 0.8, 0.08);
+          v.debris(ev.x, y + 0.15, ev.z, 0xc8b6a2, 12, 2.6);
+          v.sparks(ev.x, y + 0.2, ev.z, 0xffb848, 14, 2.8, 0.1, 0.45);
+          break;
+        }
+        case 'shard_pick':
+          this.combatNumber(new THREE.Vector3(ev.x, this.heightAt(ev.x, ev.z) + 0.7, ev.z), ev.amount, 'mana');
+          v.sparks(ev.x, this.heightAt(ev.x, ev.z) + 0.25, ev.z, 0x9fe0ff, 8, 1.4, 0.08, 0.4);
+          break;
         case 'hit': {
           const g = this.unitMeshes.get(ev.unit.id);
           if (ev.burn) {   // 熔岩烧灼:每跳都出一个小号橙色数字(不走 60 点的合并阈值),不闪白
