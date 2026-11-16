@@ -52,7 +52,7 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
   const me = game.side(forWho), op = game.side(other);
   const U = game.upgrade;
   return {
-    time: r2(game.time), ph: game.phase, w: V.side(game.winner), er: game.endReason || null,
+    time: r2(game.time), ph: game.phase, pl: r2(game.prepLeft ?? 0), w: V.side(game.winner), er: game.endReason || null,
     su: !!game.surge, ot: !!game.overtime, uc: game.upgradeCount, ack,
     me: { f: me.faction, m: r2(me.mana), mm: me.manaMax, hp: Math.round(me.baseHP), hpm: me.baseHPMax,
       pl: me.played, hand: me.hand.map(c => c.id), q: me.queue.map(c => c.id),
@@ -96,7 +96,7 @@ function serializeEvent(ev, V) {
 // mirror 是客户端用同样参数构造的 Game 实例,只用来承载状态和复用只读方法(canPlay、canDeployAt、crowns…),从不 tick
 export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 } = {}) {
   const g = mirror;
-  g.time = snap.time; g.phase = snap.ph; g.winner = snap.w; g.endReason = snap.er;
+  g.time = snap.time; g.phase = snap.ph; g.prepLeft = snap.pl ?? 0; g.winner = snap.w; g.endReason = snap.er;
   g.surge = snap.su; g.overtime = snap.ot; g.upgradeCount = snap.uc;
 
   const me = g.p, op = g.e;

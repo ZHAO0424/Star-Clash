@@ -28,6 +28,7 @@ export const PACE = { mana: 0.55, attack: 1.7, move: 0.7 };   // 第五轮再慢
 // ── 势力招牌机制 ──
 export const VET_TIME = 10, VET_MAX = 3, VET_BONUS = 0.2;      // 钢铁 · 老兵军衔
 export const LINK_RANGE = 2.6, LINK_SHARE = 0.4, LINK_HASTE = 0.35;   // 玛雅 · 战术网络
+export const PREP_TIME = 5;   // 开局准备阶段(秒):不回蓝、不能出牌 / 弃牌、单位不行动、计时器不走
 export const BLOOD_PER_MANA = 150, BLOOD_FLOOR = 300, BLOOD_COOLDOWN = 18;            // 混沌 · 血祭
 
 export const UPGRADE_EVERY = 20;        // 双方合计每出 20 张牌触发一次强化暂停
@@ -74,7 +75,9 @@ export class Game {
     this.structures = [];
     this.pending = [];          // 延迟生效的效果(轨道炮击等){ t, run }
     this.time = 0;
-    this.phase = 'battle';      // battle | upgrade | end
+    // prep(开局准备,opts.prep 秒,默认 PREP_TIME;新手引导传 0 跳过)| battle | upgrade | end
+    this.prepLeft = opts.prep ?? PREP_TIME;
+    this.phase = this.prepLeft > 0 ? 'prep' : 'battle';
     this.winner = null;
     this.upgrade = null;        // 强化暂停中:{ options: {p, e}, picked: {p, e}, timer }
     this.upgradeCount = 0;
@@ -719,6 +722,15 @@ export class Game {
 
   // ── 每帧 ──
   tick(dt) {
+    if (this.phase === 'prep') {   // 准备阶段:只走倒计时,其它一概不动(time 不加,3:00 计时器不走)
+      this.prepLeft -= dt;
+      if (this.prepLeft <= 0) {
+        this.prepLeft = 0;
+        this.phase = 'battle';
+        this.events.push({ type: 'battle_start' });
+      }
+      return;
+    }
     if (this.phase === 'upgrade' && this.upgrade) {
       // 超时:没选的一方自动随机
       this.upgrade.timer -= dt;

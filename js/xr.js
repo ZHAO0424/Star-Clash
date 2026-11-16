@@ -320,6 +320,14 @@ export class XRControls {
     this.anchor.add(this.errorPanel.mesh);
     this.errorUntil = 0;
 
+    // 开局倒计时:战场上方、面向用户,比手牌高(不会被手牌挡住);准备阶段显示 5…1,开战后「开战！」1 秒
+    this.countdownPanel = makePanel(0.22, 0.11, 704, 352);
+    this.countdownPanel.mesh.position.set(0, -0.30, -0.70);
+    this.countdownPanel.mesh.rotation.x = -0.25;
+    this.countdownPanel.mesh.visible = false;
+    this.ui.add(this.countdownPanel.mesh);
+    this.goUntil = 0;
+
     // 暂停提示:战场上方
     this.pausedPanel = makePanel(0.26, 0.07, 832, 224);
     this.pausedPanel.mesh.position.set(0, -0.36, -0.68);
@@ -862,11 +870,13 @@ export class XRControls {
     if (this.calibFrames > 0 && --this.calibFrames === 0) this.recenter();
 
     const game = this.cb.getGame();
-    if (this.returnGame !== game || game?.phase !== 'battle') {
+    if (this.returnGame !== game || !['battle', 'prep'].includes(game?.phase)) {
       this.resetReturningCards();
       this.returnGame = game;
     }
-    if (this.inputGame !== game || this.inputPhase !== game?.phase) {
+    // 换局 / 换阶段时清掉进行中的输入;准备 → 开战不清(准备阶段拖着的牌开战后可以直接放下)
+    const prepToBattle = this.inputGame === game && this.inputPhase === 'prep' && game?.phase === 'battle';
+    if (this.inputGame !== game || (this.inputPhase !== game?.phase && !prepToBattle)) {
       if (game && game !== this.inputGame && game.phase === 'battle') this.palmHintUntil = performance.now() + 20000;
       this.inputGame = game;
       this.inputPhase = game?.phase;
@@ -884,7 +894,7 @@ export class XRControls {
         if (!st.connected) continue;
         const ray = this.ctrlRay(st);
         if (st.grab) this.dragRay(st, ray);
-        else st.hover = game?.phase === 'battle' ? this.pick(this.cards, null, ray) : -1;
+        else st.hover = ['battle', 'prep'].includes(game?.phase) ? this.pick(this.cards, null, ray) : -1;
       }
     }
     if (inputReady) {
@@ -1193,7 +1203,7 @@ export class XRControls {
     }
     if (!st.pinched) {
       const game = this.cb.getGame();
-      st.hover = game?.phase !== 'battle' ? -1
+      st.hover = !['battle', 'prep'].includes(game?.phase) ? -1
         : st.rayActive && st.ray ? this.pick(this.cards, null, st.ray)
         : this.pick(this.cards, point, null, GRAB_RADIUS * 1.3);
     }
@@ -1290,7 +1300,7 @@ export class XRControls {
     const idx = this.pick(this.cards, point, ray);
     if (idx < 0 || (guide && game.p.hand[idx]?.type !== 'unit')) return;
     if (this.inputs.some(o => o !== st && o.grab && o.grab.idx === idx)) return;
-    if (!game.canPlay('p', idx)) { this.cb.onToast?.(t('tNoMana')); return; }
+    if (game.phase === 'battle' && !game.canPlay('p', idx)) { this.cb.onToast?.(t('tNoMana')); return; }
     this.cards[idx].returning = null;
     st.grab = { idx, id: game.p.hand[idx].id, game, hit: null, viaRay: fromHandRay };   // 记住所属对局:换局后松手不能在新局里出牌   // 记住卡牌 id:捏住期间手牌可能被快照校正而换位
   }
@@ -1363,6 +1373,11 @@ export class XRControls {
     st.grab = null;
     const p = this.cards[g.idx];
     const game = this.cb.getGame();
+    if (!cancel && this.canUseInput() && game === g.game && game?.phase === 'prep') {   // 准备阶段:松手不出牌,牌飞回并提示
+      p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
+      if (g.hit) this.cb.onToast?.(t('tPrep'));
+      return;
+    }
     if (cancel || !this.canUseInput() || game !== g.game || game?.phase !== 'battle') {
       p.mesh.position.copy(p.home);
       return;
@@ -1493,7 +1508,7 @@ export class XRControls {
 
   // ── 面板重绘 ──
   refreshPanels(game, dt) {
-    const battle = game.phase === 'battle';
+    const battle = game.phase === 'battle' || game.phase === 'prep';   // 准备阶段手牌照常显示、可以拖着预览
     const guide = battle && this.cb.getFirstMatch?.();
     this.refreshFirstMatch(guide);
     this.cardRow.visible = battle;
@@ -1516,6 +1531,7 @@ export class XRControls {
     this.endPanel.mesh.visible = game.phase === 'end';
     this.lobbyReturn.mesh.visible = this.endPanel.mesh.visible;
     this.refreshPaused(game);
+    this.refreshCountdown(game);
 
     if (battle) {
       const hover = this.inputs.find(s => s.hover >= 0 && !s.grab)?.hover ?? -1;
@@ -1554,6 +1570,28 @@ export class XRControls {
 
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) { this.hudTimer = 0.15; this.drawHUD(game); }
+  }
+
+  refreshCountdown(game) {
+    const panel = this.countdownPanel;
+    if (this.countdownGame !== game) { this.countdownGame = game; this.sawPrep = false; this.goUntil = 0; }
+    if (game.phase === 'prep') this.sawPrep = true;
+    else if (this.sawPrep && game.phase === 'battle' && !this.goUntil) this.goUntil = performance.now() + 1000;
+    const go = performance.now() < this.goUntil;
+    const text = game.phase === 'prep' ? String(Math.max(1, Math.ceil(game.prepLeft))) : go ? t('prepGo') : '';
+    panel.mesh.visible = Boolean(text);
+    if (!text || panel.key === getLang() + text) return;
+    panel.key = getLang() + text;
+    const { ctx, canvas, tex } = panel;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(38, 28, 48, 0.85)';
+    ctx.beginPath(); ctx.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 48); ctx.fill();
+    ctx.strokeStyle = '#e5b573'; ctx.lineWidth = 8; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = go ? '#ffd24a' : '#fff3de';
+    ctx.font = `900 ${go ? 150 : 230}px sans-serif`;
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 8, canvas.width - 60);
+    tex.needsUpdate = true;
   }
 
   refreshPaused(game) {

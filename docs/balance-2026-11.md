@@ -132,5 +132,5 @@
 ## 复现
 
 ```
-node tools/balance-sim.mjs 400 . all     # 钢铁对其它三家 + 全势力两两对阵(第三个参数 all)
+node tools/balance-sim.mjs 400 . all     # 钢铁对其它三家 + 全势力两两对阵(第二个参数是仓库路径,第三个参数 all)
 ```

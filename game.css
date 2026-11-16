@@ -602,3 +602,9 @@ button { touch-action: manipulation; }
 #pause-badge { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 8px 18px;
   border: 2px solid #e5b573; border-radius: 12px; background: #34283ded; color: #fff3dc; font-weight: 800; cursor: pointer; }
 #pause-badge[hidden] { display: none; }
+
+/* 开局倒计时:屏幕正中大号数字;「开战！」换金色 */
+#prep-countdown { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 45; pointer-events: none;
+  font: 900 min(22vw, 160px)/1 sans-serif; color: #fff3dc; text-shadow: 0 4px 0 #2a1729, 0 0 24px #e5b573; }
+#prep-countdown.go { color: #ffd24a; font-size: min(14vw, 110px); }
+#prep-countdown[hidden] { display: none; }

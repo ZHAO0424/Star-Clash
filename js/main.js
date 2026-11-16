@@ -520,6 +520,7 @@ function ensureScene() {
     setBoardRig: rig => { prefs.xrBoardRig = rig; },
     onPlay: (idx, x, z) => {
       if (paused) { toast(t('xrPaused')); return false; }
+      if (game().phase === 'prep') { toast(t('tPrep')); return false; }
       if (!canPlayDuringGuide(game().p.hand[idx])) return false;
       const played = session.play(idx, x, z);
       if (played) { firstDeploymentPlayed(); renderHand(); }
@@ -529,6 +530,7 @@ function ensureScene() {
     onDiscard: idx => {
       if (firstMatch) return;
       if (paused) { toast(t('xrPaused')); return; }
+      if (game().phase === 'prep') { toast(t('tPrep')); return; }
       if (session.discard(idx)) renderHand();
       else toast(game().canDiscard('p', idx) ? networkStatus() : t('tDiscardCost', { n: DISCARD_COST }));
     },
@@ -635,6 +637,7 @@ function startLocal({ guided = false } = {}) {
   beginBattle(new LocalSession({
     faction: selFaction, deck: guided ? PRESET_DECKS[selFaction] : loadDeck(selFaction),
     enemyFaction, enemyDeck: PRESET_DECKS[enemyFaction], difficulty: prefs.difficulty, sceneId: pickScene(),
+    prep: guided ? 0 : undefined,   // 首局新手引导不加开局倒计时
   }), { guided });
 }
 
@@ -665,6 +668,8 @@ function playAgain() {
 
 function backToMenu(destination = '#home-screen') {
   closeFirstMatch(false);
+  countdownShown = '';
+  showCountdown('');
   xr?.receiveRemotePose(null);
   xr?.updateRemoteAvatar(0, null);
   endDrag();
@@ -752,6 +757,7 @@ function renderHand() {
     dBtn.addEventListener('click', e => {
       e.stopPropagation();
       if (paused) { toast(t('xrPaused')); return; }
+      if (game().phase === 'prep') { toast(t('tPrep')); return; }
       if (session.discard(idx)) renderHand();
       else toast(t('tDiscardCost', { n: DISCARD_COST }));
     });
@@ -797,7 +803,7 @@ function selectCard(card) {
   detail.hidden = !card;
   detail.textContent = card ? cardDesc(card) : '';
   clearPlacementError();
-  if (card && scene && game()?.phase === 'battle') showCardPlacement(selectedCard, null);
+  if (card && scene && ['battle', 'prep'].includes(game()?.phase)) showCardPlacement(selectedCard, null);
   else scene?.showPlacement(null);
 }
 
@@ -805,8 +811,8 @@ function chooseCard(card) {
   if (selectedCard?.id === card.id) { selectCard(null); return; }
   const g = game();
   const idx = g?.p.hand.findIndex(c => c.id === card.id) ?? -1;
-  if (g?.phase !== 'battle' || idx < 0) return;
-  if (!g.canPlay('p', idx)) { toast(t('tNoMana')); return; }
+  if (!['battle', 'prep'].includes(g?.phase) || idx < 0) return;   // 准备阶段可以选牌预览,出牌时再拦
+  if (g.phase === 'battle' && !g.canPlay('p', idx)) { toast(t('tNoMana')); return; }
   selectCard(card);
 }
 $('#btn-cancel-card').onclick = () => selectCard(null);
@@ -814,8 +820,8 @@ $('#btn-cancel-card').onclick = () => selectCard(null);
 function beginDrag(e, card) {
   if (drag || e.button !== 0 || !canPlayDuringGuide(card)) return;
   const idx = game().p.hand.indexOf(card);
-  if (idx < 0 || game().phase !== 'battle') return;
-  if (!game().canPlay('p', idx)) { toast(t('tNoMana')); return; }
+  if (idx < 0 || !['battle', 'prep'].includes(game().phase)) return;   // 准备阶段可以拖牌预览,松手时提示「准备中」
+  if (game().phase === 'battle' && !game().canPlay('p', idx)) { toast(t('tNoMana')); return; }
   e.preventDefault();
   drag = { id: card.id, card, pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false, source: e.currentTarget };
 }
@@ -908,6 +914,7 @@ function showCardPlacement(placement, hit) {
 
 function playAt(placement, hit, pointer) {
   const g = game();
+  if (g?.phase === 'prep') { toast(t('tPrep')); return false; }
   if (g?.phase !== 'battle' || (firstMatch && firstMatch.step !== 'deploy')) return false;
   if (!hit) { showPlacementError('deployOutside', pointer); return false; }
   if (paused) { toast(t('xrPaused')); return false; }
@@ -937,7 +944,7 @@ addEventListener('pointermove', e => {
     }
     const reason = showCardPlacement(drag, fieldHit(e.clientX, e.clientY));
     showGhost(e.clientX, e.clientY, drag.card, reason);
-  } else if (selectedCard && e.pointerType !== 'touch' && game()?.phase === 'battle') {
+  } else if (selectedCard && e.pointerType !== 'touch' && ['battle', 'prep'].includes(game()?.phase)) {
     showCardPlacement(selectedCard, fieldHit(e.clientX, e.clientY));
   }
 });
@@ -1193,6 +1200,7 @@ function frame(now) {   // 参数不能叫 t:会遮住翻译函数 t()
     if (ev.type === 'end') showEnd(ev.winner);
   }
 
+  refreshCountdown(g);
   const presenting = scene.renderer.xr.isPresenting;
   if (presenting) xr.update(dt);
   xr.updateRemoteAvatar(dt, g);
@@ -1203,6 +1211,28 @@ function frame(now) {   // 参数不能叫 t:会遮住翻译函数 t()
   scene.update(dt);
   refreshHUD();
   scene.render();
+}
+
+// ── 开局倒计时(桌面):5、4、3、2、1(每秒一声),开战时显示「开战！」1 秒。XR 里由 xr.js 画在战场上方 ──
+let countdownShown = '', countdownTimer = null;
+function showCountdown(text) {
+  const el = $('#prep-countdown');
+  el.textContent = text;
+  el.hidden = !text;
+  el.classList.toggle('go', text === t('prepGo'));
+  clearTimeout(countdownTimer);
+  if (text === t('prepGo')) countdownTimer = setTimeout(() => { el.hidden = true; countdownShown = ''; }, 1000);
+}
+function refreshCountdown(g) {
+  if (g.phase !== 'prep') {   // 准备 → 开战:显示「开战！」1 秒(联机时客户端只看快照里的阶段变化,这里统一处理)
+    if (countdownShown && countdownShown !== 'go') { countdownShown = 'go'; sfx('upgrade'); showCountdown(t('prepGo')); }
+    return;
+  }
+  const n = String(Math.max(1, Math.ceil(g.prepLeft)));
+  if (n === countdownShown) return;
+  countdownShown = n;
+  sfx('click');
+  showCountdown(n);
 }
 
 let toastTimer = null;

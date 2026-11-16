@@ -3,7 +3,9 @@
 // 双方都是 smart AI,双方位置交替(一半钢铁在 p,一半在 e),场景固定 starcore。
 const N = Number(process.argv[2] ?? 20);
 // 第二个参数给另一份仓库(比如改前版本的 git worktree)就测那一份,用来对比改前改后
-const ROOT = process.argv[3] ? 'file:///' + process.argv[3].replace(/\\/g, '/') + '/js/' : new URL('../js/', import.meta.url).href;
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const ROOT = process.argv[3] ? pathToFileURL(resolve(process.argv[3], 'js') + '/').href : new URL('../js/', import.meta.url).href;
 const { Game } = await import(ROOT + 'game.js');
 const { SimpleAI } = await import(ROOT + 'ai.js');
 const { PRESET_DECKS, FACTIONS } = await import(ROOT + 'cards.js');

@@ -13,11 +13,12 @@ import { nameToken, saveNameToken } from './storage.js';
 const RECONNECT_MS = 15000, RECONNECT_EVERY = 1500;
 
 export class LocalSession {
-  constructor({ faction, deck, enemyFaction, enemyDeck, difficulty = 'normal', sceneId = 'starcore' }) {
+  // prep:开局准备秒数(新手引导传 0);不进 config,再来一局时恢复默认
+  constructor({ faction, deck, enemyFaction, enemyDeck, difficulty = 'normal', sceneId = 'starcore', prep }) {
     this.online = false;
     this.sceneId = sceneId;
     this.config = { faction, deck, enemyFaction, enemyDeck, difficulty, sceneId };
-    this.game = new Game(faction, enemyFaction, { p: deck, e: enemyDeck }, { sceneId });
+    this.game = new Game(faction, enemyFaction, { p: deck, e: enemyDeck }, { sceneId, prep });
     this.ai = new SimpleAI(this.game, 'e', { level: difficulty });
     this.opName = t({ basic: 'aiEasy', normal: 'aiNormal', smart: 'aiHard' }[difficulty] || 'aiNormal');
   }
