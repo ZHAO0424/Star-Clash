@@ -91,7 +91,6 @@ const glacierRidges = [
 const glacierRocks = [
   { x: -1.02, z: 2.5, r: 0.30 }, { x: 0.9, z: 1.30, r: 0.25 },
 ];
-const glacierRift = { x: 3.65, z: 0.75, r: 1.0, slow: 0.5 };
 const mirrorPoint = point => ({ ...point, x: -point.x, z: -point.z });
 const GLACIER = stretchLayout({
   ...MAP,
@@ -99,8 +98,15 @@ const GLACIER = stretchLayout({
     ...wall, pts: wall.pts.map(([x, z]) => [-x, -z]),
   }))],
   obstacles: [...glacierRocks, ...glacierRocks.map(mirrorPoint)],
-  rifts: [mirrorPoint(glacierRift), glacierRift],
+  rifts: [],   // 原来两侧各一个圆形冰缝(半径 1.0,地面 ×0.5);2026-11-16 换成下面斜插的冰路
 });
+// 冰封裂谷 · 冰路(2026-11-16,替换两个圆形冰缝):两条不规则折线带状冰面斜插过三条进攻路线,
+//   互为绕星核旋转 180° 的镜像(p / e 公平),在两侧边路中段交叉。地面单位在冰面上移速 ×0.5(和原冰缝同一强度;
+//   覆盖面积从约 6.3 增加到约 13,整体减速更多、更显眼),飞行单位不受影响。
+//   冰面不进部署区(带宽边缘 |z| ≤ 2.05 < 部署线 2.4 − 单位半径)、不压祭坛占领圈(冰面边缘离圈 ≥ 0.15)。
+//   冰面只是代价、不参与寻路(和熔岩一样):nav 不读它
+const icePathA = [[-4.8, 1.7], [-3.3, 1.0], [-2.2, 0.0], [-1.3, -1.45], [0.3, -1.75], [1.6, -1.45], [2.5, -0.4], [3.6, 0.3], [4.8, 0.2]];
+GLACIER.ice = { half: 0.3, slow: 0.5, paths: [icePathA, icePathA.map(([x, z]) => [-x, -z])] };
 // 熔岩锻炉(第三轮):两侧的圆形熔岩池(裂隙,地面减速 50%)换成一条横贯战场的熔岩河。
 //   · 河道中心线 z = amp · sin(π x / W):左右两端在边线中点落进来,绕星核旋转 180° 对称(奇函数)
 //   · 地面单位(非建筑)站在河里 → 烧灼:每 0.5 秒结算一次 dps × 0.5;离开后余烬再烧 ember 秒。飞行单位不受影响
@@ -120,6 +126,25 @@ export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ?
 
 // 熔岩河中心线的 z
 export const lavaCenterZ = (lava, W, x) => lava.amp * Math.sin(Math.PI * x / W);
+// 点到折线的距离
+function distToPolyline(pts, x, z) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1], [bx, bz] = pts[i], vx = bx - ax, vz = bz - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1)));
+    best = Math.min(best, Math.hypot(x - ax - vx * t, z - az - vz * t));
+  }
+  return best;
+}
+// 冰封裂谷:这一点在不在冰面上(地面单位的中心)
+export function onIce(map, x, z) {
+  const I = map.ice;
+  if (!I || Math.abs(x) > map.W) return false;
+  if (Math.hypot(x - map.node.x, z - map.node.z) < map.node.r) return false;
+  return I.paths.some(p => distToPolyline(p, x, z) < I.half);
+}
+export const iceDistance = (map, x, z) => Math.min(...(map.ice?.paths ?? []).map(p => distToPolyline(p, x, z)));
+
 // 这一点会不会被烧灼(地面单位的中心落在河道里、又不在祭坛 / 岩桥上)
 export function inLava(map, x, z) {
   const L = map.lava;

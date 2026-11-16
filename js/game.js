@@ -7,7 +7,7 @@
 // 机制字段说明见 cards.js 顶部
 
 import { CARDS, PRESET_DECKS, validateDeck, rollUpgrades, shuffle } from './cards.js';
-import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour, inLava } from './map.js';
+import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour, inLava, onIce } from './map.js';
 import { NavGrid } from './nav.js';
 
 export const FIELD_W = MAP.W;           // 半宽
@@ -845,6 +845,7 @@ export class Game {
         if (!u.air) {
           [dx, dz] = this.steer(u, dx, dz, len);
           for (const r of this.map.rifts) if (Math.hypot(u.x - r.x, u.z - r.z) < r.r) speed *= r.slow;
+          if (this.map.ice && onIce(this.map, u.x, u.z)) speed *= this.map.ice.slow;   // 冰封裂谷的冰路(不参与寻路,只是代价)
         }
         u.x += dx * speed * dt;
         u.z += dz * speed * dt;
