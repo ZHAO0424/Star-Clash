@@ -13,6 +13,7 @@ import { loadKit, layoutProps, buildProps as buildProps3d } from './props3d.js';
 import { buildArena, animateArena, ARENA } from './arena.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { setupLook, LOOK, applyEnv, castShadows, receiveShadows, blobShadow } from './render-look.js';
 
 const TMP_COLOR = new THREE.Color();
 const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
@@ -226,10 +227,8 @@ export class BattleScene {
     this.world = new THREE.Group();
     this.scene.add(this.world);
 
-    this.scene.add(new THREE.AmbientLight(0x8899bb, 0.7));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.4);
-    dir.position.set(4, 10, 6);
-    this.scene.add(dir);
+    // 光影基调(ACES + 天光 / 暖主光 / 冷补光 / 轮廓光 + 桌面实时阴影),见 render-look.js
+    this.look = setupLook(this.renderer, this.scene);
 
     this.terrain = null;             // 当前场景的地形(assets.loadScene 的结果;null = 平面战场)
     this.hm = null;
@@ -338,8 +337,10 @@ export class BattleScene {
       this.board.add(this.arena);
       this.terrain.scene.traverse(o => {
         if (!o.isMesh) return;
+        o.receiveShadow = true;
         for (const m of [].concat(o.material)) { m.clippingPlanes = [this.clipPlane, ...this.sideClips]; m.clipShadows = true; }
       });
+      receiveShadows(this.arena);
       this.updateClipPlanes();
       this.buildProps();
     } else this.buildFlatBoard(W, L);
@@ -574,7 +575,7 @@ export class BattleScene {
       m.scale.setScalar(k);
       // 台面(最宽处大约在模型高度的 55%)对齐地面,悬浮的岩石底部埋进地里
       m.position.set(N.x - (box.min.x + box.max.x) / 2 * k, y - (box.min.y + size.y * 0.5) * k, N.z - (box.min.z + box.max.z) / 2 * k);
-      m.traverse(o => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt.isMeshStandardMaterial) { mt.envMap = this.getModelEnv(); mt.envMapIntensity = 0.8; } });
+      m.traverse(o => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt.isMeshStandardMaterial) applyEnv(mt, this.getModelEnv()); });
       m.name = 'altar';
       this.board.add(m);
       this.nodeVis.core.visible = false;
@@ -753,6 +754,8 @@ export class BattleScene {
     const gy = this.heightAt(s.x, s.z);
     group.position.set(s.x, gy, s.z);
     this.drape(range, s.x, s.z, 0.03, gy);
+    group.add(blobShadow(s.radius * 1.45, 0.55));
+    castShadows(body); castShadows(top);
     group.userData = { body, top, bar, range, h };
     this.world.add(group);
     return group;
@@ -780,6 +783,7 @@ export class BattleScene {
     group.position.set(s.x, gy, s.z);
     this.drape(pad, s.x, s.z, 0.02, gy);
     this.drape(range, s.x, s.z, 0.03, gy);
+    group.add(blobShadow(s.radius * 1.45, 0.55));
     group.userData = { sprite, pad, bar, range, h };
     this.world.add(group);
     return group;
@@ -806,7 +810,7 @@ export class BattleScene {
     root.traverse(o => {
       if (!o.isMesh) return;
       o.userData.sharedGeo = true;
-      o.material = [].concat(o.material).map(m => { const c = m.clone(); if (c.isMeshStandardMaterial) { c.envMap = this.getModelEnv(); c.envMapIntensity = 0.85; } mats.push(c); return c; });
+      o.material = [].concat(o.material).map(m => { const c = m.clone(); applyEnv(c, this.getModelEnv()); mats.push(c); return c; });
       if (o.material.length === 1) o.material = o.material[0];
     });
     group.add(model);
@@ -829,6 +833,8 @@ export class BattleScene {
       mat.emissiveIntensity = 1;
       return { mat, base };
     });
+    group.add(blobShadow(s.radius * 1.5, 0.6));
+    castShadows(model);
     group.userData = { model, mats, emission, pad, bar, range, h };
     this.world.add(group);
     return group;
@@ -918,7 +924,7 @@ export class BattleScene {
     obj.traverse(o => {
       o.userData.ownedTexture?.dispose();
       if (!o.userData.sharedGeo) o.geometry?.dispose();   // 模型实例共用几何体,不能释放
-      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m?.dispose();
+      if (!o.userData.sharedMat) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m?.dispose();   // 圆影等共用材质不释放
     });
   }
 
@@ -1008,15 +1014,10 @@ export class BattleScene {
     }
     group.add(body);
 
-    // 飞行单位的地面影子
-    let shadow = null;
-    if (unit.air || model) {
-      shadow = new THREE.Mesh(new THREE.CircleGeometry(model && !unit.air ? 0.26 : 0.2, 20),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
-      shadow.rotation.x = -Math.PI / 2;
-      shadow.position.y = 0.02;
-      group.add(shadow);
-    }
+    // 贴地圆影(所有单位;飞行单位更小更淡,表示离地)。模型另外投桌面实时阴影
+    const shadow = blobShadow(unit.air ? unit.radius * 1.2 + 0.08 : unit.radius * 1.55 + 0.1, unit.air ? 0.32 : 0.55);
+    group.add(shadow);
+    if (!sprite) castShadows(body);
 
     // 阵营底环(蓝=玩家 红=敌方)
     const ring = ringMesh(unit.radius + 0.10, SIDE_COLOR[unit.side], 0.92, 0.055);
@@ -1283,12 +1284,12 @@ export class BattleScene {
     });
     // 单位模型单独加一层室内环境反射:只有平行光 + 环境光时模型偏暗发灰(地形不受影响)
     this.getModelEnv();
-    for (const m of mats) if (m.isMeshStandardMaterial) { m.envMap = this.modelEnv; m.envMapIntensity = 0.9; m.needsUpdate = true; }
+    for (const m of mats) if (m.isMeshStandardMaterial) { applyEnv(m, this.modelEnv); m.needsUpdate = true; }
     // 武器挂到手骨上(跟着动作挥动);材质并进 mats,受击白闪 / 死亡淡出一起处理
     for (const w of entry.weapons || []) {
       const mount = attachWeapon(root, size.y, w.spec, w.scene);
       if (mount) {
-        for (const m of mount.userData.mats) if (m.isMeshStandardMaterial) { m.envMap = this.modelEnv; m.envMapIntensity = 0.9; }
+        for (const m of mount.userData.mats) applyEnv(m, this.modelEnv);
         mats.push(...mount.userData.mats);
       }
     }
@@ -2228,6 +2229,7 @@ export class BattleScene {
     // 降临震屏:只在桌面版、只在这一帧渲染时把相机挪一下,渲染完放回(不影响视角状态)
     const k = this.shakeT > 0 && !this.renderer.xr.isPresenting ? this.shakeT / SHAKE_T : 0;
     if (k) this.camera.position.add(SHAKE_OFF.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * SHAKE_AMP * k));
+    this.look.update(this.renderer.xr.isPresenting);
     this.renderer.render(this.scene, this.camera);
     if (k) this.camera.position.sub(SHAKE_OFF);
   }

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mapForScene, wallSegments } from './map.js';
 import { ARENA } from './arena-dims.js';
+import { LOOK, applyEnv } from './render-look.js';
 
 const loader = new GLTFLoader();
 const kitCache = new Map();
@@ -143,7 +144,7 @@ export function buildProps(kit, layout, heightAt, envMap) {
   for (const [name, list] of Object.entries(byName)) {
     for (const { geometry, material } of kit[name].meshes) {
       const mat = material.clone();
-      if (envMap && mat.isMeshStandardMaterial) { mat.envMap = envMap; mat.envMapIntensity = 0.7; }
+      if (envMap) applyEnv(mat, envMap, LOOK.propEnvIntensity);
       const inst = new THREE.InstancedMesh(geometry, mat, list.length);
       list.forEach((p, i) => {
         q.setFromAxisAngle(up, p.rot);
