@@ -138,3 +138,14 @@ test('cardRowPose:在近边外侧、高出台面,正对眼睛,棋盘越高手牌
   const high = cardRowPose(eye, { y: -0.3, z: -0.209 }), low = cardRowPose(eye, { y: -0.8, z: -0.209 });
   assert.ok(high.tilt > low.tilt, '棋盘高时倾角更小(更立)');
 });
+
+test('forwardLean:贴台面不偏,越高越靠前偏,封顶 0.12m,方向沿眼→手', async () => {
+  const { forwardLean, LEAN } = await import('../js/xr-math.js');
+  const eye = { x: 0, y: 0, z: 0 }, boardY = -0.5;
+  const at = h => forwardLean(eye, { x: 0, y: boardY + h, z: -0.35 }, boardY);
+  assert.deepEqual(at(0), { x: 0, z: 0 });
+  assert.ok(at(0.05).z < 0 && at(0.1).z < at(0.05).z);          // 往前(−z)偏,越高越多
+  assert.ok(Math.abs(at(0.3).z) <= LEAN.CAP + 1e-9);
+  const side = forwardLean(eye, { x: 0.3, y: -0.4, z: -0.3 }, boardY);
+  assert.ok(Math.abs(side.x - side.z * -1) < 1e-9);               // 45° 方向:x 与 −z 等量
+});

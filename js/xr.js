@@ -21,7 +21,7 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose, forwardLean } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -173,6 +173,13 @@ export class XRControls {
       new THREE.Vector3(edgeX, edgeY, edgeZ), new THREE.Vector3(-edgeX, edgeY, edgeZ),
     ]), new THREE.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.95, depthTest: false }));
     this.rigOutline.renderOrder = 25;
+    // 近手拖牌时,手里的牌到前倾后的落点画一条细虚线:看得出"会落在那里"
+    this.dropLink = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
+      new THREE.LineDashedMaterial({ color: 0xbfefff, dashSize: 0.006, gapSize: 0.005, transparent: true, opacity: 0.8, depthTest: false }));
+    this.dropLink.renderOrder = 26;
+    this.dropLink.frustumCulled = false;
+    this.dropLink.visible = false;
+    bs.scene.add(this.dropLink);
     this.rigOutline.visible = false;
     bs.world.add(this.rigOutline);
 
@@ -904,6 +911,14 @@ export class XRControls {
     const grab = this.inputs.find(s => s.grab)?.grab;
     this.trash.mesh.material.opacity = grab ? (grab.trash ? 1 : 0.75) : 0.35;
     const card = grab && game.p.hand.find(c => c.id === grab.id);
+    this.dropLink.visible = Boolean(card && grab.hit && grab.from && !grab.viaRay);
+    if (this.dropLink.visible) {
+      const link = this.dropLink.geometry.attributes.position;
+      link.setXYZ(0, grab.from.x, grab.from.y, grab.from.z);
+      link.setXYZ(1, grab.hit.point.x, grab.hit.point.y, grab.hit.point.z);
+      link.needsUpdate = true;
+      this.dropLink.computeLineDistances();
+    }
     if (card && !grab.trash) {
       const hit = grab.hit;
       const reason = hit ? game.deployBlockReason('p', card, hit.x, hit.z) : null;
@@ -1293,7 +1308,24 @@ export class XRControls {
     const boardY = this.bs.world.getWorldPosition(new THREE.Vector3()).y;
     const h = point.y - boardY;
     g.trash = this.trash.mesh.visible && this.trash.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(point) < TRASH_RADIUS;
-    g.hit = this.snapHeal(g, (!g.trash && h > -0.05 && h < DROP_MAX_HEIGHT) ? this.bs.worldPointToField(point) : null);
+    // 落点前倾:沿"眼睛 → 手"的水平方向前推(forwardLean),每次调用平滑一点,牌本身仍跟着手
+    const lean = forwardLean(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()), point, boardY);
+    g.lean ??= new THREE.Vector3();
+    g.lean.lerp(new THREE.Vector3(lean.x, 0, lean.z), 0.35);
+    g.from = point.clone();
+    const aim = point.clone().add(g.lean);
+    g.hit = this.snapPlacement(g, (!g.trash && h > -0.05 && h < DROP_MAX_HEIGHT) ? this.bs.worldPointToField(aim) : null);
+  }
+
+  // 落点吸附:单位 / 建筑被岩石、墙、建筑挡住时就近找空位(game.nearestDeploySpot);装甲维修吸附受伤单位
+  snapPlacement(g, hit) {
+    const game = this.cb.getGame();
+    const card = game?.p.hand.find(c => c.id === g.id);
+    if (hit && card && isPlaced(card)) {
+      const spot = game.nearestDeploySpot('p', card, hit.x, hit.z);
+      if (spot) hit = { ...hit, x: spot.x, z: spot.z };
+    }
+    return this.snapHeal(g, hit);
   }
 
   // 装甲维修:落点吸附到最近的受伤己方单位(heal-snap.js),松手就在它身上释放;
@@ -1311,7 +1343,7 @@ export class XRControls {
     const g = st.grab;
     const mesh = this.cards[g.idx].mesh;
     g.trash = this.trash.mesh.visible && this.rayHits(this.trash.mesh, ray);
-    g.hit = g.trash ? null : this.snapHeal(g, this.bs.rayToField(ray));
+    g.hit = g.trash ? null : this.snapPlacement(g, this.bs.rayToField(ray));
     const target = g.hit
       ? g.hit.point.clone().add(new THREE.Vector3(0, 0.03, 0))
       : ray.origin.clone().addScaledVector(ray.direction, 0.4);

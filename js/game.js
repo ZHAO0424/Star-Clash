@@ -115,6 +115,23 @@ export class Game {
   nextCard(who) { return this.side(who).queue[0] || null; }
 
   // ── 出牌 ──
+  // 被岩石 / 装饰、分路长墙、建筑重叠挡住时,在 maxR 格内按同心圆(每 0.15 格一圈、每圈 16 个方向)就近找空位(第四轮)。
+  // 出界、越过己方部署线属于玩家意图错误,不吸附;找不到返回 null。客户端吸附后把坐标发给服务器,
+  // 服务器出牌时用同一个 deployBlockReason 复核,结果必然一致
+  nearestDeploySpot(who, card, x, z, maxR = 1.0) {
+    const reason = this.deployBlockReason(who, card, x, z);
+    if (!reason) return { x, z };
+    if (!['deployRock', 'deployWall', 'deployOccupied'].includes(reason)) return null;
+    const toOwn = who === 'p' ? Math.PI / 2 : -Math.PI / 2;   // 每圈从朝己方的方向开始找
+    for (let r = 0.15; r <= maxR + 1e-9; r += 0.15) {
+      for (let i = 0; i < 16; i++) {
+        const a = toOwn + i / 16 * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        if (!this.deployBlockReason(who, card, px, pz)) return { x: px, z: pz };
+      }
+    }
+    return null;
+  }
+
   canDeployAt(who, card, x, z) {
     return this.deployBlockReason(who, card, x, z) === null;
   }

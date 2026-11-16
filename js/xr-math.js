@@ -130,6 +130,20 @@ export function inPointingZone(local) {
     && forward >= POINT_ZONE.FORWARD[0] && forward <= POINT_ZONE.FORWARD[1];
 }
 
+// ── 近手拖牌的落点前倾(第四轮)──
+// 原来落点 = 捏合点竖直投影到台面,要放远处就得把手伸到远处正上方。改为沿"眼睛 → 手"的水平方向再前推
+//   offset = min(CAP, λ · h · d / (yEye − yHand))
+// h = 手离台面的高度,d = 眼到手的水平距离:相当于把"眼睛穿过指尖"的视线与台面的交点按 λ 混合进来;
+// 手贴着台面时 offset → 0(和原来一样),手越高越靠前偏得越多,封顶 CAP 米。返回世界坐标里的水平偏移 { x, z }
+export const LEAN = { K: 0.6, CAP: 0.12 };
+export function forwardLean(eye, hand, boardY) {
+  const h = hand.y - boardY, rise = eye.y - hand.y;
+  const dx = hand.x - eye.x, dz = hand.z - eye.z, d = Math.hypot(dx, dz);
+  if (h <= 0 || rise <= 1e-3 || d <= 1e-3) return { x: 0, z: 0 };
+  const offset = Math.min(LEAN.CAP, LEAN.K * h * d / rise);
+  return { x: dx / d * offset, z: dz / d * offset };
+}
+
 // ── 手牌行随棋盘高度自适应(第四轮)──
 // 在 yz 平面里算(UI 坐标,-z 朝前):以棋盘近边 edge 为圆心、半径 R 的弧上,比"近边 → 眼睛"的方向往下压 DROP,
 // 手牌平面法线正对眼睛;再保证整行(上沿 top、下沿 bottom,沿行本地 y 的偏移)在近边外侧 ≥ EDGE_GAP、高出台面 ≥ TOP_GAP。

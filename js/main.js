@@ -890,9 +890,16 @@ function snapHeal(card, hit) {
   return { ...hit, x: heal.x, z: heal.z, heal };
 }
 
+// 单位 / 建筑被岩石、墙、建筑挡住时就近找空位(game.nearestDeploySpot,与 XR 共用、服务器同一判定复核)
+function snapDeploy(card, hit) {
+  if (!hit || !isPlaced(card)) return hit;
+  const spot = game().nearestDeploySpot('p', card, hit.x, hit.z);
+  return spot ? { ...hit, x: spot.x, z: spot.z } : hit;
+}
+
 function showCardPlacement(placement, hit) {
   const { card } = placement;
-  hit = snapHeal(card, hit);
+  hit = snapHeal(card, snapDeploy(card, hit));
   const g = game();
   const reason = hit ? g.deployBlockReason('p', card, hit.x, hit.z) : null;
   scene.showPlacement({ ...hit, game: g, card, showDeployZone: isPlaced(card), radius: previewRadius(card), valid: !reason, isUnit: card.type !== 'spell' });
@@ -904,7 +911,7 @@ function playAt(placement, hit, pointer) {
   if (g?.phase !== 'battle' || (firstMatch && firstMatch.step !== 'deploy')) return false;
   if (!hit) { showPlacementError('deployOutside', pointer); return false; }
   if (paused) { toast(t('xrPaused')); return false; }
-  hit = snapHeal(placement.card, hit);
+  hit = snapHeal(placement.card, snapDeploy(placement.card, hit));
   const idx = g.p.hand.findIndex(card => card.id === placement.id);
   if (idx < 0) return false;
   const card = g.p.hand[idx];
