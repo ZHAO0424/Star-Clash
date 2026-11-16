@@ -36,6 +36,8 @@ const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
 const RETURN_SECONDS = 0.18;
 const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
+const COLLAPSE_HEIGHT = 0.12;// 抓起一张牌时其余手牌压到原高的 12%(手牌行底部一条细边)
+const COLLAPSE_SPEED = 14;   // 收起 / 展开的速度(1/s)
 const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
 const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内用近手戳、抓,超过才出射线
 
@@ -1335,8 +1337,11 @@ export class XRControls {
       this.cardSig = '';
       return;
     }
-    const reason = !game.canPlay('p', idx) ? 'tNoMana'
-      : g.hit ? game.deployBlockReason('p', card, g.hit.x, g.hit.z) : 'deployOutside';
+    if (!g.hit) {   // 落在战场外 = 取消出牌:牌飞回手牌行
+      p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
+      return;
+    }
+    const reason = !game.canPlay('p', idx) ? 'tNoMana' : game.deployBlockReason('p', card, g.hit.x, g.hit.z);
     if (reason || !this.cb.onPlay(idx, g.hit.x, g.hit.z)) {
       p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
       if (reason) this.cb.onToast?.(t(reason));
@@ -1465,9 +1470,8 @@ export class XRControls {
       const grabbedCards = this.inputs.flatMap(input => input.grab ? [input.grab] : []);
       const grabbed = grabbedCards[0];
       const aimingAtBoard = grabbedCards.some(grab => grab.hit);
-      this.cards.forEach((card, idx) => {
-        card.mesh.visible = Boolean(game.p.hand[idx]) && (!aimingAtBoard || grabbedCards.some(grab => grab.idx === idx));
-      });
+      this.collapseCards(grabbedCards, dt);
+      this.cards.forEach((card, idx) => { card.mesh.visible = Boolean(game.p.hand[idx]); });
       this.refreshHandPanels(game, grabbed ? game.p.hand.find(card => card.id === grabbed.id) : game.p.hand[hover]);
       this.manaPanel.mesh.visible = !aimingAtBoard;
       if (aimingAtBoard) {
@@ -1497,6 +1501,20 @@ export class XRControls {
     if (!panel.mesh.visible || panel.key === getLang()) return;
     panel.key = getLang();
     this.drawLobbyButton(panel, t('xrPaused'), t('xrPausedHint'), false, 'pause');
+  }
+
+  // 抓起一张牌后,其余手牌缩小下沉到手牌行底部、只留一条细边(不挡视线);松手后展开回原位
+  collapseCards(grabbedCards, dt) {
+    const k = 1 - Math.exp(-dt * COLLAPSE_SPEED);
+    this.cards.forEach((card, idx) => {
+      const held = grabbedCards.some(grab => grab.idx === idx);
+      card.collapse = (card.collapse ?? 0) + ((grabbedCards.length && !held ? 1 : 0) - (card.collapse ?? 0)) * k;
+      if (card.collapse < 1e-3) card.collapse = 0;
+      const squash = 1 - (1 - COLLAPSE_HEIGHT) * card.collapse;
+      card.mesh.scale.set(1 - 0.1 * card.collapse, squash, 1);
+      if (held || card.returning) return;
+      card.mesh.position.set(card.home.x, card.home.y - CARD_H / 2 * (1 - squash), card.home.z);
+    });
   }
 
   refreshFirstMatch(guide) {
