@@ -9,13 +9,13 @@
 // 双手同时捏合(空捏)保持 1 秒 → 以当前头部重新居中
 
 import * as THREE from 'three';
-import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { FACTIONS, cardTags, previewRadius } from './cards.js';
 import { cardArt, uiArt, XR_GUIDE, loadXRGuideArt, loadXRControlArt } from './assets.js';
 import { isPlaced } from './game.js';
 import { ARENA } from './arena.js';
 import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
+import { createHandVisual } from './xr-hand-visual.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -279,10 +279,10 @@ export class XRControls {
     // 输入源
     this.raycaster = new THREE.Raycaster();
     this.inputs = [];
-    const handFactory = new XRHandModelFactory();
     for (let i = 0; i < 2; i++) {
       const hand = this.renderer.xr.getHand(i);
-      hand.add(handFactory.createHandModel(hand, 'spheres'));
+      const visual = createHandVisual(hand);
+      hand.add(visual.object);
       bs.scene.add(hand);
 
       const ctrl = this.renderer.xr.getController(i);
@@ -302,7 +302,7 @@ export class XRControls {
       cursor.visible = false;
       bs.scene.add(cursor);
 
-      const st = { i, hand, ctrl, line, cursor, isHand: false, connected: false,
+      const st = { i, hand, visual, ctrl, line, cursor, isHand: false, connected: false,
                    pinched: false, grab: null, hover: -1, point: new THREE.Vector3() };
       ctrl.addEventListener('connected', e => {
         st.connected = true;
@@ -707,6 +707,7 @@ export class XRControls {
     const inputReady = this.inputResumeFrames === 0;
     if (!inputReady) this.inputResumeFrames--;
 
+    for (const st of this.inputs) this.updateHandVisual(st, game);
     for (const st of inputReady ? this.inputs : []) {
       if (st.isHand) this.readHand(st);
       else {
@@ -845,6 +846,13 @@ export class XRControls {
         || Math.abs(point.y - height) > .0525 * projection + radius;
     };
     this.opponentAvatar.update(this.remotePose.pose, dt, ratio, seatOffset, mayShow);
+  }
+
+  // 半透明手:glb 到了换材质;捏合边缘变亮、抓着牌换势力色
+  updateHandVisual(st, game) {
+    st.visual.update();
+    const card = st.grab && game?.p.hand.find(c => c.id === st.grab.id);
+    st.visual.setState(st.grab ? 'grab' : st.pinched ? 'pinch' : 'idle', card ? FACTIONS[card.faction].color : null);
   }
 
   loseHandTracking(st) {
