@@ -67,7 +67,8 @@ const GLACIER = {
 // 熔岩锻炉(第三轮):两侧的圆形熔岩池(裂隙,地面减速 50%)换成一条横贯战场的熔岩河。
 //   · 河道中心线 z = amp · sin(π x / W):左右两端在边线中点落进来,绕星核旋转 180° 对称(奇函数)
 //   · 地面单位(非建筑)站在河里 → 烧灼:每 0.5 秒结算一次 dps × 0.5;离开后余烬再烧 ember 秒。飞行单位不受影响
-//   · 不烧灼的地方:星核祭坛(半径 = 占领圈 node.r,熔岩从祭坛下面流过)+ 两座冷却岩桥(|x − bridge.x| < half)
+//   · 不烧灼的地方:只有星核祭坛(半径 = 占领圈 node.r,熔岩从祭坛下面流过)。
+//     第三轮曾有两座冷却岩桥(x = ±3.55),按用户反馈去掉:边路过河必须蹚熔岩;bridges 字段保留为空,渲染 / 寻路仍支持
 //   · 河道最宽处 |z| ≤ amp + half = 0.67 < 部署线 0.8:河在双方部署区之外,不影响部署
 const VOLCANO = {
   ...MAP,
@@ -75,7 +76,7 @@ const VOLCANO = {
   lava: {
     amp: 0.25, half: 0.42,
     dps: 8, tick: 0.5, ember: 1.0,
-    bridges: [{ x: -3.55, half: 0.3 }, { x: 3.55, half: 0.3 }],
+    bridges: [],
   },
 };
 export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ? VOLCANO : MAP;

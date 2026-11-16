@@ -591,7 +591,7 @@ export class Game {
       u.progress = { x: u.x, z: u.z, t: this.time };
     }
     if (!u.path || u.pathTarget !== target || moved || this.time >= u.pathRefresh) {
-      u.path = this.nav.findPath(u.x, u.z, target.x, target.z, reach, melee, this.burnCost(u));
+      u.path = this.nav.findPath(u.x, u.z, target.x, target.z, reach, melee);   // 熔岩不参与选路:烧灼只是代价
       u.pathTarget = target;
       u.pathFor = { x: target.x, z: target.z };
       u.pathRefresh = this.time + (target.kind || target.building ? 1.5 : 0.6) + (u.id % 7) * 0.05;   // 错开刷新,避免同一帧扎堆
@@ -602,7 +602,7 @@ export class Game {
     if (!p.length || u.pathIdx >= p.length) return target;                    // 已经站在能打到的位置
     while (u.pathIdx < p.length - 1 && Math.hypot(p[u.pathIdx].x - u.x, p[u.pathIdx].z - u.z) < 0.25) u.pathIdx++;
     for (let j = Math.min(p.length - 1, u.pathIdx + 8); j > u.pathIdx; j--) {   // 视线平滑:能直接看到更远的点就跳过去
-      if (this.nav.clearLine(u.x, u.z, p[j].x, p[j].z, true)) { u.pathIdx = j; break; }
+      if (this.nav.clearLine(u.x, u.z, p[j].x, p[j].z)) { u.pathIdx = j; break; }
     }
     const w = p[u.pathIdx];
     if (u.pathIdx === p.length - 1 && Math.hypot(w.x - u.x, w.z - u.z) < 0.25) return target;
@@ -623,8 +623,7 @@ export class Game {
     if (!target) return null;
     this.nav.updateDynamic(this.structures, this.units);
     const reach = card.range + target.radius + UNIT_RADIUS - 0.05;
-    const p = this.nav.findPath(x, z, target.x, target.z, reach, card.range <= 1.2,
-      this.burnCost({ air: false, speed: card.speed * PACE.move, maxHp: card.hp }));
+    const p = this.nav.findPath(x, z, target.x, target.z, reach, card.range <= 1.2);
     if (!p) return null;
     const out = [{ x, z }];
     let len = 0;
@@ -935,12 +934,13 @@ export class Game {
     return u.dead;
   }
 
-  // 地面单位走进熔岩的寻路代价:每格额外成本 = 烧灼 dps /(速度 × 生命)× 20,夹在 [0.5, 6]。
-  //   含义:丢 5% 生命 ≈ 多走 1 格。脆皮 / 慢速单位更愿意绕到祭坛或岩桥,坦克会直接蹚过去
+  // 熔岩对某种单位的「怕烧程度」= 烧灼 dps /(速度 × 生命)× 20(丢 5% 生命 ≈ 多走 1 格),夹在 [0.3, 6]。
+  //   只给 AI 出牌决策用(决定从哪一路出兵);单位移动不看它:熔岩不参与寻路,侧路单位照自己的路线直接蹚过去,
+  //   只有视野(SIGHT)里出现敌人时才会因为追击往中间走
   burnCost(u) {
     const L = this.map.lava;
     if (!L || u.air) return 0;
-    return Math.max(0.5, Math.min(6, L.dps / (Math.max(0.1, u.speed) * Math.max(1, u.maxHp ?? u.hp)) * 20));
+    return Math.max(0.3, Math.min(6, L.dps / (Math.max(0.1, u.speed) * Math.max(1, u.maxHp ?? u.hp)) * 20));
   }
 
   // 绕开前方的岩石:障碍在前方且比目标近时,沿切向偏转

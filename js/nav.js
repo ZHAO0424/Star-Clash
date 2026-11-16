@@ -2,10 +2,9 @@
 //   · 网格步长 0.2,覆盖整个战场;岩脊、岩石、塔体、建筑卡按地面单位半径留出空隙
 //   · 斜向移动不能切墙角(两个相邻直角格都要通行)
 //   · 边成本 = 距离 × 两端逆速度倍率的平均值:裂隙里速度 ×0.5 → 成本 ×2,所以会权衡绕开还是穿过
-//   · 熔岩(熔岩锻炉):burn 层标记会烧灼的格子;每次寻路按单位传入 burnCost(脆皮 / 慢速单位更怕烧),边成本再加 距离 × burnCost\r
 //   · 终点不是目标中心,而是"站在这里就能打到目标"的格子(目标在塔中心也能找到落脚点)
 //   · 静态障碍建一次;塔被摧毁、建筑卡出现 / 消失时只重建动态层
-import { MAP, ROCK_CLEARANCE, wallGap, blockingWall, inLava } from './map.js';
+import { MAP, ROCK_CLEARANCE, wallGap, blockingWall } from './map.js';
 
 const STEP = 0.2;
 const CLEAR = 0.24;   // 留空:地面单位半径 0.22 + 一点余量
@@ -20,7 +19,6 @@ export class NavGrid {
     this.staticBlock = new Uint8Array(n);
     this.dynBlock = new Uint8Array(n);
     this.costMul = new Float32Array(n);
-    this.burn = new Uint8Array(n);
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
         const k = j * this.cols + i, x = this.x0 + i * STEP, z = this.z0 + j * STEP;
@@ -29,7 +27,6 @@ export class NavGrid {
         let slow = 1;
         for (const r of map.rifts) if (Math.hypot(x - r.x, z - r.z) < r.r) slow = Math.min(slow, r.slow);
         this.costMul[k] = 1 / slow;
-        this.burn[k] = inLava(map, x, z) ? 1 : 0;
       }
     }
     this.dynKey = '';
@@ -89,7 +86,7 @@ export class NavGrid {
 
   // 从 (sx, sz) 走到"能打到目标"的位置:离目标中心 ≤ reach;melee 时还要求中间没有岩脊挡着。
   // 返回路径点数组 [{x, z}, ...](不含起点),或 null(没有可达路径)
-  findPath(sx, sz, tx, tz, reach, melee, burnCost = 0) {
+  findPath(sx, sz, tx, tz, reach, melee) {
     const start = this.nearestFree(sx, sz);
     if (start < 0) return null;
     const goalOk = k => {
@@ -98,7 +95,7 @@ export class NavGrid {
     };
     const h = k => Math.max(0, Math.hypot(this.px(k) - tx, this.pz(k) - tz) - reach);
     const run = ++this.run;
-    const { g, prev, stamp, closed, heap, heapF, cols, rows, burn, costMul } = this;
+    const { g, prev, stamp, closed, heap, heapF, cols, rows } = this;
     let size = 0;
     const push = (k, f) => {   // 二叉小顶堆
       let i = size++;
@@ -138,7 +135,7 @@ export class NavGrid {
         const nk = nj * cols + ni;
         if (this.blocked(nk) || closed[nk] === run) continue;
         if (di && dj && (this.blocked(k + di) || this.blocked(k + dj * cols))) continue;   // 斜向不切墙角
-        const ng = g[k] + STEP * (di && dj ? Math.SQRT2 : 1) * ((costMul[k] + costMul[nk]) / 2 + burnCost * (burn[k] + burn[nk]) / 2);
+        const ng = g[k] + STEP * (di && dj ? Math.SQRT2 : 1) * (this.costMul[k] + this.costMul[nk]) / 2;
         if (stamp[nk] === run && ng >= g[nk]) continue;
         stamp[nk] = run; g[nk] = ng; prev[nk] = k;
         push(nk, ng + h(nk));
@@ -152,13 +149,12 @@ export class NavGrid {
     return pts;
   }
 
-  // 两点之间的直线是否都能通行(按 STEP/2 采样);用于路径平滑:能直接看到更远的路径点就跳过中间的。
-  // avoidBurn:直线不能抄近路穿过熔岩格(否则 A* 绕到岩桥 / 祭坛的路线会被平滑成直穿熔岩)
-  clearLine(ax, az, bx, bz, avoidBurn = false) {
+  // 两点之间的直线是否都能通行(按 STEP/2 采样);用于路径平滑:能直接看到更远的路径点就跳过中间的
+  clearLine(ax, az, bx, bz) {
     const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / (STEP * 0.5)));
     for (let s = 1; s <= n; s++) {
       const t = s / n, k = this.idx(ax + (bx - ax) * t, az + (bz - az) * t);
-      if (this.blocked(k) || (avoidBurn && this.burn[k])) return false;
+      if (this.blocked(k)) return false;
     }
     return true;
   }

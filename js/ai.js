@@ -17,6 +17,7 @@ import { dist2, FIELD_W, FIELD_HALF } from './game.js';
 import { wallGap } from './map.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const LANE_BURN_OK = 1.5;   // 熔岩图:打头单位的过河代价(game.burnCost)不超过这个值就走边路硬蹚
 const value = u => u.hp + u.atk * 3 + (u.shield || 0);
 const AREA_DAMAGE = new Set(['stun_area', 'dot_area', 'strike', 'curse', 'parasite', 'chain']);
 const isRanged = c => c.range > 1.2 && c.atk > 0;
@@ -283,7 +284,7 @@ export class SimpleAI {
     if (s.mana >= Math.min(8, s.manaMax) || full) {
       const lead = best(deploy.filter(x => x.card.type === 'unit'), c => c.hp * (c.siege ? 1.3 : 1) * (c.count || 1) + (c.kamikaze ? 150 : 0));
       if (lead) {
-        const x = this.laneX();
+        const x = this.laneX(lead.card);
         const u = place(lead, this.own(x, isRanged(lead.card) ? FIELD_HALF * 0.55 : 2.4)) &&
           g.units.filter(o => o.side === this.who).slice(-1)[0];
         if (u) this.push = { unit: u, t: g.time };
@@ -296,18 +297,20 @@ export class SimpleAI {
   }
 
   // 进攻方向:防守最薄的敌方塔(塔血量 + 附近敌军价值),x 收向中路以避开两侧裂隙
-  laneX() {
+  laneX(card) {
     const g = this.game;
     const towers = g.structures.filter(t => t.side === this.foe && !t.dead && t.kind !== 'base');
     if (!towers.length) return 0;
     const weak = towers.map(t => ({ t, v: t.hp + g.units.filter(u => u.side === this.foe && dist2(u, t) < 3).reduce((a, u) => a + value(u), 0) }))
       .sort((a, b) => a.v - b.v)[0].t;
-    // 熔岩锻炉:从离目标塔最近的不烧灼渡口(星核祭坛 / 两座岩桥)正后方出兵,寻路再按单位耐烧程度决定绕不绕
+    // 熔岩锻炉(没有岩桥,只有祭坛安全):耐烧的打头单位直接走目标塔那一路(过河时蹚熔岩);
+    //   怕烧的(过河代价高)从祭坛正后方出兵。否则所有进攻都挤到中路,边路没人走(诊断:98% 的过河都经过祭坛)
     const lava = g.map.lava;
     if (lava) {
-      const fords = [g.map.node.x, ...lava.bridges.map(b => b.x)];
-      const ford = fords.reduce((a, b) => (Math.abs(b - weak.x) < Math.abs(a - weak.x) ? b : a));
-      return clamp(ford, -FIELD_W + 0.5, FIELD_W - 0.5) + (Math.random() - 0.5) * 0.4;
+      const cost = card ? g.burnCost({ air: !!card.air, speed: card.speed * 0.7, maxHp: card.hp * (card.count || 1) }) : Infinity;
+      const toLane = card?.air || cost <= LANE_BURN_OK;
+      const x = toLane ? clamp(weak.x * 0.85, -3.6, 3.6) : g.map.node.x;
+      return x + (Math.random() - 0.5) * 0.4;
     }
     return clamp(weak.x * 0.5, -1.7, 1.7) + (Math.random() - 0.5) * 0.6;
   }

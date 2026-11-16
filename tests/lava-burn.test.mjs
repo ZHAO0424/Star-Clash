@@ -1,8 +1,8 @@
 // 熔岩锻炉 · 横贯熔岩河的烧灼规则(第三轮)
 //   · 地面单位在河里每 0.5 秒受 dps × 0.5 伤害,离开后余烬再烧 1 秒;飞行单位、建筑不受影响
-//   · 星核祭坛(占领圈内)和两座冷却岩桥不烧灼,祭坛照常可占
+//   · 只有星核祭坛(占领圈内)不烧灼,祭坛照常可占;没有岩桥
 //   · 河道在双方部署区之外;只有熔岩锻炉有熔岩,其它图不变
-//   · 寻路:怕烧的单位绕岩桥,耐烧的可以直接蹚
+//   · 熔岩不参与寻路:侧路单位没有目标时按自己的路线直接蹚过去;视野里出现敌人才追过去
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../js/game.js';
@@ -58,13 +58,12 @@ test('星核祭坛下方不烧灼,祭坛照常可占', () => {
   assert.ok(g.node.progress > 0, `占领进度 ${g.node.progress}`);
 });
 
-test('冷却岩桥不烧灼,河道其余部分烧灼', () => {
-  for (const b of L.bridges) {
-    assert.equal(inLava(VOLCANO, b.x, zc(b.x)), false);
-    assert.equal(inLava(VOLCANO, b.x + b.half + 0.05, zc(b.x + b.half + 0.05)), true);
+test('没有岩桥:祭坛以外整条河都烧灼', () => {
+  assert.equal(L.bridges.length, 0);
+  for (let x = -VOLCANO.W + 0.01; x < VOLCANO.W; x += 0.05) {
+    if (Math.abs(x) < VOLCANO.node.r + 0.05) continue;
+    assert.equal(inLava(VOLCANO, x, zc(x)), true, `x=${x.toFixed(2)}`);
   }
-  // 三条路都被河截断:左 / 中(祭坛两侧)/ 右
-  for (const x of [-4.3, -2.6, -1.5, 1.5, 2.6, 4.3]) assert.equal(inLava(VOLCANO, x, zc(x)), true, `x=${x}`);
 });
 
 test('河道在双方部署区之外,绕星核旋转 180° 对称', () => {
@@ -82,19 +81,29 @@ test('只有熔岩锻炉有熔岩:星核荒原同一位置不烧灼', () => {
   assert.ok(g.drainEvents().every(e => !e.burn));
 });
 
-test('寻路:怕烧的单位从岩桥过河,耐烧的可以直接蹚', () => {
-  const g = game();
-  g.nav.updateDynamic(g.structures, g.units);
-  const tower = g.structures.find(s => s.side === 'e' && s.x < 0 && s.kind === 'pylon');
-  const crossings = path => path.filter(q => Math.abs(q.z - zc(q.x)) < L.half);
-  const fragile = g.burnCost({ air: false, speed: 1.3 * 0.7, maxHp: 38 });
-  const tough = g.burnCost({ air: false, speed: 0.55 * 0.7, maxHp: 463 });
-  assert.ok(fragile > tough);
-  // 从左路正中、离岩桥 1.1 格的位置出发
-  const reach = tower.radius + 0.22 + 0.5;
-  const p1 = g.nav.findPath(-2.45, 2.5, tower.x, tower.z, reach, true, fragile);
-  assert.ok(p1 && crossings(p1).length, '有路径且经过河道所在的 z 段');
-  assert.ok(crossings(p1).every(q => !g.nav.burn[g.nav.idx(q.x, q.z)]), '脆皮单位全程不踩熔岩');
-  const p0 = g.nav.findPath(-2.45, 2.5, tower.x, tower.z, reach, true, 0);
-  assert.ok(p0.cost <= p1.cost);
+// 让单位跑一段:返回它第一次进入河道 z 段时的 x
+function crossX(g, u, maxT = 40) {
+  for (let s = 0; s < maxT / 0.1 && !u.dead; s++) {
+    g.tick(0.1); g.drainEvents();
+    if (Math.abs(u.z - zc(u.x)) < L.half) return u.x;
+  }
+  return null;
+}
+
+test('侧路单位视野里没有敌人时,按自己的路线直接蹚熔岩过河(不绕去祭坛)', () => {
+  for (const id of ['swarm_worker', 'steel_tank', 'steel_infantry']) {   // 脆皮和坦克都一样
+    const g = game(), u = place(g, id, -3.6, 2.4);
+    const x = crossX(g, u);
+    assert.ok(x !== null && x < -(VOLCANO.node.r + 0.1), `${id} 过河位置 x=${x}`);   // 不经过祭坛(占领圈)
+    assert.ok(inLava(VOLCANO, u.x, u.z) || u.status.burn > 0, `${id} 过河时在烧`);
+  }
+});
+
+test('中间有敌人进入视野时,侧路单位转向追击', () => {
+  const g = game(), u = place(g, 'steel_infantry', -3.4, 1.9);
+  const foe = place(g, 'swarm_warrior', -0.5, 0.2, 'e');   // 站在祭坛上(不烧),离侧路单位约 3.3 格 < 视野 3.5
+  foe.status.stun = 99;
+  for (let i = 0; i < 10; i++) { g.tick(0.1); g.drainEvents(); }
+  assert.equal(u.target, foe, '目标切到中间的敌人');
+  assert.ok(u.x > -3.2, `往中间走 x=${u.x.toFixed(2)}`);
 });
