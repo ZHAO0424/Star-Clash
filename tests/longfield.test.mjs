@@ -48,3 +48,17 @@ test('地形拉伸映射:战场边 6.8 → 7.6,黄线外不动,可逆且单调',
     prev = s;
   }
 });
+
+// 建筑模型的占地上限 = 半径 × 2.8(核心)/ × 2.65(塔)(scene.makeStructModel);按这个上限算的包围盒必须在地板里,离后缘 ≥ 0.1
+test('所有建筑包围盒都在玩法区地板内(离后缘 / 侧边 ≥ 0.1),8 张图共用', async () => {
+  const { SCENES } = await import('../js/scenes.js');
+  assert.equal(SCENES.length, 8);
+  for (const { id } of SCENES) {
+    const m = mapForScene(id);
+    for (const s of [...m.towers, m.base]) {
+      const half = s.radius * (s.kind === 'base' ? 2.8 : 2.65) / 2;
+      assert.ok(Math.abs(s.z) + half <= m.HALF - 0.1 + 1e-9, `${id} ${s.kind} 后沿 ${(Math.abs(s.z) + half).toFixed(2)} > ${m.HALF - 0.1}`);
+      assert.ok(Math.abs(s.x) + half <= m.W - 0.1 + 1e-9, `${id} ${s.kind} 侧沿`);
+    }
+  }
+});
