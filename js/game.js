@@ -28,7 +28,7 @@ export const PACE = { mana: 0.55, attack: 1.7, move: 0.7 };   // 第五轮再慢
 // ── 势力招牌机制 ──
 export const VET_TIME = 10, VET_MAX = 3, VET_BONUS = 0.2;      // 钢铁 · 老兵军衔
 export const LINK_RANGE = 2.6, LINK_SHARE = 0.4, LINK_HASTE = 0.35;   // 玛雅 · 战术网络
-export const BLOOD_PER_MANA = 100, BLOOD_FLOOR = 300, BLOOD_COOLDOWN = 12;            // 混沌 · 血祭
+export const BLOOD_PER_MANA = 150, BLOOD_FLOOR = 300, BLOOD_COOLDOWN = 18;            // 混沌 · 血祭
 
 export const UPGRADE_EVERY = 20;        // 双方合计每出 20 张牌触发一次强化暂停
 export const UPGRADE_LIMIT = 3;
