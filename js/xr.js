@@ -16,6 +16,7 @@ import { ARENA } from './arena.js';
 import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
 import { createHandVisual } from './xr-hand-visual.js';
+import { HandRay } from './xr-hand-ray.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -32,6 +33,7 @@ const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
 const RETURN_SECONDS = 0.18;
 const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
+const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内用近手戳、抓,超过才出射线
 
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 
@@ -303,7 +305,9 @@ export class XRControls {
       bs.scene.add(cursor);
 
       const st = { i, hand, visual, ctrl, line, cursor, isHand: false, connected: false,
-                   pinched: false, grab: null, hover: -1, point: new THREE.Vector3() };
+                   pinched: false, grab: null, hover: -1, point: new THREE.Vector3(),
+                   handRay: new HandRay(bs.scene), ray: null, rayActive: false, rayEligible: false, rayDist: 0.5,
+                   pressRay: new THREE.Ray() };
       ctrl.addEventListener('connected', e => {
         st.connected = true;
         st.isHand = !!e.data.hand;
@@ -359,6 +363,7 @@ export class XRControls {
       st.handPoint = null;
       st.cursor.visible = false;
     }
+    this.rayOwner = null;
     this.bothPinchTime = 0;
     this.bs.world.visible = true;
     this.lobby.visible = false;
@@ -522,7 +527,8 @@ export class XRControls {
     const hovered = new Set();
     for (const st of this.inputs) {
       if (!st.connected || st.grab) continue;
-      const target = this.lobbyTarget(panels, st.handPoint, st.isHand ? null : this.ctrlRay(st));
+      const ray = st.isHand ? (st.rayActive ? st.ray : null) : this.ctrlRay(st);
+      const target = this.lobbyTarget(panels, ray ? null : st.handPoint, ray);
       if (target) hovered.add(target.action);
     }
     return hovered;
@@ -709,7 +715,7 @@ export class XRControls {
 
     for (const st of this.inputs) this.updateHandVisual(st, game);
     for (const st of inputReady ? this.inputs : []) {
-      if (st.isHand) this.readHand(st);
+      if (st.isHand) this.readHand(st, dt);
       else {
         st.cursor.visible = false;
         if (!st.connected) continue;
@@ -862,9 +868,12 @@ export class XRControls {
     st.hover = -1;
     st.handPoint = null;
     st.cursor.visible = false;
+    st.ray = null;
+    st.rayActive = st.rayEligible = false;
+    st.handRay.show(null);
   }
 
-  readHand(st) {
+  readHand(st, dt) {
     const tip = st.hand.joints?.['index-finger-tip'];
     const thumb = st.hand.joints?.['thumb-tip'];
     if (!tip || !thumb || !st.connected || st.hand.visible === false || tip.visible === false || thumb.visible === false) {
@@ -873,7 +882,65 @@ export class XRControls {
     }
     const a = tip.getWorldPosition(new THREE.Vector3());
     const b = thumb.getWorldPosition(new THREE.Vector3());
-    this.handInput(st, a.distanceTo(b), a.add(b).multiplyScalar(0.5));
+    const dist = a.distanceTo(b);
+    this.updateHandRay(st, dt, dist);
+    this.handInput(st, dist, a.add(b).multiplyScalar(0.5));
+    // 捏合瞬间射线会跳:点击用上一帧(还没捏上时)的射线
+    if (st.rayActive && !st.pinched) st.pressRay.copy(st.ray);
+  }
+
+  // ── 手部射线(远处的按钮)──
+  // 射线能点的面板:大厅 / 战斗按钮、强化、结束、设置;不能拖牌(拖牌保持近手操作,以免误出牌)
+  rayPanels(game) {
+    if (!game) return this.guideIndex >= 0 ? this.guideButtons : this.lobbyButtons;
+    if (game.phase === 'upgrade') return this.upgrades;
+    if (game.phase === 'end') return [this.endPanel, this.lobbyReturn];
+    return [...this.battleButtons, ...this.firstMatchButtons];
+  }
+
+  rayPanelHit(panels, ray) {
+    const meshes = panels.map(p => p.mesh).filter(mesh => this.isVisibleForInput(mesh));
+    this.raycaster.set(ray.origin, ray.direction);
+    return this.raycaster.intersectObjects(meshes, false)[0] ?? null;
+  }
+
+  // 点是否在任一可见面板的 margin 范围内(面板本地坐标里的盒子)
+  nearPanels(point, panels, margin) {
+    return panels.some(({ mesh }) => {
+      if (!this.isVisibleForInput(mesh)) return false;
+      const local = mesh.worldToLocal(point.clone());
+      const { width, height } = mesh.geometry.parameters;
+      return Math.abs(local.z) < margin && Math.abs(local.x) < width / 2 + margin && Math.abs(local.y) < height / 2 + margin;
+    });
+  }
+
+  // 两只手同时只显示一根射线;另一只手捏一下就抢过来(这一下不算点击)
+  updateHandRay(st, dt, dist) {
+    st.ray = st.handRay.update(st.ctrl, dt);
+    const game = this.cb.getGame();
+    const panels = this.rayPanels(game);
+    const close = [...panels, this.trash, ...(game?.phase === 'battle' ? this.cards : [])];
+    const near = st.handPoint && this.nearPanels(st.handPoint, close, RAY_NEAR);
+    const hit = st.ray && !st.grab && !near && !this.rayBlocked(st) ? this.rayPanelHit(panels, st.ray) : null;
+    if (hit) st.rayDist = hit.distance;
+    // 捏着的时候保持射线:捏合瞬间射线会跳,不能因此丢掉目标
+    st.rayEligible = Boolean(hit) || (st.rayActive && st.pinched && Boolean(st.ray));
+    const owner = this.rayOwner;
+    if (st.rayEligible && owner !== st) {
+      const ownerBusy = owner && owner.connected && owner.isHand && owner.rayEligible;
+      if (!ownerBusy) this.rayOwner = st;
+      else if (!owner.pinched && !st.pinched && !st.waitForOpen && dist < PINCH_ON) {
+        this.rayOwner = st;
+        st.waitForOpen = true;
+      }
+    }
+    st.rayActive = this.rayOwner === st && st.rayEligible;
+    st.handRay.show(st.rayActive ? st.rayDist : null);
+  }
+
+  // 预留给手心菜单:菜单出现时左手射线隐藏
+  rayBlocked() {
+    return false;
   }
 
   // 手部输入核心(与设备解耦,便于桌面端模拟测试)
@@ -890,7 +957,8 @@ export class XRControls {
       if (dist > PINCH_OFF) st.waitForOpen = false;
     } else if (!st.pinched && dist < PINCH_ON) {
       st.pinched = true;
-      this.press(st, point, null);
+      if (st.rayActive) this.press(st, null, st.pressRay, true);
+      else this.press(st, point, null);
     } else if (st.pinched && dist > PINCH_OFF) {
       st.pinched = false;
       const ready = this.canUseInput();
@@ -922,7 +990,8 @@ export class XRControls {
     return best;
   }
 
-  press(st, point, ray) {
+  // fromHandRay:手部射线点的,只点按钮、不抓牌
+  press(st, point, ray, fromHandRay = false) {
     if (!this.canUseInput()) return;
     const game = this.cb.getGame();
     if (game && !this.ui.visible) return;
@@ -1003,6 +1072,7 @@ export class XRControls {
       }
       if (guide.step !== 'deploy') return;
     }
+    if (fromHandRay) return;
     const idx = this.pick(this.cards, point, ray);
     if (idx < 0 || (guide && game.p.hand[idx]?.type !== 'unit')) return;
     if (this.inputs.some(o => o !== st && o.grab && o.grab.idx === idx)) return;
