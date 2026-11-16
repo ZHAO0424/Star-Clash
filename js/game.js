@@ -23,7 +23,7 @@ const AIR_RADIUS = 0.18;
 const BUILDING_RADIUS = 0.42;
 const HAND_SIZE = 5;
 // ── 整体节奏(玩家反馈"太快"后放慢):回蓝、攻击间隔、移动速度的全局系数 ──
-export const PACE = { mana: 0.7, attack: 1.4, move: 0.85 };
+export const PACE = { mana: 0.55, attack: 1.7, move: 0.7 };   // 第五轮再慢约 20%(原 0.7 / 1.4 / 0.85)
 
 // ── 势力招牌机制 ──
 export const VET_TIME = 10, VET_MAX = 3, VET_BONUS = 0.2;      // 钢铁 · 老兵军衔

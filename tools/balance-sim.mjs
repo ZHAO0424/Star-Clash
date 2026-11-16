@@ -1,5 +1,5 @@
 // 平衡模拟:AI 对 AI 跑若干局,统计钢铁对其它三个势力的胜率,以及「装甲维修」的施放次数和实际回血量。
-// 用法:node tools/balance-sim.mjs <每个对阵的局数> [仓库路径,默认本仓库]
+// 用法:node tools/balance-sim.mjs <每个对阵的局数> [仓库路径,默认本仓库] [all = 另跑全部势力两两对阵]
 // 双方都是 smart AI,双方位置交替(一半钢铁在 p,一半在 e),场景固定 starcore。
 const N = Number(process.argv[2] ?? 20);
 // 第二个参数给另一份仓库(比如改前版本的 git worktree)就测那一份,用来对比改前改后
@@ -39,7 +39,7 @@ function match(pf, ef) {
     ais.p.tick(DT); ais.e.tick(DT);
     g.drainEvents();
   }
-  return { winner: g.winner, repair };
+  return { winner: g.winner, repair, time: g.time };
 }
 
 const out = {};
@@ -56,3 +56,19 @@ for (const foe of Object.keys(FACTIONS).filter(f => f !== 'steel')) {
   out[foe] = { w, l, d, rate: (w / N * 100).toFixed(0) + '%' };
 }
 console.log(JSON.stringify({ N, vs: out, repairCastsPerGame: (casts / (N * 3)).toFixed(2), healPerCast: casts ? (healed / casts).toFixed(0) : '-' }));
+
+// 第三个参数 all:再跑全部势力两两对阵(每对 N 局,位置交替),输出各势力总胜率和平均对局时长
+if (process.argv[4] === 'all') {
+  const ids = Object.keys(FACTIONS), total = Object.fromEntries(ids.map(f => [f, { w: 0, n: 0 }]));
+  let time = 0, games = 0;
+  for (let a = 0; a < ids.length; a++) for (let b = a + 1; b < ids.length; b++) {
+    for (let i = 0; i < N; i++) {
+      const [pf, ef] = i % 2 ? [ids[b], ids[a]] : [ids[a], ids[b]];
+      const r = match(pf, ef);
+      total[pf].n++; total[ef].n++;
+      if (r.winner === 'p') total[pf].w++; else if (r.winner === 'e') total[ef].w++;
+      time += r.time; games++;
+    }
+  }
+  console.log(JSON.stringify({ all: Object.fromEntries(ids.map(f => [f, (total[f].w / total[f].n * 100).toFixed(1) + '%'])), avgGameSeconds: (time / games).toFixed(1) }));
+}
