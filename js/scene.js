@@ -10,6 +10,7 @@ import { VFX } from './vfx.js';
 import { DeployMarker } from './deploy-fx.js';
 import { attachWeapon } from './weapons.js';
 import { loadKit, layoutProps, buildProps as buildProps3d } from './props3d.js';
+import { hasDressing, buildDressing, HIDDEN_TERRAIN_MESHES } from './obstacle-kit.js';
 import { buildArena, animateArena, ARENA } from './arena.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -486,10 +487,18 @@ export class BattleScene {
     // 有 3D 配景包(assets/props/<scene>/kit.json)就用 3D 配景;加载是异步的,先放立绘,到了再替换
     const sprites = this.buildPropSprites();
     if (!t?.propKit) return;
+    // 有程序化障碍套件的场景(obstacle-kit.js,目前只有熔岩锻炉):套件接管墙 / 岩石 / 池沿 / 边缘 / 地标,
+    // 地形 GLB 里的岩石和晶簇网格隐藏;Tripo 配景只按套件给的摆放列表放
+    const dressed = hasDressing(t.id);
+    t.scene.traverse(o => { if (o.isMesh && HIDDEN_TERRAIN_MESHES.test(o.name)) o.visible = !dressed; });
     loadKit(t.id).then(kit => {
       if (!kit || this.terrain !== t) return;   // 期间换了场景:丢弃
       sprites.forEach(sp => { this.board.remove(sp); sp.material.dispose(); });
-      this.board.add(buildProps3d(kit, layoutProps(kit, t.id), (x, z) => this.heightAt(x, z), this.getModelEnv()));
+      const heightAt = (x, z) => this.heightAt(x, z);
+      if (dressed) {
+        const d = buildDressing(t.id, { map: this.map, heightAt, envMap: this.getModelEnv() });
+        this.board.add(d.group, buildProps3d(kit, d.props, heightAt, this.getModelEnv()));
+      } else this.board.add(buildProps3d(kit, layoutProps(kit, t.id), heightAt, this.getModelEnv()));
     });
   }
 
