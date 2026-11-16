@@ -2,7 +2,7 @@
 // 判定与摆放参考 jelly-harbor 的手心菜单(D:\webxr-todo\jelly-harbor\index.html)+ weather-palm 的张开度(防误触,
 // 相当于 MRTK 的"要求平摊手掌")。纯几何判定在 xr-math.js。
 //
-//   const menu = new PalmMenu(scene, items);   // items: [{ id, icon, label(), disabled() }]
+//   const menu = new PalmMenu(scene, items);   // items: [{ id, icon(), label(), detail?(), danger?(), disabled?() }]
 //   每帧 const poked = menu.update(dt, { hand, head, allowed, tip });   // 右手食指尖戳中按钮 → 返回按钮 id
 //   右手射线 + 捏合:menu.rayHit(ray) 拿距离,捏合时 menu.pick(ray) → 按钮 id
 //   menu.open:菜单当前是否展开(展开时左手射线隐藏、左手捏合被吃掉)
@@ -142,7 +142,7 @@ export class PalmMenu {
   // 签名不变就不重画
   redraw() {
     if (!this.mesh.visible) return;
-    const states = this.items.map(item => [item.icon(), item.label(), Boolean(item.disabled?.())]);
+    const states = this.items.map(item => [item.icon(), item.label(), Boolean(item.disabled?.()), item.detail?.() ?? '', Boolean(item.danger?.())]);
     const signature = JSON.stringify([getLang(), this.hover?.id, states]);
     if (signature === this.signature) return;
     this.signature = signature;
@@ -153,12 +153,19 @@ export class PalmMenu {
     ctx.strokeStyle = '#e5b573'; ctx.lineWidth = 5; ctx.stroke();
     const cell = W / this.items.length;
     this.items.forEach((item, i) => {
-      const [icon, label, disabled] = states[i];
+      const [icon, label, disabled, detail, danger] = states[i];
       const x = i * cell;
       ctx.globalAlpha = disabled ? 0.35 : 1;
-      if (this.hover === item && !disabled) {
-        ctx.fillStyle = '#826b9d';
+      if (danger && !disabled) {   // 两段确认的第二段:红底
+        ctx.fillStyle = '#9c2f3a';
         ctx.beginPath(); ctx.roundRect(x + 16, 20, cell - 32, H - 40, 28); ctx.fill();
+      }
+      if (this.hover === item && !disabled) {
+        if (!danger) {
+          ctx.fillStyle = '#826b9d';
+          ctx.beginPath(); ctx.roundRect(x + 16, 20, cell - 32, H - 40, 28); ctx.fill();
+        }
+        ctx.beginPath(); ctx.roundRect(x + 16, 20, cell - 32, H - 40, 28);
         ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6; ctx.stroke();
       }
       const art = uiArt('xr-control-' + icon);
@@ -168,7 +175,12 @@ export class PalmMenu {
       ctx.font = 'bold 44px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, x + cell / 2, 238, cell - 24);
+      ctx.fillText(label, x + cell / 2, detail ? 226 : 238, cell - 24);
+      if (detail) {
+        ctx.font = '30px sans-serif';
+        ctx.fillStyle = '#ffd0c8';
+        ctx.fillText(detail, x + cell / 2, 266, cell - 24);
+      }
       ctx.globalAlpha = 1;
     });
     this.tex.needsUpdate = true;

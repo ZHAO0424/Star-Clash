@@ -223,22 +223,8 @@ export class XRControls {
     });
 
     this.notice = null;
-    this.battleControls = new THREE.Group();
-    this.battleControls.position.set(0, -0.18, -0.57);
-    this.battleControls.visible = false;
-    this.ui.add(this.battleControls);
-    this.battleButtons = ['center', 'size', 'sound', 'leave'].map((action, i) => {
-      const button = makePanel(0.101, 0.049, 352, 170);
-      button.action = action;
-      button.mesh.position.x = (i - 1.5) * 0.114;
-      this.battleControls.add(button.mesh);
-      return button;
-    });
-    this.leavePrompt = makePanel(0.29, 0.058, 768, 154);
-    this.leavePrompt.mesh.position.y = 0.063;
-    this.leavePrompt.mesh.visible = false;
-    this.battleControls.add(this.leavePrompt.mesh);
-    this.battleControlsSignature = '';
+    // 原来前方 57cm 的一排战斗按钮(重新居中 / 棋盘尺寸 / 音效 / 离开)已并进左手手心菜单(第三轮)
+    this.palmHintUntil = 0;   // 开局提示「张开左手掌心 → 菜单」
 
     // 强化面板
     this.upgradeGroup = new THREE.Group();
@@ -346,9 +332,13 @@ export class XRControls {
       { id: 'pause', icon: () => (this.cb.isPaused?.() ? 'resume' : 'pause'),
         label: () => t(this.cb.isPaused?.() ? 'xrResume' : 'xrPause'), disabled: () => !this.cb.canPause?.() },
       { id: 'settings', icon: () => 'settings', label: () => t('settings') },
-      { id: 'leave', icon: () => 'leave', label: () => t('quit'), disabled: () => !this.cb.getGame() },
+      // 退出对局:原地两段确认,第一次点变成红色「确认离开？」,3 秒内再点才离开;联机加「判负」小字
+      { id: 'leave', icon: () => 'leave', label: () => t(this.leaveArmed() ? 'xrConfirmLeaveShort' : 'quit'),
+        detail: () => (this.leaveArmed() && this.cb.getBattleControls().online ? t('xrLeavePenaltyShort') : ''),
+        danger: () => this.leaveArmed(), disabled: () => !this.cb.getGame() },
     ]);
     this.leaveArmedAt = -Infinity;
+    this.leaveArmedGame = null;
 
     // 输入源
     this.raycaster = new THREE.Raycaster();
@@ -410,8 +400,7 @@ export class XRControls {
     this.clearNotice();
     this.settingsOpen = false;
     this.settingsSignature = '';
-    this.battleControlsSignature = '';
-    this.confirmLeaveGame = null;
+    this.leaveArmedAt = -Infinity;
     this.lobbySignature = '';
     this.guideIndex = -1;
     this.calibFrames = 3;   // 等头部姿态就绪后再显示固定面板
@@ -482,7 +471,6 @@ export class XRControls {
   }
 
   applyControlArt() {
-    this.battleControlsSignature = '';
     this.lobbySignature = '';
     this.drawTrash();
     const art = uiArt('xr-control-back');
@@ -623,23 +611,20 @@ export class XRControls {
     } else if (id === 'leave' && game) this.requestLeave(game);
   }
 
-  // 退出对局:战斗按钮在时走那一排的二次确认;其它阶段联机局 3 秒内再点一次才离开(离开 = 判负)
+  // 退出对局(手心菜单):结算阶段直接回大厅;其它阶段两段确认——第一次点按钮变红,3 秒内再点才离开(联机离开 = 判负)
   requestLeave(game) {
-    if (game.phase === 'end') { this.cb.onLobbyAction('home'); return; }   // 结算阶段:直接回大厅
-    if (this.battleControls.visible) {
-      this.confirmLeaveGame = game;
-      this.battleControlsSignature = '';
-      this.clearNotice();
-      return;
-    }
-    const now = performance.now();
-    if (this.cb.getBattleControls().online && game.phase !== 'end' && !(now - this.leaveArmedAt < 3000)) {
-      this.leaveArmedAt = now;
-      this.cb.onToast?.(t('tLeave'));
+    if (game.phase === 'end') { this.cb.onLobbyAction('home'); return; }
+    if (!this.leaveArmed()) {
+      this.leaveArmedAt = performance.now();
+      this.leaveArmedGame = game;
       return;
     }
     this.leaveArmedAt = -Infinity;
     this.cb.onBattleAction('leave');
+  }
+
+  leaveArmed() {
+    return this.leaveArmedGame === this.cb.getGame() && performance.now() - this.leaveArmedAt < 3000;
   }
 
   // 主循环某一帧出错:显示 15 秒(错误信息 + 出错位置),用户截图带回
@@ -668,29 +653,6 @@ export class XRControls {
   clearNotice() {
     this.notice = null;
     this.hudTimer = 0;
-  }
-
-  refreshBattleControls() {
-    const { muted, boardSize, online } = this.cb.getBattleControls();
-    const hovered = this.hoverActions(this.battleButtons);
-    const confirming = Boolean(this.confirmLeaveGame);
-    const signature = JSON.stringify([getLang(), muted, boardSize, online, confirming, [...hovered]]);
-    if (signature === this.battleControlsSignature) return;
-    this.battleControlsSignature = signature;
-    this.leavePrompt.mesh.visible = confirming;
-    if (confirming) this.drawLobbyButton(this.leavePrompt, t('xrLeavePrompt'), online ? t('xrLeavePenalty') : '');
-    const labels = confirming ? [
-      [t('xrConfirmLeave')], [], [], [t('xrContinueBattle')],
-    ] : [
-      [t('xrCenter')],
-      [t('xrBoardSize'), t('xrBoard_' + boardSize)],
-      [t('xrSound'), t(muted ? 'xrOff' : 'xrOn')],
-      [t('quit')],
-    ];
-    for (const [i, panel] of this.battleButtons.entries()) {
-      panel.mesh.visible = labels[i].length > 0;
-      if (panel.mesh.visible) this.drawLobbyButton(panel, labels[i][0], labels[i][1], hovered.has(panel.action), confirming ? null : panel.action);
-    }
   }
 
   hoverActions(panels) {
@@ -876,6 +838,7 @@ export class XRControls {
       this.returnGame = game;
     }
     if (this.inputGame !== game || this.inputPhase !== game?.phase) {
+      if (game && game !== this.inputGame && game.phase === 'battle') this.palmHintUntil = performance.now() + 20000;
       this.inputGame = game;
       this.inputPhase = game?.phase;
       this.pauseInput();
@@ -907,11 +870,9 @@ export class XRControls {
     this.updateBoardGesture(dt);
     this.updatePalmMenu(dt, inputReady);
     this.refreshSettings();
-    if (this.confirmLeaveGame !== game || game?.phase !== 'battle') this.confirmLeaveGame = null;
     if (!game) { this.refreshLobby(); return; }
     this.refreshPanels(game, dt);
     if (game.phase !== 'end') this.sendLocalPose();
-    if (this.battleControls.visible) this.refreshBattleControls();
     this.animateReturningCards(dt);
     this.placementHint.mesh.visible = false;
 
@@ -1095,13 +1056,13 @@ export class XRControls {
     if (!game) return [...(this.guideIndex >= 0 ? this.guideButtons : this.lobbyButtons), ...settings];
     if (game.phase === 'upgrade') return [...this.upgrades, ...settings];
     if (game.phase === 'end') return [this.endPanel, this.lobbyReturn, ...settings];
-    return [...this.battleButtons, ...this.firstMatchButtons, ...this.cards, ...settings];
+    return [...this.firstMatchButtons, ...this.cards, ...settings];
   }
 
   // 只显示、不能点的面板:光标照样贴上去(看得出指在哪)
   raySurfaces() {
     return [this.hud, this.lobbyHeader, this.guidePanel, this.settingsHeader, this.firstMatchPrompt, this.pausedPanel,
-      this.manaPanel, this.nextCardPanel, this.cardDetailPanel, this.trash, this.upgradeWait, this.upgradeClock, this.leavePrompt];
+      this.manaPanel, this.nextCardPanel, this.cardDetailPanel, this.trash, this.upgradeWait, this.upgradeClock];
   }
 
   // 每帧给两只手分配指针:近手(离面板 / 手牌 15cm 内)或近手抓着牌的手不指;剩下的交给 HandArbiter 选一只。
@@ -1264,31 +1225,6 @@ export class XRControls {
         : this.endPanel.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(point) < 0.14;
       if (hit) this.cb.onRestart();
       return;
-    }
-    if (this.battleControls.visible && !this.inputs.some(input => input.grab)) {
-      const target = this.lobbyTarget(this.battleButtons, point, ray);
-      if (this.confirmLeaveGame === game) {
-        if (target?.action === 'leave') {
-          this.confirmLeaveGame = null;
-          this.refreshBattleControls();
-        }
-        if (target?.action === 'center') {
-          this.confirmLeaveGame = null;
-          this.cb.onBattleAction('leave');
-        }
-        return;
-      }
-      if (target) {
-        if (target.action === 'leave') {
-          this.confirmLeaveGame = game;
-          this.refreshBattleControls();
-          this.clearNotice();
-        } else if (target.action === 'center') {
-          this.recenter();
-          this.cb.onToast?.(t('tRecentered'));
-        } else this.cb.onBattleAction(target.action);
-        return;
-      }
     }
     const guide = this.cb.getFirstMatch?.();
     if (guide && this.firstMatchControls.visible) {
@@ -1470,7 +1406,6 @@ export class XRControls {
     this.trash.mesh.visible = !guide;
     this.hud.mesh.visible = !guide;
     this.upgradeGroup.visible = game.phase === 'upgrade';
-    this.battleControls.visible = battle && !guide;
     const waiting = this.upgradeGroup.visible && Boolean(game.upgrade?.picked?.p);
     this.upgrades.forEach(panel => { panel.mesh.visible = !waiting; });
     if (waiting && !this.upgradeWait.mesh.visible) this.drawLobbyButton(this.upgradeWait, t('upgradeWait'));
@@ -1669,7 +1604,8 @@ export class XRControls {
     ctx.fillStyle = mode ? '#ffd4ad' : '#e6d2e4';
     ctx.fillText(mode || (game.playsToUpgrade() ? t('toUpgrade', { n: game.playsToUpgrade() }) : t('upgradesComplete')), 760, 171, 444);
     const network = this.cb.getNetworkStatus?.();
-    const alert = [network, this.notice?.text].filter(Boolean);
+    const palmHint = performance.now() < this.palmHintUntil && !this.cb.getFirstMatch?.() ? t('xrPalmHint') : '';
+    const alert = [network, this.notice?.text || palmHint].filter(Boolean);
     if (alert.length) {
       box(42, 196, W - 84, 48, '#261c30');
       ctx.fillStyle = network ? '#ffb9b2' : '#ffe0a2';
