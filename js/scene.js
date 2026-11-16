@@ -843,7 +843,7 @@ export class BattleScene {
   // 立绘版塔 / 核心:正对镜头的精灵 + 脚下一圈阵营色底座(敌我靠底座颜色区分)
   makeStructSprite(s, tex) {
     const group = new THREE.Group();
-    const h = s.kind === 'base' ? 2.1 : s.kind === 'pylon' ? 1.7 : 1.45;
+    const h = s.kind === 'base' ? 2.1 : s.kind === 'pylon' ? 1.7 : 1.15;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.08, depthWrite: true }));
     sprite.scale.set(h, h, 1);
     sprite.center.set(0.5, 0.05);
@@ -871,7 +871,7 @@ export class BattleScene {
   // 3D 塔与核心受高度和占地双重约束。材质逐个克隆用于受击与摧毁反馈。
   makeStructModel(s, entry) {
     const group = new THREE.Group();
-    const targetHeight = s.kind === 'base' ? 1.9 : s.kind === 'pylon' ? 1.6 : 1.35;
+    const targetHeight = s.kind === 'base' ? 1.9 : s.kind === 'pylon' ? 1.6 : 1.05;   // 前哨炮(两座小炮)比侧翼塔小一档
     const root = entry.scene.clone(true);
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
