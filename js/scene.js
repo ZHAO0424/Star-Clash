@@ -172,6 +172,8 @@ function setBar(bar, hp, maxHp, viewRotation, now, { visible = true, shield = 0 
   bar.number?.userData.setText(String(Math.max(0, Math.round(hp))), pct <= 0.25 ? '#ffad87' : '#ffe6b5');
 }
 
+const DEFAULT_VIEW = Object.freeze({ yaw: 0, pitch: 0, zoom: 1, panX: 0, panZ: 0 });
+
 export class BattleScene {
   constructor(canvas) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -217,7 +219,7 @@ export class BattleScene {
     this.corpses = [];               // 正在播倒地 / 下沉的单位
     this.vfx = new VFX(this.world, (x, z) => this.heightAt(x, z));   // 粒子 / 弹道 / 法术特效
 
-    this.view = { yaw: 0, pitch: 0, zoom: 1 };   // 桌面端视角(右键旋转 / 滚轮缩放),默认 = 固定俯视角
+    this.view = { ...DEFAULT_VIEW };   // 桌面端视角(右键旋转 / 滚轮缩放 / 中键平移),默认 = 固定俯视角
     this.setBattlefield(null);
 
     this.insets = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -274,7 +276,7 @@ export class BattleScene {
     if (this.terrain?.scene) this.board.remove(this.terrain.scene);
     for (const c of [...this.board.children]) this.drop(c);
     this.arena = null;
-    this.view = { yaw: 0, pitch: 0, zoom: 1 };   // 新的一局 / 换场景:桌面视角恢复默认
+    this.view = { ...DEFAULT_VIEW };   // 新的一局 / 换场景:桌面视角恢复默认
     this.terrain = t;
     this.hm = t?.hm ?? null;
     this.buildBoard();
@@ -1558,10 +1560,11 @@ export class BattleScene {
     return new THREE.Vector3(Math.sin(this.view.yaw) * h, L * Math.sin(elev), Math.cos(this.view.yaw) * h);
   }
 
-  // 鼠标:右键拖动旋转视角(左右转 / 上下调俯仰),滚轮缩放,中键单击复位。左键仍用于拖牌、点牌出牌
+  // 鼠标:右键拖动旋转视角(左右转 / 上下调俯仰),滚轮缩放,中键拖动平移(中键单击不动 = 复位)。
+  // 左键仍用于拖牌、点牌出牌;触屏不走这里(只认 pointerType === 'mouse')
   enableMouseView() {
     const el = this.renderer.domElement;
-    let orbit = null, pending = false;
+    let orbit = null, pan = null, pending = false;
     // 高回报率鼠标一帧会来几十个事件:只记下视角参数,下一帧合并成一次取景
     const refit = () => {
       if (pending) return;
@@ -1569,21 +1572,51 @@ export class BattleScene {
       requestAnimationFrame(() => { pending = false; this.fitCamera(); });
     };
     el.addEventListener('contextmenu', e => e.preventDefault());
+    // 中键按下时浏览器会进入自动滚动:pointerdown 里拦不住,mousedown 也要拦
+    el.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
     el.addEventListener('pointerdown', e => {
       if (this.renderer.xr.isPresenting || e.pointerType !== 'mouse') return;
-      if (e.button === 1) { e.preventDefault(); this.resetView(); return; }
+      if (e.button === 1) {
+        e.preventDefault();
+        pan = { id: e.pointerId, x: e.clientX, y: e.clientY, panX: this.view.panX, panZ: this.view.panZ, moved: false };
+        el.setPointerCapture(e.pointerId);
+        el.style.cursor = 'move';
+        return;
+      }
       if (e.button !== 2) return;
       orbit = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: this.view.yaw, pitch: this.view.pitch };
       el.setPointerCapture(e.pointerId);
       el.style.cursor = 'grabbing';
     });
     el.addEventListener('pointermove', e => {
+      if (pan && e.pointerId === pan.id) {
+        const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+        if (!pan.moved && Math.hypot(dx, dy) < 4) return;   // 4px 以内当单击(松手复位)
+        pan.moved = true;
+        // 战场跟着光标走:按相机到注视点的距离换算每像素对应的地面长度,竖直方向再除以俯角的 sin
+        const dir = this.viewDir();
+        const meters = 2 * this.camera.position.distanceTo(this.viewTarget()) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) / innerHeight;
+        const h = Math.hypot(dir.x, dir.z), sinElev = dir.y / dir.length();
+        const fx = -dir.x / h, fz = -dir.z / h;   // 水平前方
+        const rx = -fz, rz = fx;                  // 水平右方
+        const ahead = dy * meters / sinElev, side = -dx * meters;
+        this.view.panX = Math.max(-FIELD_W, Math.min(FIELD_W, pan.panX + rx * side + fx * ahead));
+        this.view.panZ = Math.max(-FIELD_HALF, Math.min(FIELD_HALF, pan.panZ + rz * side + fz * ahead));
+        refit();
+        return;
+      }
       if (!orbit || e.pointerId !== orbit.id) return;
       this.view.yaw = Math.max(-1.3, Math.min(1.3, orbit.yaw - (e.clientX - orbit.x) * 0.006));
       this.view.pitch = Math.max(-0.45, Math.min(0.4, orbit.pitch + (e.clientY - orbit.y) * 0.004));
       refit();
     });
     const end = e => {
+      if (pan && e.pointerId === pan.id) {
+        if (!pan.moved && e.type === 'pointerup') this.resetView();
+        pan = null;
+        el.style.cursor = '';
+        return;
+      }
       if (!orbit || e.pointerId !== orbit.id) return;
       orbit = null;
       el.style.cursor = '';
@@ -1599,8 +1632,13 @@ export class BattleScene {
   }
 
   resetView() {
-    this.view = { yaw: 0, pitch: 0, zoom: 1 };
+    this.view = { ...DEFAULT_VIEW };
     this.fitCamera();
+  }
+
+  // 中键平移后的注视点(地面上,战场坐标)
+  viewTarget() {
+    return new THREE.Vector3(this.view.panX, 0, this.view.panZ);
   }
 
   fitCamera(W = innerWidth, H = innerHeight) {   // 传入尺寸时按该尺寸适配(场景对比页按 16:9 截图)
@@ -1660,9 +1698,12 @@ export class BattleScene {
     }
     // 平移画面:战场投影的中心对准空白区域的中心
     cam.setViewOffset(W, H, best.shiftX, best.shift, W, H);
+    // 中键平移:取景算完后整体平移相机和注视点(不参与上面的取景,否则又被居中抵消)
+    cam.position.add(this.viewTarget());
+    cam.lookAt(this.viewTarget());
     // 雾跟着相机距离走:只让远处的外圈山体淡出,战场本身不能泡在雾里(否则整体发暗)
     if (this.scene.fog) {
-      const dist = cam.position.length();
+      const dist = cam.position.distanceTo(this.viewTarget());
       this.scene.fog.near = dist * 1.05;
       this.scene.fog.far = dist * 2.4;
     }
