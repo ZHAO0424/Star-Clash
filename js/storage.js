@@ -33,8 +33,9 @@ export function isPresetDeck(faction, ids) {
 // ── 偏好 ──
 export const prefs = {
   get boardSize() {
-    const value = get('sg.xrBoardSize', 'standard');
-    return ['small', 'standard', 'large'].includes(value) ? value : 'standard';
+    // 默认「小」(第六轮);已经存过尺寸偏好的老用户按存的值,不强改
+    const value = get('sg.xrBoardSize', 'small');
+    return ['small', 'standard', 'large'].includes(value) ? value : 'small';
   },
   set boardSize(value) { set('sg.xrBoardSize', value); },
   get xrMode() {
