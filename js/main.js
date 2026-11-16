@@ -28,6 +28,7 @@ let selectedCard = null;
 let drag = null;   // {id, card, hit, pointerId}
 let selFaction = prefs.faction;
 let firstMatch = null;
+let paused = false;   // 本地人机对局暂停:loop 里跳过 session.tick(联机由服务器推进,不能暂停)
 
 const game = () => session?.game;
 // 调试:地址带 ?debug 时把场景 / 对局挂到 window 上,方便在控制台里看特效、模型
@@ -507,11 +508,15 @@ function ensureScene() {
       };
     },
     onLobbyAction: handleXRHomeAction,
-    getBattleControls: () => ({ muted: isMuted(), boardSize: prefs.boardSize, online: Boolean(session?.online) }),
+    getBattleControls: () => ({ muted: isMuted(), boardSize: prefs.boardSize, online: Boolean(session?.online), handOpacity: prefs.xrHandOpacity }),
+    canPause,
+    isPaused: () => paused,
+    onPause: value => setPaused(value),
     onBattleAction: handleXRBattleAction,
     getNetworkStatus: () => networkStatus({ problemsOnly: true }),
     getBoardSize: () => prefs.boardSize,
     onPlay: (idx, x, z) => {
+      if (paused) { toast(t('xrPaused')); return false; }
       if (!canPlayDuringGuide(game().p.hand[idx])) return false;
       const played = session.play(idx, x, z);
       if (played) { firstDeploymentPlayed(); renderHand(); }
@@ -520,6 +525,7 @@ function ensureScene() {
     },
     onDiscard: idx => {
       if (firstMatch) return;
+      if (paused) { toast(t('xrPaused')); return; }
       if (session.discard(idx)) renderHand();
       else toast(game().canDiscard('p', idx) ? networkStatus() : t('tDiscardCost', { n: DISCARD_COST }));
     },
@@ -557,6 +563,7 @@ async function beginBattle(s, { guided = false } = {}) {
   pendingBattle = null;
   session?.leave();
   session = s;
+  setPaused(false, { silent: true });
   leaveArmed = -Infinity;
   xr.clearNotice();
   xr.receiveRemotePose(null);
@@ -665,6 +672,7 @@ function backToMenu(destination = '#home-screen') {
   for (const selector of ['#btn-quick', '#btn-solo', '#btn-online', '#btn-again']) $(selector).disabled = false;
   session?.leave();
   session = null;
+  setPaused(false, { silent: true });
   $('#end-screen').style.display = 'none';
   $('#upgrade-screen').style.display = 'none';
   if (destination === '#home-screen') openHome();
@@ -698,6 +706,21 @@ function refreshMuteButton() {
 muteButton.onclick = () => { setMuted(!isMuted()); refreshMuteButton(); };
 refreshMuteButton();
 
+// ── 暂停(XR 手心菜单发起;桌面上显示「已暂停」按钮,点一下继续)──
+function canPause() {
+  return Boolean(session && !session.online && !firstMatch && game().phase !== 'end');
+}
+function setPaused(value, { silent = false } = {}) {
+  const next = Boolean(value) && canPause();
+  if (next === paused) return;
+  paused = next;
+  const badge = $('#pause-badge');
+  badge.hidden = !paused;
+  badge.textContent = t('pausedResume');
+  if (!silent) toast(t(paused ? 'xrPaused' : 'tGameResumed'));
+}
+$('#pause-badge').onclick = () => { sfx('click'); setPaused(false); };
+
 // ── 手牌 ──
 function renderHand() {
   const g = game();
@@ -725,6 +748,7 @@ function renderHand() {
     dBtn.addEventListener('pointerdown', e => e.stopPropagation());
     dBtn.addEventListener('click', e => {
       e.stopPropagation();
+      if (paused) { toast(t('xrPaused')); return; }
       if (session.discard(idx)) renderHand();
       else toast(t('tDiscardCost', { n: DISCARD_COST }));
     });
@@ -866,6 +890,7 @@ function playAt(placement, hit, pointer) {
   const g = game();
   if (g?.phase !== 'battle' || (firstMatch && firstMatch.step !== 'deploy')) return false;
   if (!hit) { showPlacementError('deployOutside', pointer); return false; }
+  if (paused) { toast(t('xrPaused')); return false; }
   const idx = g.p.hand.findIndex(card => card.id === placement.id);
   if (idx < 0) return false;
   const card = g.p.hand[idx];
@@ -1097,7 +1122,7 @@ function loop(now) {   // 参数不能叫 t:会遮住翻译函数 t()
   }
   const g = game();
 
-  if (!firstMatch) session.tick(dt);
+  if (!firstMatch) { if (!paused) session.tick(dt); }
   else if (firstMatch.step === 'watch') {
     g.tick(dt);
     firstMatch.elapsed += dt;
@@ -1179,6 +1204,10 @@ function handleXRBattleAction(action) {
     prefs.boardSize = sizes[(sizes.indexOf(prefs.boardSize) + 1) % sizes.length];
     xr.applyBoardSize();
     toast(t('xrBoardChanged', { size: t('xrBoard_' + prefs.boardSize) }));
+  } else if (action === 'hand') {
+    const levels = ['low', 'mid', 'high'];
+    prefs.xrHandOpacity = levels[(levels.indexOf(prefs.xrHandOpacity) + 1) % levels.length];
+    xr.applyHandOpacity();
   } else if (action === 'leave' && leaveBattle(true)) {
     toast(t('xrLeftField'));
   }

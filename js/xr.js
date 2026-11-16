@@ -17,6 +17,7 @@ import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
 import { createHandVisual } from './xr-hand-visual.js';
 import { HandRay } from './xr-hand-ray.js';
+import { PalmMenu } from './xr-palm-menu.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -33,6 +34,7 @@ const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
 const RETURN_SECONDS = 0.18;
 const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
+const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
 const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内用近手戳、抓,超过才出射线
 
 const hex = c => '#' + c.toString(16).padStart(6, '0');
@@ -278,6 +280,41 @@ export class XRControls {
     this.lobbySignature = '';
     this.drawLobbyButton(this.lobbyReturn, t('xrHome'));
 
+    // 暂停提示:战场上方
+    this.pausedPanel = makePanel(0.26, 0.07, 832, 224);
+    this.pausedPanel.mesh.position.set(0, -0.36, -0.68);
+    this.pausedPanel.mesh.rotation.x = -0.35;
+    this.pausedPanel.mesh.visible = false;
+    this.ui.add(this.pausedPanel.mesh);
+
+    // XR 设置面板(手心菜单「设置」打开):大厅和对局里都能用,挂在 anchor 下、视线略低处
+    this.settingsOpen = false;
+    this.settings = new THREE.Group();
+    this.settings.position.set(0, 0.0, -0.45);
+    this.settings.visible = false;
+    this.anchor.add(this.settings);
+    this.settingsHeader = makePanel(0.30, 0.04, 960, 128);
+    this.settingsHeader.mesh.position.y = 0.075;
+    this.settings.add(this.settingsHeader.mesh);
+    this.settingsButtons = ['size', 'sound', 'hand', 'close'].map(action => {
+      const button = makePanel(0.145, 0.046, 464, 148);
+      button.action = action;
+      this.settings.add(button.mesh);
+      return button;
+    });
+    this.layoutSettings();
+    this.settingsSignature = '';
+
+    // 左手手心菜单
+    this.palmMenu = new PalmMenu(bs.scene, [
+      { id: 'center', icon: () => 'center', label: () => t('xrCenter') },
+      { id: 'pause', icon: () => (this.cb.isPaused?.() ? 'resume' : 'pause'),
+        label: () => t(this.cb.isPaused?.() ? 'xrResume' : 'xrPause'), disabled: () => !this.cb.canPause?.() },
+      { id: 'settings', icon: () => 'settings', label: () => t('settings') },
+      { id: 'leave', icon: () => 'leave', label: () => t('quit'), disabled: () => !this.cb.getGame() },
+    ]);
+    this.leaveArmedAt = -Infinity;
+
     // 输入源
     this.raycaster = new THREE.Raycaster();
     this.inputs = [];
@@ -341,7 +378,10 @@ export class XRControls {
     this.nextPoseAt = 0;
     loadXRControlArt().then(() => this.applyControlArt());
     this.applyBoardSize();
+    this.applyHandOpacity();
     this.clearNotice();
+    this.settingsOpen = false;
+    this.settingsSignature = '';
     this.battleControlsSignature = '';
     this.confirmLeaveGame = null;
     this.lobbySignature = '';
@@ -364,6 +404,9 @@ export class XRControls {
       st.cursor.visible = false;
     }
     this.rayOwner = null;
+    this.palmMenu.hide();
+    this.settingsOpen = false;
+    this.settings.visible = false;
     this.bothPinchTime = 0;
     this.bs.world.visible = true;
     this.lobby.visible = false;
@@ -490,6 +533,78 @@ export class XRControls {
     this.bs.world.updateMatrixWorld(true);
   }
 
+  applyHandOpacity() {
+    const opacity = HAND_OPACITY[this.cb.getBattleControls().handOpacity] ?? HAND_OPACITY.mid;
+    for (const st of this.inputs) st.visual.setOpacity(opacity);
+  }
+
+  // 设置按钮两列排;按钮数为奇数时最后一个(关闭)居中放最下面
+  layoutSettings() {
+    this.settingsButtons.forEach((button, i) => {
+      const last = i === this.settingsButtons.length - 1 && i % 2 === 0;
+      button.mesh.position.set(last ? 0 : i % 2 ? 0.078 : -0.078, 0.025 - Math.floor(i / 2) * 0.056, 0);
+    });
+  }
+
+  refreshSettings() {
+    if (!this.settings.visible) return;
+    const { muted, boardSize, handOpacity } = this.cb.getBattleControls();
+    const hovered = this.hoverActions(this.settingsButtons);
+    const signature = JSON.stringify([getLang(), muted, boardSize, handOpacity, [...hovered]]);
+    if (signature === this.settingsSignature) return;
+    this.settingsSignature = signature;
+    this.drawLobbyButton(this.settingsHeader, t('settings'));
+    const labels = {
+      size: [t('xrBoardSize'), t('xrBoard_' + boardSize)],
+      sound: [t('xrSound'), t(muted ? 'xrOff' : 'xrOn')],
+      hand: [t('xrHandOpacity'), t('xrHand_' + handOpacity)],
+      view: [t('xrViewReset')],
+      close: [t('close')],
+    };
+    const icons = { size: 'size', sound: 'sound', view: 'center' };
+    for (const button of this.settingsButtons) {
+      const [label, detail] = labels[button.action];
+      this.drawLobbyButton(button, label, detail, hovered.has(button.action), icons[button.action] ?? null);
+    }
+  }
+
+  settingsAction(action) {
+    if (action === 'close') this.settingsOpen = false;
+    else this.cb.onBattleAction(action);   // size / sound / hand
+    this.settingsSignature = '';
+  }
+
+  // 手心菜单按钮
+  palmAction(id) {
+    const game = this.cb.getGame();
+    if (id === 'center') {
+      this.recenter();
+      this.cb.onToast?.(t('tRecentered'));
+    } else if (id === 'pause') this.cb.onPause?.(!this.cb.isPaused?.());
+    else if (id === 'settings') {
+      this.settingsOpen = !this.settingsOpen;
+      this.settingsSignature = '';
+    } else if (id === 'leave' && game) this.requestLeave(game);
+  }
+
+  // 退出对局:战斗按钮在时走那一排的二次确认;其它阶段联机局 3 秒内再点一次才离开(离开 = 判负)
+  requestLeave(game) {
+    if (this.battleControls.visible) {
+      this.confirmLeaveGame = game;
+      this.battleControlsSignature = '';
+      this.clearNotice();
+      return;
+    }
+    const now = performance.now();
+    if (this.cb.getBattleControls().online && game.phase !== 'end' && !(now - this.leaveArmedAt < 3000)) {
+      this.leaveArmedAt = now;
+      this.cb.onToast?.(t('tLeave'));
+      return;
+    }
+    this.leaveArmedAt = -Infinity;
+    this.cb.onBattleAction('leave');
+  }
+
   notify(text) {
     this.notice = { text, until: performance.now() + 3200 };
     this.hudTimer = 0;
@@ -536,7 +651,8 @@ export class XRControls {
 
   updateLayout(game) {
     const ready = this.calibFrames === 0;
-    this.lobby.visible = ready && !game;
+    this.lobby.visible = ready && !game && !this.settingsOpen;
+    this.settings.visible = ready && this.settingsOpen;
     this.ui.visible = ready && Boolean(game);
     this.bs.world.visible = ready && Boolean(game);
     this.poster.visible = this.active && ready && !this.isAR && Boolean(game) && this.poster.children.length > 0;
@@ -725,6 +841,8 @@ export class XRControls {
       }
     }
     this.checkRecenter(dt);
+    this.updatePalmMenu(dt, inputReady);
+    this.refreshSettings();
     if (this.confirmLeaveGame !== game || game?.phase !== 'battle') this.confirmLeaveGame = null;
     if (!game) { this.refreshLobby(); return; }
     this.refreshPanels(game, dt);
@@ -750,6 +868,22 @@ export class XRControls {
       const starter = guide?.step === 'deploy' && game.p.hand.find(card => card.id === guide.cardId);
       this.bs.showPlacement(starter ? { game, card: starter, showDeployZone: true } : null);
     }
+  }
+
+  updatePalmMenu(dt, inputReady) {
+    const hand = side => this.inputs.find(s => s.isHand && s.connected && s.side === side);
+    const left = hand('left'), right = hand('right');
+    const tipJoint = right?.hand.joints?.['index-finger-tip'];
+    const tip = right && !right.grab && right.handPoint && tipJoint && tipJoint.visible !== false
+      ? tipJoint.getWorldPosition(new THREE.Vector3()) : null;
+    const poked = this.palmMenu.update(dt, {
+      hand: left?.hand,
+      head: this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()),
+      allowed: inputReady && !this.inputs.some(s => s.grab),
+      tip,
+      hoverRay: right?.rayActive ? right.ray : null,
+    });
+    if (poked && this.canUseInput()) this.palmAction(poked);
   }
 
   sendLocalPose() {
@@ -892,10 +1026,11 @@ export class XRControls {
   // ── 手部射线(远处的按钮)──
   // 射线能点的面板:大厅 / 战斗按钮、强化、结束、设置;不能拖牌(拖牌保持近手操作,以免误出牌)
   rayPanels(game) {
-    if (!game) return this.guideIndex >= 0 ? this.guideButtons : this.lobbyButtons;
-    if (game.phase === 'upgrade') return this.upgrades;
-    if (game.phase === 'end') return [this.endPanel, this.lobbyReturn];
-    return [...this.battleButtons, ...this.firstMatchButtons];
+    const settings = this.settingsOpen ? this.settingsButtons : [];
+    if (!game) return [...(this.guideIndex >= 0 ? this.guideButtons : this.lobbyButtons), ...settings];
+    if (game.phase === 'upgrade') return [...this.upgrades, ...settings];
+    if (game.phase === 'end') return [this.endPanel, this.lobbyReturn, ...settings];
+    return [...this.battleButtons, ...this.firstMatchButtons, ...settings];
   }
 
   rayPanelHit(panels, ray) {
@@ -920,8 +1055,15 @@ export class XRControls {
     const game = this.cb.getGame();
     const panels = this.rayPanels(game);
     const close = [...panels, this.trash, ...(game?.phase === 'battle' ? this.cards : [])];
-    const near = st.handPoint && this.nearPanels(st.handPoint, close, RAY_NEAR);
-    const hit = st.ray && !st.grab && !near && !this.rayBlocked(st) ? this.rayPanelHit(panels, st.ray) : null;
+    const menu = this.palmMenu.open && st.side !== 'left' ? this.palmMenu.mesh : null;
+    const near = st.handPoint && (this.nearPanels(st.handPoint, close, RAY_NEAR)
+      || (menu && menu.position.distanceTo(st.handPoint) < RAY_NEAR));
+    let hit = null;
+    if (st.ray && !st.grab && !near && !this.rayBlocked(st)) {
+      hit = this.rayPanelHit(panels, st.ray);
+      const menuHit = menu && this.palmMenu.rayHit(st.ray);
+      if (menuHit && (!hit || menuHit.distance < hit.distance)) hit = menuHit;
+    }
     if (hit) st.rayDist = hit.distance;
     // 捏着的时候保持射线:捏合瞬间射线会跳,不能因此丢掉目标
     st.rayEligible = Boolean(hit) || (st.rayActive && st.pinched && Boolean(st.ray));
@@ -938,9 +1080,9 @@ export class XRControls {
     st.handRay.show(st.rayActive ? st.rayDist : null);
   }
 
-  // 预留给手心菜单:菜单出现时左手射线隐藏
-  rayBlocked() {
-    return false;
+  // 手心菜单出现时左手射线隐藏
+  rayBlocked(st) {
+    return st.side === 'left' && this.palmMenu.open;
   }
 
   // 手部输入核心(与设备解耦,便于桌面端模拟测试)
@@ -993,6 +1135,15 @@ export class XRControls {
   // fromHandRay:手部射线点的,只点按钮、不抓牌
   press(st, point, ray, fromHandRay = false) {
     if (!this.canUseInput()) return;
+    if (st.isHand && st.side === 'left' && this.palmMenu.open) return;   // 菜单出现时左手捏合被菜单吃掉
+    if (fromHandRay) {
+      const id = this.palmMenu.pick(ray);
+      if (id !== null) { if (id) this.palmAction(id); return; }
+    }
+    if (this.settings.visible) {
+      const target = this.lobbyTarget(this.settingsButtons, point, ray);
+      if (target) { this.settingsAction(target.action); return; }
+    }
     const game = this.cb.getGame();
     if (game && !this.ui.visible) return;
     if (!game) {
@@ -1217,6 +1368,7 @@ export class XRControls {
     }
     this.endPanel.mesh.visible = game.phase === 'end';
     this.lobbyReturn.mesh.visible = this.endPanel.mesh.visible;
+    this.refreshPaused(game);
 
     if (battle) {
       const hover = this.inputs.find(s => s.hover >= 0 && !s.grab)?.hover ?? -1;
@@ -1257,6 +1409,14 @@ export class XRControls {
 
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) { this.hudTimer = 0.15; this.drawHUD(game); }
+  }
+
+  refreshPaused(game) {
+    const panel = this.pausedPanel;
+    panel.mesh.visible = Boolean(this.cb.isPaused?.()) && game.phase !== 'end';
+    if (!panel.mesh.visible || panel.key === getLang()) return;
+    panel.key = getLang();
+    this.drawLobbyButton(panel, t('xrPaused'), t('xrPausedHint'), false, 'pause');
   }
 
   refreshFirstMatch(guide) {

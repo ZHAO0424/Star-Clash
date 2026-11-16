@@ -597,3 +597,8 @@ button { touch-action: manipulation; }
   .in-first-match #btn-menu { top: 70px; }
   .in-first-match #btn-xr { top: 70px; right: 124px; }
 }
+
+/* 暂停(XR 手心菜单发起):桌面上顶部居中一个按钮,点一下继续 */
+#pause-badge { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 8px 18px;
+  border: 2px solid #e5b573; border-radius: 12px; background: #34283ded; color: #fff3dc; font-weight: 800; cursor: pointer; }
+#pause-badge[hidden] { display: none; }

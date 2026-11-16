@@ -42,6 +42,11 @@ export const prefs = {
     return ['immersive-ar', 'immersive-vr'].includes(value) ? value : 'auto';
   },
   set xrMode(value) { set('sg.xrMode', value); },
+  get xrHandOpacity() {
+    const value = get('sg.xrHandOpacity', 'mid');
+    return ['low', 'mid', 'high'].includes(value) ? value : 'mid';
+  },
+  set xrHandOpacity(value) { set('sg.xrHandOpacity', value); },
   get firstMatchSeen() { return get('sg.firstMatchSeen', false) === true; },
   set firstMatchSeen(value) { set('sg.firstMatchSeen', Boolean(value)); },
   get entered() { return get('sg.entered', false) === true; },

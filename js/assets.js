@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mapForScene } from './map.js';
+import { drawXRIcon, XR_VECTOR_ICONS } from './xr-icons.js';
 
 export const XR_GUIDE = [
   { id: 'pinch', url: 'assets/ui/guide/pinch.webp' },
@@ -46,6 +47,10 @@ const XR_CONTROLS = {
 let xrControlArtRequest;
 
 export function loadXRControlArt() {
+  // 暂停 / 继续 / 设置还没有位图,先用 canvas 矢量图标顶上
+  for (const name of XR_VECTOR_ICONS) {
+    if (!images.has('ui:xr-control-' + name)) images.set('ui:xr-control-' + name, drawXRIcon(name));
+  }
   xrControlArtRequest ??= Promise.all(Object.entries(XR_CONTROLS).map(async ([action, path]) => {
     const img = await loadImage('assets/ui/' + path);
     if (img) images.set('ui:xr-control-' + action, img);
