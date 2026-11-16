@@ -3,7 +3,7 @@
 //
 // 空间布局(anchor = 进入 XR 时用户头部位置 + 朝向):
 //   战场  :头下 50cm、前方 72cm,约 0.55m × 0.75m 的桌面;己方半场在 44~76cm,坐姿可及
-//   手牌  :头下 40cm、前方 20cm,一排 5 张,向后倾斜面向用户
+//   手牌  :头下 42cm、前方 24cm(视线下约 60°),一排 5 张,向后倾斜面向用户;能量条在手牌下面
 //   HUD   :战场远端上方
 //   强化/结束面板:手牌上方,需要时出现
 // 重新居中在左手手心菜单里;双手同时空捏保持 0.4 秒 → 拖动旋转 / 升降 / 推拉战场(xr-board-rig.js)
@@ -80,7 +80,7 @@ function drawCard(panel, card, affordable, hover, blood = null) {
   ctx.globalAlpha = affordable ? 1 : 0.4;
   // 底
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#665573'); g.addColorStop(1, '#362a43');
+  g.addColorStop(0, 'rgba(102,85,115,0.45)'); g.addColorStop(1, 'rgba(54,42,67,0.45)');   // 半透明底:透出后面的战场
   ctx.fillStyle = g;
   ctx.beginPath();
   if (card.type === 'spell') {
@@ -167,8 +167,9 @@ export class XRControls {
 
     // 手牌
     this.cardRow = new THREE.Group();
-    this.cardRow.position.set(0, -0.345, -0.265);
-    this.cardRow.rotation.x = -0.50;
+    // 视线下方约 60°:压在战场近边之下,不挡战场(第三轮眼镜验收)
+    this.cardRow.position.set(0, -0.42, -0.24);
+    this.cardRow.rotation.x = -0.60;
     this.ui.add(this.cardRow);
     this.cards = [];
     for (let i = 0; i < 5; i++) {
@@ -186,10 +187,10 @@ export class XRControls {
     this.nextCardPanel.mesh.position.set(-3 * CARD_GAP, 0, 0);
     this.cardRow.add(this.nextCardPanel.mesh);
     this.manaPanel = makePanel(0.28, 0.034, 736, 104);
-    this.manaPanel.mesh.position.set(0, 0.071, 0);
+    this.manaPanel.mesh.position.set(0, -0.072, 0);   // 能量条在手牌下面
     this.cardRow.add(this.manaPanel.mesh);
     this.cardDetailPanel = makePanel(0.32, 0.034, 840, 100);
-    this.cardDetailPanel.mesh.position.set(0, -0.072, 0);
+    this.cardDetailPanel.mesh.position.set(0, -0.11, 0);
     this.cardRow.add(this.cardDetailPanel.mesh);
 
     // 回收区(弃牌):手牌右侧
@@ -265,9 +266,11 @@ export class XRControls {
     this.ui.add(this.endPanel.mesh);
     this.endFor = null;
 
-    // 首页在头部下方、手能触及的位置固定，按需重画 Canvas。
+    // 首页按需重画 Canvas。
     this.lobby = new THREE.Group();
-    this.lobby.position.set(0, -0.145, -0.46);
+    // 大厅(含教学)离远到 0.65m、整组放大 1.3 倍:视角大小基本不变,主要靠射线点
+    this.lobby.position.set(0, -0.20, -0.65);
+    this.lobby.scale.setScalar(1.3);
     this.lobby.visible = false;
     this.boardRig.node.add(this.lobby);
     this.lobbyHeader = makePanel(0.34, 0.087, 1024, 262);
