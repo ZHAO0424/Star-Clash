@@ -1,8 +1,10 @@
 // 棋盘底座 — 整个地图放在一块红蓝对阵的棋盘底座上(参考 assets/model-references/red-blue-board-versus.png)
-//   · 台面:蓝方半场(+Z,己方)/ 红方半场(-Z,敌方),金色分界线、两端半圆、内框线
-//   · 金色倒角边框;四角发光晶体石柱、两端中门塔、长边宝石嵌板(红在敌方那头、蓝在己方)
-//   · 每个部件是一个"槽":assets/arena/parts/<槽名>.glb 存在就用模型(GPT 部件图 → Tripo 生成),否则用程序化几何体
-//     槽名:rim_straight / rim_corner / pylon_red / pylon_blue / gate_red / gate_blue / plaque_red / plaque_blue
+//   · 台面:受光石板(铺砖 + 凹凸),阵营色只作细镶边(己方 +Z 蓝 / 敌方 -Z 红),金色内框线
+//   · 边框:倒角石材 + 内侧金属包边 + 顶面阵营色发光嵌线(第一轮画面提升 C:不再铺大面积纯红纯蓝)
+//   · 四角发光晶体石柱、两端中门塔、长边宝石嵌板(红在敌方那头、蓝在己方)
+//   · 部件"槽":assets/arena/parts/<槽名>.glb 存在就用模型(GPT 部件图 → Tripo 生成),否则用程序化几何体
+//     槽名:pylon_red / pylon_blue / gate_red / gate_blue / plaque_red / plaque_blue
+//     (rim_straight / rim_corner 两个边框模型只是纯色方块且要 30+ 次 draw call,已改用程序化石材边框)
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
@@ -47,68 +49,75 @@ function loadPart(slot) {
   return loader.loadAsync(`assets/arena/parts/${slot}.glb`).then(gltf => gltf.scene);
 }
 
-async function replaceRim(root, fallback) {
-  const [straight, corner] = await Promise.all([loadPart('rim_straight'), loadPart('rim_corner')]);
-  const rim = new THREE.Group();
-  rim.name = 'slot:rim:assembled';
-  const maxX = ARENA.hx + ARENA.rim, maxZ = ARENA.hz + ARENA.rim;
-  const leg = 1.2, width = ARENA.rim, height = 0.30;
-  const y = ARENA.top - 0.11;
-  const add = (model, dimensions, x, z, angle) => {
-    const part = fitPart(model.clone(true), dimensions);
-    if (!part) return false;
-    part.position.set(x, y, z);
-    part.rotation.y = angle;
-    rim.add(part);
-    return true;
-  };
-  for (const [sx, sz, angle] of [
-    [-1, -1, 0], [1, -1, -Math.PI / 2], [1, 1, Math.PI], [-1, 1, Math.PI / 2],
-  ]) {
-    if (!add(corner, [leg, height, leg], sx * (maxX - leg / 2), sz * (maxZ - leg / 2), angle)) return;
-  }
-  for (const longSide of [false, true]) {
-    const extent = longSide ? maxZ : maxX;
-    const run = 2 * (extent - leg);
-    const count = Math.ceil(run / 2);
-    const length = run / count;
-    const offset = (longSide ? maxX : maxZ) - width / 2;
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < count; i++) {
-        const along = -run / 2 + (i + 0.5) * length;
-        const x = longSide ? side * offset : along;
-        const z = longSide ? along : side * offset;
-        const angle = longSide ? side * Math.PI / 2 : side < 0 ? Math.PI : 0;
-        if (!add(straight, [length, height, width], x, z, angle)) return;
-      }
-    }
-  }
-  root.add(rim);
-  fallback.visible = false;
+// 固定种子的随机数:台面花纹每次一样(双方看到的也一样)
+function seeded(seed) {
+  return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
 }
 
+// 台面:暖灰石板铺砖 + 风化斑点;返回 { map, bump }(bump 是缩小一半的灰度高度图,砖缝凹下去)
+//   画面上只露出地形岛外的一圈(约 0.7 格宽),所以花纹以"砖缝 + 细镶边"为主,不画大面积阵营色
 function surfaceTexture() {
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = Math.round(512 * ARENA.hz / ARENA.hx);
-  const g = c.getContext('2d'), W = c.width, H = c.height;
-  const grad = (y0, y1, a, b) => { const l = g.createLinearGradient(0, y0, 0, y1); l.addColorStop(0, a); l.addColorStop(1, b); return l; };
-  g.fillStyle = grad(0, H / 2, '#7a1626', '#a8243a'); g.fillRect(0, 0, W, H / 2);       // 红方(上 = -Z)
-  g.fillStyle = grad(H / 2, H, '#24489a', '#1a3478'); g.fillRect(0, H / 2, W, H / 2);   // 蓝方(下 = +Z)
-  for (let i = 0; i < 2600; i++) {   // 布纹 / 石纹的细微颗粒
-    g.fillStyle = `rgba(255,255,255,${Math.random() * 0.035})`;
-    g.fillRect(Math.random() * W, Math.random() * H, 2 + Math.random() * 3, 1 + Math.random() * 2);
+  const W = 768, H = Math.round(W * ARENA.hz / ARENA.hx), ppu = W / (2 * ARENA.hx);   // ppu = 每格像素
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const h = document.createElement('canvas'); h.width = W / 2; h.height = H / 2;
+  const g = c.getContext('2d'), gh = h.getContext('2d');
+  const R = seeded(20251116);
+  g.fillStyle = '#8a8077'; g.fillRect(0, 0, W, H);
+  gh.fillStyle = '#444'; gh.fillRect(0, 0, W / 2, H / 2);
+  // 石板:错缝铺砖,每块颜色略有差异
+  const tile = 0.78 * ppu;
+  for (let row = 0, y = 0; y < H; row++, y += tile) {
+    const off = (row % 2) * tile * 0.5;
+    for (let x = -off; x < W; x += tile) {
+      const v = 118 + R() * 26, warm = R() * 10;
+      g.fillStyle = `rgb(${v + warm | 0},${v + warm * 0.4 | 0},${v - 6 | 0})`;
+      g.fillRect(x + 2, y + 2, tile - 4, tile - 4);
+      const hv = 170 + R() * 50 | 0;
+      gh.fillStyle = `rgb(${hv},${hv},${hv})`;
+      gh.fillRect((x + 3) / 2, (y + 3) / 2, (tile - 6) / 2, (tile - 6) / 2);
+    }
   }
-  g.strokeStyle = '#e8b85a'; g.lineCap = 'round';
-  g.lineWidth = 5; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();   // 分界线
-  g.lineWidth = 3;
-  const m = W * ARENA.frameMargin / (2 * ARENA.hx); g.strokeRect(m, m, W - 2 * m, H - 2 * m);   // 黄线内框 = 地形岛轮廓
-  for (const [y, dir] of [[m, 1], [H - m, -1]]) {                                         // 两端半圆
-    g.beginPath(); g.arc(W / 2, y, W * 0.24, dir > 0 ? 0 : Math.PI, dir > 0 ? Math.PI : Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(W / 2, y + dir * H * 0.06, W * 0.42, dir > 0 ? 0.25 : Math.PI + 0.25, dir > 0 ? Math.PI - 0.25 : Math.PI * 2 - 0.25); g.stroke();
+  // 风化:细颗粒 + 少量深色污渍
+  for (let i = 0; i < 9000; i++) {
+    const a = R() * 0.08;
+    g.fillStyle = R() < 0.5 ? `rgba(255,245,230,${a})` : `rgba(30,20,15,${a})`;
+    g.fillRect(R() * W, R() * H, 1 + R() * 2, 1 + R() * 2);
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = R() * W, y = R() * H, r = 10 + R() * 40;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, 'rgba(40,30,25,0.18)'); gr.addColorStop(1, 'rgba(40,30,25,0)');
+    g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  // 黄线内框 = 地形岛轮廓:金色线;外侧一圈阵营色细镶边(上半 -Z 红 / 下半 +Z 蓝),中线金色分界
+  const m = ppu * ARENA.frameMargin;
+  for (const [y0, y1, col] of [[0, H / 2, '#d0485c'], [H / 2, H, '#4a8cf0']]) {
+    g.save(); g.beginPath(); g.rect(0, y0, W, y1 - y0); g.clip();
+    g.strokeStyle = col; g.lineWidth = 3; g.strokeRect(m * 0.45, m * 0.45, W - m * 0.9, H - m * 0.9);
+    g.restore();
+  }
+  g.strokeStyle = '#e2b25e'; g.lineWidth = 3; g.strokeRect(m, m, W - 2 * m, H - 2 * m);
+  g.lineWidth = 5; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  return { map, bump: new THREE.CanvasTexture(h) };
+}
+
+// 边框石材:可平铺的小块噪声贴图(ExtrudeGeometry 顶面 UV = 形状坐标,即战场单位)
+function rimTexture() {
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), R = seeded(7);
+  g.fillStyle = '#80766c'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 1400; i++) {
+    const a = R() * 0.12;
+    g.fillStyle = R() < 0.5 ? `rgba(255,240,220,${a})` : `rgba(25,18,12,${a})`;
+    g.fillRect(R() * S, R() * S, 1 + R() * 3, 1 + R() * 3);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(0.8, 0.8);
   return t;
 }
 
@@ -163,17 +172,38 @@ export function buildArena(env) {
     new THREE.MeshStandardMaterial({ color: 0x3a2a24, roughness: 0.9, envMap: env, envMapIntensity: 0.4 }));
   slab.rotation.x = Math.PI / 2; slab.position.y = A.top - 0.02;
   root.add(slab);
-  const surf = new THREE.Mesh(new THREE.PlaneGeometry(2 * A.hx, 2 * A.hz), new THREE.MeshStandardMaterial({ map: surfaceTexture(), roughness: 0.75, envMap: env, envMapIntensity: 0.5 }));
+  const tex = surfaceTexture();
+  const surf = new THREE.Mesh(new THREE.PlaneGeometry(2 * A.hx, 2 * A.hz), new THREE.MeshStandardMaterial({
+    map: tex.map, bumpMap: tex.bump, bumpScale: 2.0, roughness: 0.82, metalness: 0.05, envMap: env, envMapIntensity: 0.45 }));
   surf.rotation.x = -Math.PI / 2; surf.position.y = A.top;
   root.add(surf);
-  // 金色边框:外轮廓减内轮廓,带倒角
-  const ring = chamferRect(A.hx + A.rim, A.hz + A.rim, 0.9);
-  const hole = chamferRect(A.hx, A.hz, 0.6);
-  ring.holes.push(new THREE.Path(hole.getPoints().reverse()));
-  const rim = new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2 }), gold(env));
-  rim.rotation.x = -Math.PI / 2; rim.position.y = A.top - 0.05;
+  // 边框:倒角石材(外轮廓减内轮廓)+ 内侧金属包边 + 顶面阵营色嵌线
+  const band = (outX, outZ, outCh, inX, inZ, inCh, depth, bevel) => {
+    const ring = chamferRect(outX, outZ, outCh);
+    ring.holes.push(new THREE.Path(chamferRect(inX, inZ, inCh).getPoints().reverse()));
+    const geo = new THREE.ExtrudeGeometry(ring, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 });
+    geo.rotateX(-Math.PI / 2);
+    return geo;
+  };
+  const rim = new THREE.Mesh(band(A.hx + A.rim, A.hz + A.rim, 0.9, A.hx + 0.06, A.hz + 0.06, 0.62, 0.18, 0.06),
+    new THREE.MeshStandardMaterial({ map: rimTexture(), color: 0xc8beb2, roughness: 0.72, metalness: 0.08, envMap: env, envMapIntensity: 0.5 }));
+  rim.position.y = A.top - 0.05;
   rim.name = 'slot:rim';
   root.add(rim);
+  const lip = new THREE.Mesh(band(A.hx + 0.1, A.hz + 0.1, 0.64, A.hx - 0.02, A.hz - 0.02, 0.58, 0.2, 0.02), gold(env));
+  lip.position.y = A.top - 0.02;
+  lip.name = 'rimTrim';
+  root.add(lip);
+  // 阵营色嵌线:长边顶面各半段一条细发光槽(敌方 -Z 红 / 己方 +Z 蓝),只作镶边
+  const inlayY = A.top + 0.2, inlayX = A.hx + A.rim * 0.55, inlayLen = A.hz - 0.9;
+  for (const [col, sz] of [[RED, -1], [BLUE, 1]]) {
+    const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, roughness: 0.4 });
+    for (const sx of [-1, 1]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, inlayLen), mat);
+      strip.position.set(sx * inlayX, inlayY, sz * (inlayLen / 2 + 0.25));
+      root.add(strip);
+    }
+  }
   // 部件
   const slots = [];
   const place = (slot, kind, color, x, z, rotY) => {
@@ -205,9 +235,6 @@ export function buildArena(env) {
         delete obj.userData.crystal;
         obj.add(part);
       }).catch(() => { /* 保留程序化部件 */ });
-    }
-    if (have.includes('rim_straight') && have.includes('rim_corner')) {
-      replaceRim(root, rim).catch(() => { /* 两种部件均可用时才替换整圈 */ });
     }
   }).catch(() => { /* 无清单时使用程序化底座 */ });
   return root;
