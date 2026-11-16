@@ -210,6 +210,16 @@ export function cardTags(c) {
   return t;
 }
 
+// 部署特效(锁定法阵 / 降临)按体型分 3 档(第四轮):建筑 1.0;一张牌出多只的群兵 0.55;5 费以上或空中单位 0.75;其余 0.55。
+// 以前法阵直接用 previewRadius(含攻击射程),远程单位的法阵能占半个战场
+export function deployFxRadius(c) {
+  if (c.type === 'building') return 1.0;
+  if (c.count > 2) return 0.55;
+  return c.cost >= 5 || c.air ? 0.75 : 0.55;
+}
+// 降临序列(冲击环 / 闪光 / 光柱)按同一档缩放:小 0.75、中 1、大 1.2
+export const deployFxScale = c => ({ 0.55: 0.75, 0.75: 1, 1: 1.2 })[deployFxRadius(c)];
+
 // 落点预览圈半径:单位 = 攻击范围;建筑 = 攻击/脉冲/光环范围;范围法术 = 作用半径
 export function previewRadius(c) {
   if (c.type === 'spell') return c.radius || 0.3;

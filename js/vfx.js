@@ -368,22 +368,22 @@ export class VFX {
   // 部署降临:落雷 → 着陆冲击(闪光 + 冲击波 + 裂纹 + 扬尘)→ 法阵符文飘散成光点。粒子 ≤ 30
   //   faction 势力 id(选符文贴图);air 飞行单位:光柱停在 airY 高度、不出裂纹;building 建筑:扬尘更重
   //   lite:多只的小兵,只要冲击波 + 小闪光(不砸光柱,避免满屏光柱)
-  descend(x, z, { color, faction, air = false, airY = 1, building = false, lite = false, r = 0.7 } = {}) {
+  descend(x, z, { color, faction, air = false, airY = 1, building = false, lite = false, r = 0.7, k = 1 } = {}) {   // k:按体型的整体缩放(cards.js deployFxScale)
     const gy = this.gy(x, z), hitY = air ? gy + airY : gy;
     if (lite) {
-      this.ring(x, z, 0.05, 0.55, color, 0.35, 0.9);
-      this.flash(x, gy + 0.25, z, color, 0.5, 0.12);
+      this.ring(x, z, 0.05, 0.55 * k, color, 0.35, 0.9);
+      this.flash(x, gy + 0.25, z, color, 0.5 * k, 0.12);
       return;
     }
-    this.strike(x, z, color, { bottom: hitY, width: building ? 0.42 : 0.32 });
+    this.strike(x, z, color, { bottom: hitY, width: (building ? 0.42 : 0.32) * k });
     this.later(0.12, () => {   // 着陆冲击
-      this.flash(x, hitY + 0.2, z, 0xffffff, building ? 1.6 : 1.2, 0.16);
-      this.flash(x, hitY + 0.15, z, color, building ? 2.4 : 1.8, 0.28);
-      this.ring(x, z, 0.1, building ? 1.8 : 1.4, 0xffffff, 0.32, 1, air ? hitY - gy + 0.06 : 0.06);
-      this.ring(x, z, 0.1, building ? 1.2 : 0.9, color, 0.5, 0.9, air ? hitY - gy + 0.08 : 0.08);
+      this.flash(x, hitY + 0.2, z, 0xffffff, (building ? 1.6 : 1.2) * k, 0.16);
+      this.flash(x, hitY + 0.15, z, color, (building ? 2.4 : 1.8) * k, 0.28);
+      this.ring(x, z, 0.1, (building ? 1.8 : 1.4) * k, 0xffffff, 0.32, 1, air ? hitY - gy + 0.06 : 0.06);
+      this.ring(x, z, 0.1, (building ? 1.2 : 0.9) * k, color, 0.5, 0.9, air ? hitY - gy + 0.08 : 0.08);
       this.sparks(x, hitY + 0.1, z, color, 8, 2.2, 0.1, 0.35);
       if (air) return;
-      this.decal(x, z, building ? 1.1 : 0.85, deployTextures().crack, color, { life: 1, opacity: 0.85 });
+      this.decal(x, z, (building ? 1.1 : 0.85) * k, deployTextures().crack, color, { life: 1, opacity: 0.85 });
       const n = building ? 10 : 6, dust = C(0xdfe4ee);   // 扬尘向外推(亮色:眼镜里暗色等于看不见)
       for (let i = 0; i < n; i++) {
         const a = i / n * Math.PI * 2 + rnd(0, 0.5), sp = rnd(1.4, 2.2) * (building ? 1.2 : 1);

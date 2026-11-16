@@ -1,6 +1,6 @@
 // 渲染层 — Three.js 场景:开放战场、建筑、单位、攻击/部署范围圈、弹道、粒子
 import * as THREE from 'three';
-import { FACTIONS } from './cards.js';
+import { FACTIONS, deployFxRadius, deployFxScale } from './cards.js';
 import { FIELD_W, FIELD_HALF, DEPLOY_LINE } from './game.js';
 import { t } from './i18n.js';
 import { mapForScene, wallSegments } from './map.js';
@@ -658,7 +658,8 @@ export class BattleScene {
     const show = Number.isFinite(opts?.x) && Number.isFinite(opts?.z);
     this.showHealMarkers(show ? opts.heal : null);
     const marker = show && opts.isUnit;   // 单位 / 建筑:锁定法阵;法术:范围圈
-    this.placeRing.visible = this.placeArea.visible = show && !marker;
+    this.placeArea.visible = show && !marker;
+    this.placeRing.visible = show;   // 单位 / 建筑:细的射程环(法阵按体型,不再代表射程)
     this.placeDot.visible = false;
     if (!marker) this.deployMarker.hide();
     const showZone = opts?.showDeployZone;
@@ -681,8 +682,17 @@ export class BattleScene {
     }
     if (marker) {
       const f = opts.card?.faction;
-      this.deployMarker.set({ x: opts.x, z: opts.z, radius: opts.radius, faction: f, color: FACTIONS[f]?.color,
+      const fx = deployFxRadius(opts.card);
+      this.deployMarker.set({ x: opts.x, z: opts.z, radius: fx, faction: f, color: FACTIONS[f]?.color,
         state: !opts.valid ? 'bad' : here ? 'rift' : 'ok' });
+      // 射程另画一条细环(射程不比法阵大时不画)
+      this.placeRing.visible = opts.radius > fx + 0.1;
+      if (!this.placeRing.visible) return;
+      this.placeRing.position.x = opts.x; this.placeRing.position.z = opts.z;
+      this.placeRing.scale.setScalar(opts.radius);
+      if (this.hm) this.drape(this.placeRing, opts.x, opts.z, 0.06);
+      this.placeRing.material.color.setHex(opts.valid ? 0x5ac8ff : 0xff4444);
+      this.placeRing.material.opacity = 0.35;
       return;
     }
     const color = opts.valid ? (here ? 0xd1a6ff : 0x5ac8ff) : 0xff4444;
@@ -1987,7 +1997,7 @@ export class BattleScene {
   descendFx(x, z, card, side) {
     const lite = !!card.token || card.count > 2;
     this.vfx.descend(x, z, { color: FACTIONS[card.faction].color, faction: card.faction, air: !!card.air,
-      building: card.type === 'building', lite, r: card.type === 'building' ? 1.0 : 0.7 });
+      building: card.type === 'building', lite, r: deployFxRadius(card), k: deployFxScale(card) });
     if (!lite && side === 'p') this.vfx.later(0.12, () => { this.shakeT = SHAKE_T; });
     return lite ? 'lite' : 'descend';
   }
