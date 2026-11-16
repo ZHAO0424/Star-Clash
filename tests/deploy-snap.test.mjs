@@ -14,7 +14,8 @@ test('合法落点原样返回', () => {
 
 test('压在岩石上:1 格内找到合法空位', () => {
   const g = game();
-  const rock = g.map.obstacles.find(o => o.z > DEPLOY_LINE + 0.5 && o.z < FIELD_HALF - 0.5 && o.r <= 0.7);
+  const rock0 = g.map.obstacles.find(o => o.z + o.r > DEPLOY_LINE && o.z < FIELD_HALF - 0.5 && o.r <= 0.7);   // 中路岩石(z = 2.35)压在部署线上
+  const rock = rock0 && { ...rock0, z: Math.max(rock0.z, DEPLOY_LINE + 0.05) };   // 取岩石在部署区一侧的点
   assert.ok(rock, '己方半场应有岩石');
   assert.equal(g.deployBlockReason('p', unit, rock.x, rock.z), 'deployRock');
   const spot = g.nearestDeploySpot('p', unit, rock.x, rock.z);
@@ -27,4 +28,17 @@ test('越过部署线 / 出界不吸附', () => {
   const g = game();
   assert.equal(g.nearestDeploySpot('p', unit, 0, DEPLOY_LINE - 0.5), null);
   assert.equal(g.nearestDeploySpot('p', unit, 0, FIELD_HALF + 1), null);
+});
+
+test('部署区:离中线 2.4 以外,纵深 5.2 占半场约 68%(比最初 6.0 / 88% 小);熔岩河整条在部署区外', async () => {
+  const { mapForScene, lavaCenterZ } = await import('../js/map.js');
+  assert.equal(DEPLOY_LINE, 2.4);
+  assert.ok(FIELD_HALF - DEPLOY_LINE < 6.0 && (FIELD_HALF - DEPLOY_LINE) / FIELD_HALF < 0.7);
+  const g = game();
+  assert.equal(g.deployBlockReason('p', unit, 0.5, DEPLOY_LINE - 0.01), 'deploySide');
+  assert.equal(g.deployBlockReason('p', unit, 0.5, DEPLOY_LINE + 0.01), null);
+  assert.equal(g.deployBlockReason('e', unit, 0.5, -DEPLOY_LINE + 0.01), 'deploySide');
+  for (const id of ['starcore', 'glacier', 'volcano']) assert.equal(mapForScene(id).DEPLOY_LINE, DEPLOY_LINE, id);
+  const V = mapForScene('volcano');
+  for (let x = -V.W; x <= V.W; x += 0.05) assert.ok(Math.abs(lavaCenterZ(V.lava, V.W, x)) + V.lava.half + 0.22 < DEPLOY_LINE);
 });

@@ -1208,6 +1208,7 @@ function frame(now) {   // 参数不能叫 t:会遮住翻译函数 t()
   scene.syncUnits(g.units, cam);
   scene.syncStructures(g.structures, cam);
   scene.syncNode(g.node);
+  scene.syncMeteor(g);   // 星核荒原 · 陨星(其它图没有 meteor,只清空)
   scene.update(dt);
   refreshHUD();
   scene.render();

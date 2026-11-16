@@ -7,7 +7,7 @@
 //       3. 补援:刚发起的进攻,在坦克后方补远程/范围支援
 //       4. 反击:防守成功后,给推进中的幸存单位补兵
 //       5. 星核:星核不归自己且己方在场兵力不占优时,派耐打的单位去占
-//       6. 进攻:法力攒够才发起(坦克/攻城打头),挑防守最薄的塔,避开裂隙
+//       6. 进攻:法力攒够才发起(坦克/攻城打头),挑防守最薄的塔,避开裂隙;熔岩图从最近的不烧灼渡口出兵
 //       7. 法力将满时不浪费:出性价比最高的牌
 //   'normal' 战略 AI 的减速版:每 ~2 秒评估一次,25% 概率随手出牌(普通难度)
 //   'basic' 旧版:每 2.5~4 秒出一张牌,只按费用挑牌(简单难度,也是强度对照)
@@ -17,6 +17,7 @@ import { dist2, FIELD_W, FIELD_HALF } from './game.js';
 import { wallGap } from './map.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const LANE_BURN_OK = 1.5;   // 熔岩图:打头单位的过河代价(game.burnCost)不超过这个值就走边路硬蹚
 const value = u => u.hp + u.atk * 3 + (u.shield || 0);
 const AREA_DAMAGE = new Set(['stun_area', 'dot_area', 'strike', 'curse', 'parasite', 'chain']);
 const isRanged = c => c.range > 1.2 && c.atk > 0;
@@ -265,6 +266,13 @@ export class SimpleAI {
       }
     }
 
+    // 4b. 星核荒原 · 星石:己方半场有星石、附近没有己方单位 → 在它正后方出一张最便宜的单位(走过去顺路捡,+1 法力)
+    const shard = g.meteor?.shards.find(sh => sh.z * this.dir > 0 && sh.left > 4 && !mobile.some(u => Math.hypot(u.x - sh.x, u.z - sh.z) < 2));
+    if (shard && s.mana >= 3) {
+      const pick = best(deploy.filter(x => x.card.type === 'unit' && !x.card.air && x.card.cost <= 3), c => -c.cost + (c.speed || 0));
+      if (pick) { place(pick, this.own(shard.x, g.map.DEPLOY_LINE + 0.15)); return; }
+    }
+
     // 5. 星核:不归自己,且己方在星核附近的兵力不占优 → 派耐打的单位去占
     const N = this.game.map.node;
     const near = (list) => list.filter(u => !u.building && Math.hypot(u.x - N.x, u.z - N.z) < N.r + 1.5)
@@ -283,7 +291,7 @@ export class SimpleAI {
     if (s.mana >= Math.min(8, s.manaMax) || full) {
       const lead = best(deploy.filter(x => x.card.type === 'unit'), c => c.hp * (c.siege ? 1.3 : 1) * (c.count || 1) + (c.kamikaze ? 150 : 0));
       if (lead) {
-        const x = this.laneX();
+        const x = this.laneX(lead.card);
         const u = place(lead, this.own(x, isRanged(lead.card) ? FIELD_HALF * 0.55 : 2.4)) &&
           g.units.filter(o => o.side === this.who).slice(-1)[0];
         if (u) this.push = { unit: u, t: g.time };
@@ -296,12 +304,21 @@ export class SimpleAI {
   }
 
   // 进攻方向:防守最薄的敌方塔(塔血量 + 附近敌军价值),x 收向中路以避开两侧裂隙
-  laneX() {
+  laneX(card) {
     const g = this.game;
     const towers = g.structures.filter(t => t.side === this.foe && !t.dead && t.kind !== 'base');
     if (!towers.length) return 0;
     const weak = towers.map(t => ({ t, v: t.hp + g.units.filter(u => u.side === this.foe && dist2(u, t) < 3).reduce((a, u) => a + value(u), 0) }))
       .sort((a, b) => a.v - b.v)[0].t;
+    // 熔岩锻炉(没有岩桥,只有祭坛安全):耐烧的打头单位直接走目标塔那一路(过河时蹚熔岩);
+    //   怕烧的(过河代价高)从祭坛正后方出兵。否则所有进攻都挤到中路,边路没人走(诊断:98% 的过河都经过祭坛)
+    const lava = g.map.lava;
+    if (lava) {
+      const cost = card ? g.burnCost({ air: !!card.air, speed: card.speed * 0.7, maxHp: card.hp * (card.count || 1) }) : Infinity;
+      const toLane = card?.air || cost <= LANE_BURN_OK;
+      const x = toLane ? clamp(weak.x * 0.85, -3.6, 3.6) : g.map.node.x;
+      return x + (Math.random() - 0.5) * 0.4;
+    }
     return clamp(weak.x * 0.5, -1.7, 1.7) + (Math.random() - 0.5) * 0.6;
   }
 

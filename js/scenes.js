@@ -7,7 +7,8 @@
 export const SCENES = [
   {
     id: 'starcore', name: '星核荒原', en: 'Starcore Plateau', propKit: true,
-    desc: '外星岩石高原,台阶状的平顶山环绕着一颗搏动的星核', descEn: 'An alien rock plateau ringed by terraced mesas',
+    desc: '外星岩石高原。每隔一阵会有陨星坠落:先亮预警圈,砸中双方单位,落点留下可拾取的星石(+1 法力)。',
+    descEn: 'An alien rock plateau. Meteors fall from time to time: a warning ring appears, the impact hits both sides, and the crater leaves a star shard (+1 mana).',
     relief: 'mesa', rock: 'pillar', rimHeight: 1.0,
     palette: { near: [0.50, 0.56, 0.62], far: [0.64, 0.52, 0.48], rim: [0.42, 0.58, 0.46], cliff: [0.66, 0.56, 0.48],
       hazard: [0.52, 0.32, 0.86], hazardCore: [0.82, 0.62, 1.0], crystal: [0.55, 0.30, 1.0], rock: [0.62, 0.58, 0.56] },
@@ -21,8 +22,8 @@ export const SCENES = [
   },
   {
     id: 'glacier', name: '冰封裂谷', en: 'Frozen Rift', propKit: true,
-    desc: '两侧转线口前后错开，外线经过减速冰缝，中路直通星核。',
-    descEn: 'Staggered crossings connect the lanes. Outer routes pass slowing ice rifts. The middle leads to the star core.',
+    desc: '两侧转线口前后错开，两条冰路斜插过三路，地面单位踏上冰面会减速。',
+    descEn: 'Staggered crossings connect the lanes. Two ice paths cut diagonally across all lanes and slow ground units.',
     menuPreview: 'assets/terrain/glacier/preview.png',
     relief: 'spires', rock: 'ice', rimHeight: 1.25,
     palette: { near: [0.78, 0.86, 0.94], far: [0.86, 0.84, 0.90], rim: [0.86, 0.92, 0.98], cliff: [0.60, 0.74, 0.88],
@@ -37,7 +38,8 @@ export const SCENES = [
   },
   {
     id: 'volcano', name: '熔岩锻炉', en: 'Lava Forge', propKit: true,
-    desc: '火山盆地,四周是冒烟的火山锥,裂隙是滚烫的熔岩池', descEn: 'A volcanic basin of smoking cones and molten lava pools',
+    desc: '一条熔岩河横贯三路，地面单位蹚过会被烧灼;只有星核祭坛能安全通过。',
+    descEn: 'A lava river cuts across all three lanes and burns ground units. Only the star-core altar is a safe crossing.',
     relief: 'cones', rock: 'basalt', rimHeight: 1.35,
     palette: { near: [0.58, 0.46, 0.42], far: [0.66, 0.44, 0.38], rim: [0.56, 0.44, 0.40], cliff: [0.62, 0.40, 0.32],
       hazard: [0.98, 0.48, 0.16], hazardCore: [1.0, 0.82, 0.30], crystal: [1.0, 0.55, 0.15], rock: [0.56, 0.48, 0.46] },

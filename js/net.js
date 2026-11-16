@@ -63,13 +63,14 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
     st: game.structures.map(s => [s.kind, V.side(s.side), r2(V.x(s.x)), r2(V.z(s.z)), Math.round(s.hp), s.dead ? 1 : 0]),
     u: game.units.map(u => {
       const st = u.status;
-      const flags = (st.stun > 0 ? 1 : 0) | (st.hack > 0 ? 2 : 0) | (st.curse > 0 ? 4 : 0) | (st.parasite > 0 ? 8 : 0) | (u.mimic ? 16 : 0);   // 16 = 基因拟态复制体
+      const flags = (st.stun > 0 ? 1 : 0) | (st.hack > 0 ? 2 : 0) | (st.curse > 0 ? 4 : 0) | (st.parasite > 0 ? 8 : 0) | (u.mimic ? 16 : 0) | (st.burn > 0 ? 32 : 0);   // 16 = 基因拟态复制体;32 = 熔岩烧灼中(含余烬)
       const t = u.target;
       return [u.id, V.side(u.side), u.card.id, r2(V.x(u.x)), r2(V.z(u.z)), Math.round(u.hp), Math.round(u.maxHp),
         Math.round(u.shield), Math.round(u.maxShield), flags, t ? r2(V.x(t.x)) : null, t ? r2(V.z(t.z)) : null, u.rank || 0, u.card.cocoon ? r2(u.hatchProgress ?? 0) : null, u.links?.length ? u.links.map(m => m.id) : null];
     }),
     up: U ? { o: U.options[forWho].map(u => u.id), pk: !!U.picked[forWho], po: !!U.picked[other], tm: r2(U.timer) } : null,
     ev: events.map(e => serializeEvent(e, V)),
+    mt: game.meteor ? game.meteor.snapshot(V, r2) : null,   // 星核荒原 · 陨星:预警圈 / 星石(重连时也靠它恢复)
   };
 }
 
@@ -140,6 +141,7 @@ export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 
     u.status.stun = flags & 1 ? 1 : 0; u.status.hack = flags & 2 ? 1 : 0;
     u.status.curse = flags & 4 ? 1 : 0; u.status.parasite = flags & 8 ? 1 : 0;
     u.mimic = Boolean(flags & 16);
+    u.status.burn = flags & 32 ? 1 : 0;
     u.target = tx === null ? null : { x: tx, z: tz };
     u.rank = rank || 0;
     u.hatchProgress = hatchProgress ?? 0;
@@ -153,6 +155,8 @@ export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 
     picked: { p: snap.up.pk ? true : null, e: snap.up.po ? true : null },
     timer: snap.up.tm,
   } : null;
+
+  if (snap.mt && g.meteor) g.meteor.applySnapshot(snap.mt);
 
   // 事件还原成渲染层认识的形状
   const live = new Map(g.units.map(u => [u.id, u]));

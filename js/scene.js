@@ -3,16 +3,19 @@ import * as THREE from 'three';
 import { FACTIONS, deployFxRadius, deployFxScale } from './cards.js';
 import { FIELD_W, FIELD_HALF, DEPLOY_LINE } from './game.js';
 import { t } from './i18n.js';
-import { mapForScene, wallSegments } from './map.js';
+import { mapForScene, wallSegments, inLava, lavaCenterZ, onIce } from './map.js';
 import { unitTexture, structTexture, unitModel, structModel } from './assets.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { VFX } from './vfx.js';
 import { DeployMarker } from './deploy-fx.js';
 import { attachWeapon } from './weapons.js';
+import { unitDisplaySize } from './unit-size.js';
 import { loadKit, layoutProps, buildProps as buildProps3d } from './props3d.js';
+import { hasDressing, buildDressing, HIDDEN_TERRAIN_MESHES } from './obstacle-kit.js';
 import { buildArena, animateArena, ARENA } from './arena.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { setupLook, LOOK, applyEnv, castShadows, receiveShadows, blobShadow } from './render-look.js';
 
 const TMP_COLOR = new THREE.Color();
 const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
@@ -200,6 +203,9 @@ function setBar(bar, hp, maxHp, viewRotation, now, { visible = true, shield = 0 
   bar.number?.userData.setText(String(Math.max(0, Math.round(hp))), pct <= 0.25 ? '#ffad87' : '#ffe6b5');
 }
 
+const BURN_TINT = 0xff4a10;   // 熔岩烧灼的单位染色
+const ICE_CHIP = new THREE.Color(0.75, 0.92, 1.0);   // 冰屑
+const EMBER_HOT = new THREE.Color(1.0, 0.55, 0.12), EMBER_RED = new THREE.Color(1.0, 0.25, 0.04);
 const DEFAULT_VIEW = Object.freeze({ yaw: 0, pitch: 0, zoom: 1, panX: 0, panZ: 0 });
 
 export class BattleScene {
@@ -226,10 +232,8 @@ export class BattleScene {
     this.world = new THREE.Group();
     this.scene.add(this.world);
 
-    this.scene.add(new THREE.AmbientLight(0x8899bb, 0.7));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.4);
-    dir.position.set(4, 10, 6);
-    this.scene.add(dir);
+    // 光影基调(ACES + 天光 / 暖主光 / 冷补光 / 轮廓光 + 桌面实时阴影),见 render-look.js
+    this.look = setupLook(this.renderer, this.scene);
 
     this.terrain = null;             // 当前场景的地形(assets.loadScene 的结果;null = 平面战场)
     this.hm = null;
@@ -301,6 +305,7 @@ export class BattleScene {
     this.map = map;
     this.activeLinks?.clear();
     this.damageBursts.clear();
+    this.meteorVis = null;   // 预警圈 / 星石挂在 board 上,下面清 board 时一起释放
     this.dropIns.clear();
     for (const fx of this.fx) fx.objs.forEach(o => this.drop(o));
     this.fx.length = 0;
@@ -338,8 +343,10 @@ export class BattleScene {
       this.board.add(this.arena);
       this.terrain.scene.traverse(o => {
         if (!o.isMesh) return;
+        o.receiveShadow = true;
         for (const m of [].concat(o.material)) { m.clippingPlanes = [this.clipPlane, ...this.sideClips]; m.clipShadows = true; }
       });
+      receiveShadows(this.arena);
       this.updateClipPlanes();
       this.buildProps();
     } else this.buildFlatBoard(W, L);
@@ -484,10 +491,18 @@ export class BattleScene {
     // 有 3D 配景包(assets/props/<scene>/kit.json)就用 3D 配景;加载是异步的,先放立绘,到了再替换
     const sprites = this.buildPropSprites();
     if (!t?.propKit) return;
+    // 有程序化障碍套件的场景(obstacle-kit.js,目前只有熔岩锻炉):套件接管墙 / 岩石 / 池沿 / 边缘 / 地标,
+    // 地形 GLB 里的岩石和晶簇网格隐藏;Tripo 配景只按套件给的摆放列表放
+    const dressed = hasDressing(t.id);
+    t.scene.traverse(o => { if (o.isMesh && HIDDEN_TERRAIN_MESHES.test(o.name)) o.visible = !dressed; });
     loadKit(t.id).then(kit => {
       if (!kit || this.terrain !== t) return;   // 期间换了场景:丢弃
       sprites.forEach(sp => { this.board.remove(sp); sp.material.dispose(); });
-      this.board.add(buildProps3d(kit, layoutProps(kit, t.id), (x, z) => this.heightAt(x, z), this.getModelEnv()));
+      const heightAt = (x, z) => this.heightAt(x, z);
+      if (dressed) {
+        const d = buildDressing(t.id, { map: this.map, heightAt, envMap: this.getModelEnv() });
+        this.board.add(d.group, buildProps3d(kit, d.props, d.surfaceAt, this.getModelEnv()));   // 配景落在台地顶上
+      } else this.board.add(buildProps3d(kit, layoutProps(kit, t.id), heightAt, this.getModelEnv()));
     });
   }
 
@@ -525,6 +540,9 @@ export class BattleScene {
   buildRiftOverlays() {
     this.riftHint = null;
     this.riftPreview = null;
+    this.lavaHint = this.lavaWarn = this.lavaPreview = null;
+    if (this.map.lava) this.buildLavaWarn();
+    else if (this.map.ice) this.buildIceWarn();
     for (const rift of this.map.rifts) {
       const edge = ringMesh(rift.r, 0xc4a1ed, 0.65, 0.045);
       const hatching = new THREE.Mesh(new THREE.RingGeometry(rift.r * 0.82, rift.r * 0.96, 48),
@@ -574,11 +592,84 @@ export class BattleScene {
       m.scale.setScalar(k);
       // 台面(最宽处大约在模型高度的 55%)对齐地面,悬浮的岩石底部埋进地里
       m.position.set(N.x - (box.min.x + box.max.x) / 2 * k, y - (box.min.y + size.y * 0.5) * k, N.z - (box.min.z + box.max.z) / 2 * k);
-      m.traverse(o => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt.isMeshStandardMaterial) { mt.envMap = this.getModelEnv(); mt.envMapIntensity = 0.8; } });
+      m.traverse(o => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt.isMeshStandardMaterial) applyEnv(mt, this.getModelEnv()); });
       m.name = 'altar';
       this.board.add(m);
       this.nodeVis.core.visible = false;
     }, undefined, () => { /* 没有祭坛模型:保留程序化内核 */ });
+  }
+
+  // 星核荒原 · 陨星:按游戏状态(本地模拟或联机快照)每帧同步
+  //   预警圈:亮金色外环 + 脉动的橙色圈面(越临近越快)+ 顺时针收缩的倒计时弧;最后 1.4 秒陨星带拖尾斜着砸下来
+  //   星石:发光脉动、上下浮动的星晶(八面体 + 光晕)
+  syncMeteor(game) {
+    const M = game?.meteor;
+    if (!this.meteorVis) this.meteorVis = { warns: new Map(), shards: new Map() };
+    const vis = this.meteorVis, now = performance.now() / 1000, warnT = M?.cfg.warn ?? 3;
+    const seenW = new Set(), seenS = new Set();
+    for (const w of M?.warns ?? []) {
+      const key = w.x.toFixed(2) + ',' + w.z.toFixed(2);
+      seenW.add(key);
+      let o = vis.warns.get(key);
+      if (!o) { o = this.makeMeteorWarn(w, M.cfg.radius); vis.warns.set(key, o); }
+      const k = Math.max(0, w.left / warnT);
+      o.disk.material.opacity = 0.16 + 0.2 * Math.abs(Math.sin(now * (4 + (1 - k) * 10)));
+      o.arc.geometry.dispose();
+      o.arc.geometry = new THREE.RingGeometry(M.cfg.radius * 0.84, M.cfg.radius * 0.95, 48, 1, Math.PI / 2, Math.max(0.001, k * Math.PI * 2));
+      const fall = Math.max(0, 1 - w.left / 1.4);   // 0 → 1:最后 1.4 秒
+      o.rock.visible = o.trail.visible = fall > 0;
+      if (fall > 0) {
+        const d = (1 - fall) * 6.5;
+        o.rock.position.set(0.55 * d, o.y + 0.15 + d, 0.3 * d);
+        o.rock.rotation.set(now * 5, now * 3, 0);
+        o.trail.position.copy(o.rock.position).add(new THREE.Vector3(0.55, 1, 0.3).multiplyScalar(0.6));
+      }
+    }
+    for (const [key, o] of vis.warns) if (!seenW.has(key)) { this.drop(o.group); vis.warns.delete(key); }
+    for (const s of M?.shards ?? []) {
+      seenS.add(s.id);
+      let o = vis.shards.get(s.id);
+      if (!o) { o = this.makeShard(s); vis.shards.set(s.id, o); }
+      const fade = Math.min(1, s.left / 2);
+      o.gem.position.y = o.y + 0.3 + Math.sin(now * 2.4 + s.id) * 0.05;
+      o.gem.rotation.y = now * 1.6;
+      o.gem.material.emissiveIntensity = 0.9 + 0.5 * Math.sin(now * 5 + s.id);
+      o.halo.material.opacity = (0.35 + 0.2 * Math.sin(now * 5 + s.id)) * fade;
+      o.gem.scale.setScalar(0.6 + 0.4 * fade);
+    }
+    for (const [id, o] of vis.shards) if (!seenS.has(id)) { this.drop(o.group); vis.shards.delete(id); }
+  }
+
+  makeMeteorWarn(w, r) {
+    const group = new THREE.Group(), y = this.heightAt(w.x, w.z);
+    group.position.set(w.x, 0, w.z);
+    const ring = ringMesh(r, 0xffcf4a, 0.95, 0.07);
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+    disk.rotation.x = -Math.PI / 2;
+    const arc = new THREE.Mesh(new THREE.RingGeometry(r * 0.84, r * 0.95, 48), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
+    arc.rotation.x = -Math.PI / 2;
+    for (const m of [ring, disk, arc]) { m.position.y = y + 0.05; m.renderOrder = 7; group.add(m); }
+    ring.position.y = y + 0.06;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: 0x8a6a5a, emissive: 0xff9a40, emissiveIntensity: 1.4, flatShading: true }));
+    const trail = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.09, 1.0, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.55, 1, 0.3).normalize());
+    rock.visible = trail.visible = false;
+    group.add(rock, trail);
+    this.board.add(group);
+    return { group, ring, disk, arc, rock, trail, y };
+  }
+
+  makeShard(s) {
+    const group = new THREE.Group(), y = this.heightAt(s.x, s.z);
+    group.position.set(s.x, 0, s.z);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x6fc8ff, emissiveIntensity: 1.2, roughness: 0.2, metalness: 0.1, flatShading: true }));
+    gem.scale.y = 1.6;
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(0.32, 32), new THREE.MeshBasicMaterial({ color: 0x8fd8ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = y + 0.04;
+    group.add(gem, halo);
+    this.board.add(group);
+    return { group, gem, halo, y };
   }
 
   // 星核进度/归属表现
@@ -633,6 +724,87 @@ export class BattleScene {
     this.deployZone.material.map.needsUpdate = true;
   }
 
+  // 熔岩锻炉:拖牌时熔岩河两岸描一道脉动的亮边(熔岩本身是橙色,红边看不出来)(岩桥、祭坛处断开 = 安全渡口)+ 两侧各一个「熔岩 · 会烧灼」标签
+  buildLavaWarn() {
+    const L = this.map.lava, W = this.map.W, N = this.map.node, zc = x => lavaCenterZ(L, W, x);
+    const pos = [], idx = [];
+    const strip = (x0, x1, s) => {
+      const n = Math.max(2, Math.ceil((x1 - x0) / 0.1));
+      const i0 = pos.length / 3;
+      for (let i = 0; i <= n; i++) {
+        const x = x0 + (x1 - x0) * i / n, z = zc(x) + s * L.half, y = this.heightAt(x, z + s * 0.08) + 0.07;   // 压在岸柱顶上(岸柱比地面高 0.045)
+        pos.push(x, y, z - s * 0.04, x, y, z + s * 0.05);
+        if (i < n) idx.push(i0 + i * 2, i0 + i * 2 + 1, i0 + i * 2 + 2, i0 + i * 2 + 1, i0 + i * 2 + 3, i0 + i * 2 + 2);
+      }
+    };
+    const stops = [-W, ...[...L.bridges.flatMap(b => [b.x - b.half, b.x + b.half]), N.x - N.r, N.x + N.r].sort((a, b) => a - b), W];
+    for (let i = 0; i < stops.length - 1; i += 2) for (const s of [-1, 1]) strip(stops[i], stops[i + 1], s);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.renderOrder = 6;
+    mesh.visible = false;
+    for (const x of [-2.6, 2.6]) {
+      const label = boardLabel();
+      label.scale.multiplyScalar(0.9);
+      label.position.set(x, this.heightAt(x, zc(x)) + 0.42, zc(x));
+      label.userData.setText(t('lavaZone'), '#ffb27a');
+      mesh.add(label);
+    }
+    this.board.add(mesh);
+    this.lavaWarn = mesh;
+  }
+
+  // 冰封裂谷:拖牌时在冰路上显示两个「冰面 · 减速」标签(两条冰路各一个,中心对称)
+  buildIceWarn() {
+    const g = new THREE.Group();
+    g.visible = false;
+    for (const [x, z] of [[-3.3, 1.0], [3.3, -1.0]]) {
+      const label = boardLabel();
+      label.scale.multiplyScalar(0.9);
+      label.position.set(x, this.heightAt(x, z) + 0.42, z);
+      label.userData.setText(t('iceZone'), '#bfe9ff');
+      g.add(label);
+    }
+    g.material = { opacity: 1 };   // 和熔岩亮边共用 showLavaHint 的透明度写法
+    this.board.add(g);
+    this.lavaWarn = g;
+  }
+
+  // 拖地面单位时:预览它会走的路线(9 格),第一次踩进熔岩的位置;没有返回 null。120ms 内同一张牌复用结果
+  lavaAlongPreview({ x, z, card, game }) {
+    const now = performance.now(), prev = this.lavaPreview;
+    if (prev && prev.card === card && now - prev.at < 120 && Math.hypot(prev.x - x, prev.z - z) < 0.3) return prev.hit;
+    const path = game.previewPath('p', card, x, z, 9);
+    let hit = null;
+    for (let i = 1; path && i < path.length && !hit; i++) {
+      const a = path[i - 1], b = path[i], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.08));
+      for (let k = 1; k <= n; k++) {
+        const px = a.x + (b.x - a.x) * k / n, pz = a.z + (b.z - a.z) * k / n;
+        if (this.map.lava ? inLava(this.map, px, pz) : onIce(this.map, px, pz)) { hit = { x: px, z: pz }; break; }
+      }
+    }
+    this.lavaPreview = { card, at: now, x, z, hit };
+    return hit;
+  }
+
+  showLavaHint(opts, ground, showZone) {
+    const show = Number.isFinite(opts?.x) && Number.isFinite(opts?.z);
+    if (this.lavaWarn) {
+      this.lavaWarn.visible = show && !!(showZone || opts.isUnit);
+      this.lavaWarn.material.opacity = 0.6 + 0.35 * Math.abs(Math.sin(performance.now() / 260));
+    }
+    const hit = show && ground && opts.game ? this.lavaAlongPreview(opts) : null;
+    if (hit && !this.lavaHint) { this.lavaHint = boardLabel(); this.board.add(this.lavaHint); }
+    if (this.lavaHint) this.lavaHint.visible = !!hit;
+    if (hit) {
+      this.lavaHint.position.set(hit.x, this.heightAt(hit.x, hit.z) + 0.85, hit.z);   // 比两侧「会烧灼」标签高一截,不互相盖住
+      if (this.map.lava) this.lavaHint.userData.setText(t('lavaBurnAhead', { n: this.map.lava.dps }), '#ffb27a');
+      else this.lavaHint.userData.setText(t('iceSlowAhead', { n: Math.round((1 - this.map.ice.slow) * 100) }), '#bfe9ff');
+    }
+  }
+
   // 传 null 隐藏部署与落点提示。
   riftAlongPreview(opts) {
     const { x, z, card, game } = opts;
@@ -667,6 +839,7 @@ export class BattleScene {
     if (showZone) this.updateDeployMask(opts.game, opts.card);
     const ground = show && opts.valid && opts.card?.type === 'unit' && !opts.card.air;
     if (!ground) this.riftPreview = null;
+    if (this.map.lava || this.map.ice) this.showLavaHint(opts, ground, showZone);
     const here = ground ? this.map.rifts.find(r => Math.hypot(opts.x - r.x, opts.z - r.z) < r.r) : null;
     const rift = here || (ground && opts.game ? this.riftAlongPreview(opts) : null);
     if (rift && !this.riftHint) {
@@ -753,6 +926,8 @@ export class BattleScene {
     const gy = this.heightAt(s.x, s.z);
     group.position.set(s.x, gy, s.z);
     this.drape(range, s.x, s.z, 0.03, gy);
+    group.add(blobShadow(s.radius * 1.45, 0.55));
+    castShadows(body); castShadows(top);
     group.userData = { body, top, bar, range, h };
     this.world.add(group);
     return group;
@@ -761,7 +936,7 @@ export class BattleScene {
   // 立绘版塔 / 核心:正对镜头的精灵 + 脚下一圈阵营色底座(敌我靠底座颜色区分)
   makeStructSprite(s, tex) {
     const group = new THREE.Group();
-    const h = s.kind === 'base' ? 2.1 : s.kind === 'pylon' ? 1.7 : 1.45;
+    const h = s.kind === 'base' ? 2.1 : s.kind === 'pylon' ? 1.7 : 1.15;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.08, depthWrite: true }));
     sprite.scale.set(h, h, 1);
     sprite.center.set(0.5, 0.05);
@@ -780,6 +955,7 @@ export class BattleScene {
     group.position.set(s.x, gy, s.z);
     this.drape(pad, s.x, s.z, 0.02, gy);
     this.drape(range, s.x, s.z, 0.03, gy);
+    group.add(blobShadow(s.radius * 1.45, 0.55));
     group.userData = { sprite, pad, bar, range, h };
     this.world.add(group);
     return group;
@@ -788,7 +964,7 @@ export class BattleScene {
   // 3D 塔与核心受高度和占地双重约束。材质逐个克隆用于受击与摧毁反馈。
   makeStructModel(s, entry) {
     const group = new THREE.Group();
-    const targetHeight = s.kind === 'base' ? 1.9 : s.kind === 'pylon' ? 1.6 : 1.35;
+    const targetHeight = s.kind === 'base' ? 1.9 : s.kind === 'pylon' ? 1.6 : 1.05;   // 前哨炮(两座小炮)比侧翼塔小一档
     const root = entry.scene.clone(true);
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
@@ -806,7 +982,7 @@ export class BattleScene {
     root.traverse(o => {
       if (!o.isMesh) return;
       o.userData.sharedGeo = true;
-      o.material = [].concat(o.material).map(m => { const c = m.clone(); if (c.isMeshStandardMaterial) { c.envMap = this.getModelEnv(); c.envMapIntensity = 0.85; } mats.push(c); return c; });
+      o.material = [].concat(o.material).map(m => { const c = m.clone(); applyEnv(c, this.getModelEnv()); mats.push(c); return c; });
       if (o.material.length === 1) o.material = o.material[0];
     });
     group.add(model);
@@ -829,6 +1005,8 @@ export class BattleScene {
       mat.emissiveIntensity = 1;
       return { mat, base };
     });
+    group.add(blobShadow(s.radius * 1.5, 0.6));
+    castShadows(model);
     group.userData = { model, mats, emission, pad, bar, range, h };
     this.world.add(group);
     return group;
@@ -918,7 +1096,7 @@ export class BattleScene {
     obj.traverse(o => {
       o.userData.ownedTexture?.dispose();
       if (!o.userData.sharedGeo) o.geometry?.dispose();   // 模型实例共用几何体,不能释放
-      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m?.dispose();
+      if (!o.userData.sharedMat) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m?.dispose();   // 圆影等共用材质不释放
     });
   }
 
@@ -944,14 +1122,15 @@ export class BattleScene {
       : card.hp + (card.shield || 0) >= 260 && !unit.building ? 'tank'
       : card.atk > 0 && card.range > 1.2 ? 'ranged' : null;
     const stance = role === 'tank' ? 0.9 : role === 'support' && !unit.building ? 1.06 : 1;
+    // 显示尺寸按体型分档(unit-size.js):只改渲染,碰撞 / 射程 / 底环不变
+    const size = unitDisplaySize(card, mdl?.meta?.rig);
 
     if (mdl?.ready) {
       // 3D 模型(Tripo 生成):高度和立绘一致,略矮一点(立绘图里有留白)
-      const small = (card.count || 1) > 1 || card.token;
-      let h = unit.building ? 1.1 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1) * 0.85;
+      let h = unit.building ? 1.1 : size.h;
       lift = unit.air ? 0.75 : 0;
-      // 扁宽的静态模型(战车、巢穴、无人机)按高度缩放会占地过大:再按碰撞直径限一个占地上限(人形不限,T 字静止姿势会把宽度算大)
-      const maxFoot = mdl.meta.rig === 'biped' ? 0 : unit.radius * 2 * (unit.building ? 1.8 : unit.air ? 3.0 : 2.4);
+      // 扁宽的静态模型(战车、巢穴、无人机)按高度缩放会占地过大:再按体型档限一个占地上限(人形不限,T 字静止姿势会把宽度算大)
+      const maxFoot = mdl.meta.rig === 'biped' ? 0 : unit.building ? unit.radius * 2 * 1.8 : size.foot;
       body = this.buildModel(mdl, h, maxFoot);
       body.scale.y *= stance;
       h = body.userData.height * stance;
@@ -961,8 +1140,7 @@ export class BattleScene {
       barY = h * 1.12 + lift;
     } else if (tex) {
       // 立绘公告板:始终正对镜头的 2D 精灵(美术资源到位后自动启用)
-      const small = (card.count || 1) > 1 || card.token;
-      const h = unit.building ? 1.25 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1);
+      const h = unit.building ? 1.25 : size.h / 0.85;   // 立绘图里有留白,比模型高一点
       lift = unit.air ? 0.75 : 0;
       sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.08, depthWrite: true }));
       sprite.scale.set(h, h * stance, 1);
@@ -987,8 +1165,7 @@ export class BattleScene {
       }
       barY = 1.05;
     } else {
-      const small = (card.count || 1) > 1 || card.token;
-      const scale = (0.24 + 0.05 * Math.min(card.cost, 6)) * (small ? 0.72 : 1);
+      const scale = size.h * 0.42;   // 程序化几何体(没有模型也没有立绘时的兜底)
       body = this.factionShape(fac.shape, scale, mat);
       lift = unit.air ? 0.85 : (fac.shape === 'octa' ? 0.15 : 0);
       body.position.y = scale * 1.05 + lift;
@@ -1008,15 +1185,10 @@ export class BattleScene {
     }
     group.add(body);
 
-    // 飞行单位的地面影子
-    let shadow = null;
-    if (unit.air || model) {
-      shadow = new THREE.Mesh(new THREE.CircleGeometry(model && !unit.air ? 0.26 : 0.2, 20),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
-      shadow.rotation.x = -Math.PI / 2;
-      shadow.position.y = 0.02;
-      group.add(shadow);
-    }
+    // 贴地圆影(所有单位;飞行单位更小更淡,表示离地)。模型另外投桌面实时阴影
+    const shadow = blobShadow(unit.building ? unit.radius * 1.55 + 0.1 : size.foot * (unit.air ? 0.3 : 0.42), unit.air ? 0.32 : 0.55);   // 圆影跟体型档的占地走
+    group.add(shadow);
+    if (!sprite) castShadows(body);
 
     // 阵营底环(蓝=玩家 红=敌方)
     const ring = ringMesh(unit.radius + 0.10, SIDE_COLOR[unit.side], 0.92, 0.055);
@@ -1080,10 +1252,37 @@ export class BattleScene {
     }
   }
 
+  // 冰面:脚下溅冰屑(移动时每 0.15 秒 2 颗,贴地向后飞),身体随步伐轻微左右滑(滑行感)
+  iceSkid(u, g, gy, now, moving) {
+    const ud = g.userData, v = this.vfx;
+    if (moving) g.position.x += Math.sin(now / 140 + u.id) * 0.025;
+    if (!v || !moving || now - (ud.iceFxAt || 0) < 150) return;
+    ud.iceFxAt = now;
+    const back = (ud.moveDir ?? 0) + Math.PI;
+    for (let i = 0; i < 2; i++) {
+      const a = back + (Math.random() - 0.5) * 1.2;
+      v.glow.emit(u.x, gy + 0.04, u.z, Math.sin(a) * 0.5, 0.35 + Math.random() * 0.3, Math.cos(a) * 0.5, ICE_CHIP, 0.05 + Math.random() * 0.03, 0.45, { grav: 2.5, drag: 1 });
+    }
+  }
+
+  // 熔岩烧灼:身上往上冒火星(每 0.12 秒两颗,寿命 0.6 秒),脚下偶尔溅一点火花
+  burnEmbers(u, g, gy, now) {
+    const ud = g.userData, v = this.vfx;
+    if (!v || now - (ud.burnFxAt || 0) < 120) return;
+    ud.burnFxAt = now;
+    const top = (ud.bar?.y ?? 0.8) * 0.8;
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2, r = 0.08 + Math.random() * 0.1;
+      v.glow.emit(u.x + Math.cos(a) * r, gy + 0.08 + Math.random() * top, u.z + Math.sin(a) * r,
+        (Math.random() - 0.5) * 0.2, 0.55 + Math.random() * 0.45, (Math.random() - 0.5) * 0.2, i ? EMBER_HOT : EMBER_RED, 0.07 + Math.random() * 0.04, 0.6, { drag: 1 });
+    }
+    if (Math.random() < 0.25) v.sparks(u.x, gy + 0.05, u.z, 0xff7a2a, 3, 0.8, 0.06, 0.3);
+  }
+
   updateRiftMarker(unit, group, now) {
     const ud = group.userData;
     const inside = !unit.air && !unit.building && !unit.dead
-      && this.map.rifts.some(rift => Math.hypot(unit.x - rift.x, unit.z - rift.z) < rift.r);
+      && (this.map.rifts.some(rift => Math.hypot(unit.x - rift.x, unit.z - rift.z) < rift.r) || (!!this.map.ice && onIce(this.map, unit.x, unit.z)));
     if (inside && !ud.inRift) {
       if (!this.riftMarkerTexture) {
         const canvas = document.createElement('canvas');
@@ -1151,6 +1350,8 @@ export class BattleScene {
       const moving = !u.building && (ud.vel || 0) > 0.08 && u.status.stun <= 0;
       g.position.set(u.x, gy, u.z);
       this.updateRiftMarker(u, g, now);
+      if (u.status.burn > 0 && !u.air) this.burnEmbers(u, g, gy, now);
+      if (this.map.ice && !u.air && !u.building && onIce(this.map, u.x, u.z)) this.iceSkid(u, g, gy, now, moving);
       // 出场:弹出(带一点回弹)
       const age = (now - ud.born) / 1000;
       if (age < 0.35) {
@@ -1208,7 +1409,7 @@ export class BattleScene {
       const nearPlacement = this.placeRing.visible
         && Math.hypot(u.x - this.placeRing.position.x, u.z - this.placeRing.position.z) < 0.75;
       setBar(ud.bar, u.hp, u.maxHp, viewRotation, now, {
-        visible: u.hp <= u.maxHp * 0.25 || u.shield > 0 || now - (ud.hitAt ?? -Infinity) < 950 || nearPlacement,
+        visible: u.hp <= u.maxHp * 0.25 || u.shield > 0 || now - (ud.hitAt ?? -Infinity) < 950 || now - (ud.burnHitAt ?? -Infinity) < 950 || nearPlacement,
         shield: THREE.MathUtils.clamp(u.shield / Math.max(u.maxShield, 1), 0, 1),
       });
       if (ud.hatch) {
@@ -1228,14 +1429,16 @@ export class BattleScene {
 
       // 状态染色:诅咒紫 / 寄生绿 / 狂暴红 / 眩晕暗;受击时白闪 0.14 秒
       const raging = u.card.berserk && u.hp < u.maxHp * 0.5;
-      const tint = u.status.curse > 0 ? 0x9a30ff : u.status.parasite > 0 ? 0x40ff60 : raging ? 0xff3020 : u.mimic ? 0xb070ff : null;
+      const burning = u.status.burn > 0 && !u.air;
+      const tint = u.status.curse > 0 ? 0x9a30ff : u.status.parasite > 0 ? 0x40ff60 : burning ? BURN_TINT : raging ? 0xff3020 : u.mimic ? 0xb070ff : null;
+      const tintK = tint === BURN_TINT ? 0.3 + 0.35 * Math.abs(Math.sin(now / 75 + u.id)) : 0.45;   // 烧灼:发红并快速闪烁(烤着的读感)
       const flash = Math.max(0, 1 - (now - (ud.hitAt || 0)) / 140);
       if (ud.sprite) {
-        const c = u.status.stun > 0 ? 0x777777 : tint === 0x9a30ff ? 0xd6a0ff : tint === 0x40ff60 ? 0xa8ffb0 : tint === 0xff3020 ? 0xff9a8a : 0xffffff;
+        const c = u.status.stun > 0 ? 0x777777 : tint === 0x9a30ff ? 0xd6a0ff : tint === 0x40ff60 ? 0xa8ffb0 : tint === 0xff3020 ? 0xff9a8a : tint === BURN_TINT ? 0xffb080 : 0xffffff;
         ud.sprite.material.color.setHex(c).multiplyScalar(1 + flash * 1.6);
         ud.tint = tint;
       } else if (ud.model) {
-        const e = TMP_COLOR.setHex(tint ?? 0x000000).multiplyScalar(tint ? 0.45 : 0);
+        const e = TMP_COLOR.setHex(tint ?? 0x000000).multiplyScalar(tint ? tintK : 0);
         e.r += flash * 0.9; e.g += flash * 0.9; e.b += flash * 0.9;
         for (const m of ud.model.mats) if (m.emissive && !m.userData.keepEmissive) m.emissive.copy(e);   // 自发光道具(能量球)不参与染色
       } else {
@@ -1283,12 +1486,12 @@ export class BattleScene {
     });
     // 单位模型单独加一层室内环境反射:只有平行光 + 环境光时模型偏暗发灰(地形不受影响)
     this.getModelEnv();
-    for (const m of mats) if (m.isMeshStandardMaterial) { m.envMap = this.modelEnv; m.envMapIntensity = 0.9; m.needsUpdate = true; }
+    for (const m of mats) if (m.isMeshStandardMaterial) { applyEnv(m, this.modelEnv); m.needsUpdate = true; }
     // 武器挂到手骨上(跟着动作挥动);材质并进 mats,受击白闪 / 死亡淡出一起处理
     for (const w of entry.weapons || []) {
       const mount = attachWeapon(root, size.y, w.spec, w.scene);
       if (mount) {
-        for (const m of mount.userData.mats) if (m.isMeshStandardMaterial) { m.envMap = this.modelEnv; m.envMapIntensity = 0.9; }
+        for (const m of mount.userData.mats) applyEnv(m, this.modelEnv);
         mats.push(...mount.userData.mats);
       }
     }
@@ -1444,8 +1647,9 @@ export class BattleScene {
     const sprite = boardLabel(style);
     sprite.material.depthTest = true;
     sprite.scale.set(style === 'blood' ? 1.42 : 1.18, style === 'blood' ? 0.355 : 0.295, 1);
-    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : '#ffdc94';
-    sprite.userData.setText(`−${value}`, color);
+    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : style === 'burn' ? '#ff9a4a' : style === 'mana' ? '#9fe0ff' : '#ffdc94';
+    if (style === 'burn') sprite.scale.multiplyScalar(0.78);   // 烧灼跳字小一号:每 0.5 秒一跳,不抢正常伤害的读数
+    sprite.userData.setText(style === 'mana' ? t('manaGain', { n: value }) : `−${value}`, color);
     sprite.position.copy(position);
     const baseY = position.y;
     this.addFx([sprite], style === 'blood' ? 0.82 : 0.62, k => {
@@ -2059,8 +2263,27 @@ export class BattleScene {
           }
           break;
         }
+        case 'meteor_hit': {   // 撞击:闪光 + 两道冲击波 + 碎石 12 + 火花 14(≤ 30 颗粒子);不震屏(XR 里也一样)
+          const y = this.heightAt(ev.x, ev.z);
+          v.flash(ev.x, y + 0.3, ev.z, 0xffe6a8, 2.4, 0.3);
+          v.ring(ev.x, ev.z, 0.1, ev.r * 1.7, 0xffd070, 0.5, 0.95, 0.06);
+          v.ring(ev.x, ev.z, 0.1, ev.r * 1.1, 0xffffff, 0.3, 0.8, 0.08);
+          v.debris(ev.x, y + 0.15, ev.z, 0xc8b6a2, 12, 2.6);
+          v.sparks(ev.x, y + 0.2, ev.z, 0xffb848, 14, 2.8, 0.1, 0.45);
+          break;
+        }
+        case 'shard_pick':
+          this.combatNumber(new THREE.Vector3(ev.x, this.heightAt(ev.x, ev.z) + 0.7, ev.z), ev.amount, 'mana');
+          v.sparks(ev.x, this.heightAt(ev.x, ev.z) + 0.25, ev.z, 0x9fe0ff, 8, 1.4, 0.08, 0.4);
+          break;
         case 'hit': {
           const g = this.unitMeshes.get(ev.unit.id);
+          if (ev.burn) {   // 熔岩烧灼:每跳都出一个小号橙色数字(不走 60 点的合并阈值),不闪白
+            if (ev.lost > 0) this.combatNumber(new THREE.Vector3(ev.unit.x + 0.12,
+              (g?.position.y ?? this.heightAt(ev.unit.x, ev.unit.z)) + (g?.userData.bar?.y ?? 1.05) + 0.22, ev.unit.z), ev.lost, 'burn');
+            if (g) g.userData.burnHitAt = now;
+            break;
+          }
           this.recordDamage(ev, ev.unit, g, now);
           if (!g) break;
           g.userData.hitAt = now;
@@ -2228,6 +2451,7 @@ export class BattleScene {
     // 降临震屏:只在桌面版、只在这一帧渲染时把相机挪一下,渲染完放回(不影响视角状态)
     const k = this.shakeT > 0 && !this.renderer.xr.isPresenting ? this.shakeT / SHAKE_T : 0;
     if (k) this.camera.position.add(SHAKE_OFF.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * SHAKE_AMP * k));
+    this.look.update(this.renderer.xr.isPresenting);
     this.renderer.render(this.scene, this.camera);
     if (k) this.camera.position.sub(SHAKE_OFF);
   }

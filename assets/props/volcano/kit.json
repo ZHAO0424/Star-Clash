@@ -17,7 +17,12 @@
  "minecart": {
   "file": "minecart.glb",
   "size": 0.5,
-  "zone": "camp"
+  "zone": "camp",
+  "footprint": [
+   0.42,
+   0.26
+  ],
+  "height": 0.3
  },
  "brazier": {
   "file": "brazier.glb",
@@ -27,7 +32,12 @@
  "anvil": {
   "file": "anvil.glb",
   "size": 0.45,
-  "zone": "camp"
+  "zone": "camp",
+  "footprint": [
+   0.34,
+   0.26
+  ],
+  "height": 0.3
  },
  "crystal": {
   "file": "crystal.glb",
@@ -47,12 +57,22 @@
  "boulders": {
   "file": "boulders.glb",
   "size": 0.4,
-  "zone": "ridge"
+  "zone": "ridge",
+  "footprint": [
+   0.45,
+   0.45
+  ],
+  "height": 0.4
  },
  "rockwall": {
   "file": "rockwall.glb",
   "size": 0.55,
-  "zone": "ridge"
+  "zone": "ridge",
+  "footprint": [
+   0.8,
+   0.7
+  ],
+  "height": 0.5
  },
  "spires": {
   "file": "spires.glb",
