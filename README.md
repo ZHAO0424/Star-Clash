@@ -7,4 +7,4 @@ WebXR 实时对战卡牌游戏:桌面鼠标、手机触屏都能玩,支持 WebXR
   在反向代理后面建议设 `TRUST_PROXY=1`。仓库附带 `render.yaml`,可在 Render 一键创建免费 Web Service。
 - 本地运行:`node server/server.mjs`,浏览器打开 http://localhost:8788。
 
-本仓库由源项目的 `tools/build-pages.mjs` 自动生成,请勿手改。
+本仓库现在就是源头:原先生成它的源项目(`tools/build-pages.mjs`)已不可用,改动直接在这里提交。
