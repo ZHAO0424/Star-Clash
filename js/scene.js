@@ -7,6 +7,7 @@ import { mapForScene, wallSegments } from './map.js';
 import { unitTexture, structTexture, unitModel, structModel } from './assets.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { VFX } from './vfx.js';
+import { DeployMarker } from './deploy-fx.js';
 import { attachWeapon } from './weapons.js';
 import { loadKit, layoutProps, buildProps as buildProps3d } from './props3d.js';
 import { buildArena, animateArena, ARENA } from './arena.js';
@@ -379,6 +380,9 @@ export class BattleScene {
     this.placeDot.position.y = 0.035;
     this.placeDot.visible = false;
     this.board.add(this.placeDot);
+    // 单位 / 建筑牌的落点:「锁定」法阵 + 天空锁定光束(法术牌仍用上面的范围圈)
+    this.deployMarker = new DeployMarker((m, x, z, lift) => this.drape(m, x, z, lift), (x, z) => this.heightAt(x, z));
+    this.board.add(this.deployMarker.group);
   }
 
   // ── 地形:岩石 / 裂隙 / 星核 ──
@@ -621,8 +625,10 @@ export class BattleScene {
 
   showPlacement(opts) {
     const show = Number.isFinite(opts?.x) && Number.isFinite(opts?.z);
-    this.placeRing.visible = this.placeArea.visible = show;
-    this.placeDot.visible = show && opts.isUnit && opts.valid;
+    const marker = show && opts.isUnit;   // 单位 / 建筑:锁定法阵;法术:范围圈
+    this.placeRing.visible = this.placeArea.visible = show && !marker;
+    this.placeDot.visible = false;
+    if (!marker) this.deployMarker.hide();
     const showZone = opts?.showDeployZone;
     this.deployZone.material.opacity = showZone ? 0.18 : 0;
     if (showZone) this.updateDeployMask(opts.game, opts.card);
@@ -640,6 +646,12 @@ export class BattleScene {
       this.riftHint.position.set(rift.x, this.heightAt(rift.x, rift.z) + 0.52, rift.z);
       const key = here ? 'riftSlowHere' : 'riftSlowAhead';
       this.riftHint.userData.setText(t(key, { n: Math.round((1 - rift.slow) * 100) }), '#ead7ff');
+    }
+    if (marker) {
+      const f = opts.card?.faction;
+      this.deployMarker.set({ x: opts.x, z: opts.z, radius: opts.radius, faction: f, color: FACTIONS[f]?.color,
+        state: !opts.valid ? 'bad' : here ? 'rift' : 'ok' });
+      return;
     }
     const color = opts.valid ? (here ? 0xd1a6ff : 0x5ac8ff) : 0xff4444;
     for (const m of [this.placeRing, this.placeArea, this.placeDot]) {
@@ -1780,6 +1792,7 @@ export class BattleScene {
       // 裁剪面在世界坐标里:跟着战场根节点走(XR 里战场被缩放、平移)
       this.updateClipPlanes();
     }
+    this.deployMarker?.update(dt);
     this.vfx.update(dt, this.lastCam || this.camera, this.renderer);
   }
 
