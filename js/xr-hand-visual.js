@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
 const HAND_PATH = 'assets/hands/';   // 本地文件,不从 jsDelivr 在线拉(国内网络不稳、眼镜可能断网)
-const RENDER_ORDER = 10;             // 场景(0)之后、XR 面板(20)之前
+const RENDER_ORDER = 40;             // 在 XR 面板(20,写深度)之后画、读深度:被面板挡住的部分不画,在面板前面的盖上去
 const RIM = new THREE.Color(0.5, 0.72, 1);
 const RIM_STRENGTH = { idle: 1, pinch: 1.8, grab: 1.6 };
 

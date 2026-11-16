@@ -41,6 +41,9 @@ const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内用近手戳、抓
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 
 // ── Canvas 贴图面板 ──
+// 面板写深度(透明圆角靠 alphaTest 丢掉):半透明的手在 renderOrder 之后画、读深度,
+// 手在面板后面就被挡住、在前面就盖住面板,不再"谁先画谁被盖"
+const PANEL_ALPHA_TEST = 0.05;
 function makePanel(wM, hM, wPx, hPx) {
   const canvas = document.createElement('canvas');
   canvas.width = wPx; canvas.height = hPx;
@@ -49,7 +52,7 @@ function makePanel(wM, hM, wPx, hPx) {
   tex.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(wM, hM),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false })
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, alphaTest: PANEL_ALPHA_TEST })
   );
   mesh.renderOrder = 20;
   return { mesh, ctx, tex, canvas };
@@ -135,15 +138,15 @@ export class XRControls {
 
     this.anchor = new THREE.Group();
     bs.scene.add(this.anchor);
+    // 战场和整套 UI(手牌、HUD、大厅 / 教学、设置、暂停提示、立牌)都挂在 boardRig 下,相对位置固定,双手操控时一起动
+    this.boardRig = new BoardRig(this.anchor, () => bs.world.position, cb.getBoardRig?.(), rig => cb.setBoardRig?.(rig));
     this.poster = new THREE.Group();
     this.poster.name = 'vr:standing-poster';
     this.poster.visible = false;
-    this.anchor.add(this.poster);
+    this.boardRig.node.add(this.poster);
     this.ui = new THREE.Group();
     this.ui.visible = false;
-    this.anchor.add(this.ui);
-    // 战场挂在 boardRig 下(双手操控只动战场,手牌 / HUD 留在 anchor 下不动)
-    this.boardRig = new BoardRig(this.anchor, () => bs.world.position, cb.getBoardRig?.(), rig => cb.setBoardRig?.(rig));
+    this.boardRig.node.add(this.ui);
     // 双手操控时的提示:两手之间一条连线 + 战场外框发光
     this.rigLink = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
       new THREE.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.9 }));
@@ -263,7 +266,7 @@ export class XRControls {
     this.lobby = new THREE.Group();
     this.lobby.position.set(0, -0.145, -0.46);
     this.lobby.visible = false;
-    this.anchor.add(this.lobby);
+    this.boardRig.node.add(this.lobby);
     this.lobbyHeader = makePanel(0.34, 0.087, 1024, 262);
     this.lobbyHeader.mesh.position.y = 0.112;
     this.lobby.add(this.lobbyHeader.mesh);
@@ -304,12 +307,12 @@ export class XRControls {
     this.pausedPanel.mesh.visible = false;
     this.ui.add(this.pausedPanel.mesh);
 
-    // XR 设置面板(手心菜单「设置」打开):大厅和对局里都能用,挂在 anchor 下、视线略低处
+    // XR 设置面板(手心菜单「设置」打开):大厅和对局里都能用;放在战斗按钮、手牌行上方,和其它面板不相交
     this.settingsOpen = false;
     this.settings = new THREE.Group();
-    this.settings.position.set(0, 0.0, -0.45);
+    this.settings.position.set(0, 0.06, -0.5);
     this.settings.visible = false;
-    this.anchor.add(this.settings);
+    this.boardRig.node.add(this.settings);
     this.settingsHeader = makePanel(0.30, 0.04, 960, 128);
     this.settingsHeader.mesh.position.y = 0.075;
     this.settings.add(this.settingsHeader.mesh);
@@ -478,7 +481,7 @@ export class XRControls {
     const texture = new THREE.Texture(art.img);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.needsUpdate = true;
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: PANEL_ALPHA_TEST });
     for (const { mesh } of this.cards) {
       const frontMaterial = mesh.material.clone();
       frontMaterial.side = THREE.FrontSide;
@@ -995,8 +998,7 @@ export class XRControls {
     const eye = this.renderer.xr.isPresenting
       ? this.boardRig.node.worldToLocal(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()))
       : new THREE.Vector3();
-    // HUD 挂在 anchor 下、对手挂在 boardRig 下:遮挡判断统一换到 boardRig 坐标
-    const hud = this.active ? this.boardRig.node.worldToLocal(this.hud.mesh.getWorldPosition(new THREE.Vector3())) : null;
+    const hud = this.hud.mesh.position;   // HUD 和对手都在 boardRig 坐标里
     const mayShow = (point, index) => {
       if (!this.active) return point.z >= -.91;
       const z = root.position.z - point.z;
