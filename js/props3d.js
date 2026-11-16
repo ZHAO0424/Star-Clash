@@ -114,6 +114,8 @@ export function layoutProps(kit, sceneId) {
   });
   // 5. 外圈:战场两侧和两端的边带里稀疏散布(泊松式最小间距)
   const rim = pick('rim');
+  const RIM_BIG_MAX = 10;
+  let bigRim = 0;
   if (rim.length) for (let i = 0; i < 260; i++) {
     const side = R();
     let x, z;
@@ -121,7 +123,10 @@ export function layoutProps(kit, sceneId) {
     else { x = (R() - 0.5) * 2 * (W + 0.6); z = (R() < 0.5 ? -1 : 1) * (H + 0.08 + R() * 0.35); }
     const name = rim[Math.floor(R() * rim.length)], big = kit[name].size > 0.7, r = big ? 0.3 : 0.12;
     if (!free(x, z, r)) continue;
-    put(name, x, z, R() * Math.PI * 2, 0.7 + R() * 0.5, r);
+    // 大件(星核的紫色菌球树、尖塔)缩小并限量:原来又大又密,抢了单位的视线
+    if (big && bigRim >= RIM_BIG_MAX) continue;
+    if (big) bigRim++;
+    put(name, x, z, R() * Math.PI * 2, (0.7 + R() * 0.5) * (big ? 0.62 : 1), r);
   }
   // 配景是 InstancedMesh,不受地形的侧面裁剪:外沿越过台面黄线内框的,缩小到刚好贴线
   const F = ARENA.frame, pad = 0.03;

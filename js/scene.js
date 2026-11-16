@@ -34,6 +34,7 @@ const SIDE_COLOR = { p: 0x4aa8ff, e: 0xff5a4a };
 const SHAKE_T = 0.1, SHAKE_AMP = 0.06;   // 部署降临的桌面震屏:时长(秒)/ 幅度(相机位移,XR 里不震)
 const SHAKE_OFF = new THREE.Vector3();
 const UNIT_R = 0.22;
+const UNIT_VIS = 1.3;   // 单位显示放大倍数(只改渲染,碰撞 / 射程 / 底环不变):原尺寸在俯视镜头和眼镜里都偏小
 
 // 扁平圆环(范围圈)
 function ringMesh(radius, color, opacity, width = 0.05) {
@@ -950,14 +951,15 @@ export class BattleScene {
       : card.hp + (card.shield || 0) >= 260 && !unit.building ? 'tank'
       : card.atk > 0 && card.range > 1.2 ? 'ranged' : null;
     const stance = role === 'tank' ? 0.9 : role === 'support' && !unit.building ? 1.06 : 1;
+    const vis = unit.building ? 1 : UNIT_VIS;
 
     if (mdl?.ready) {
       // 3D 模型(Tripo 生成):高度和立绘一致,略矮一点(立绘图里有留白)
       const small = (card.count || 1) > 1 || card.token;
-      let h = unit.building ? 1.1 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1) * 0.85;
+      let h = unit.building ? 1.1 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1) * 0.85 * vis;
       lift = unit.air ? 0.75 : 0;
       // 扁宽的静态模型(战车、巢穴、无人机)按高度缩放会占地过大:再按碰撞直径限一个占地上限(人形不限,T 字静止姿势会把宽度算大)
-      const maxFoot = mdl.meta.rig === 'biped' ? 0 : unit.radius * 2 * (unit.building ? 1.8 : unit.air ? 3.0 : 2.4);
+      const maxFoot = mdl.meta.rig === 'biped' ? 0 : unit.radius * 2 * (unit.building ? 1.8 : unit.air ? 3.0 : 2.4) * vis;
       body = this.buildModel(mdl, h, maxFoot);
       body.scale.y *= stance;
       h = body.userData.height * stance;
@@ -968,7 +970,7 @@ export class BattleScene {
     } else if (tex) {
       // 立绘公告板:始终正对镜头的 2D 精灵(美术资源到位后自动启用)
       const small = (card.count || 1) > 1 || card.token;
-      const h = unit.building ? 1.25 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1);
+      const h = unit.building ? 1.25 : (0.75 + 0.1 * Math.min(card.cost, 6)) * (small ? 0.72 : 1) * vis;
       lift = unit.air ? 0.75 : 0;
       sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.08, depthWrite: true }));
       sprite.scale.set(h, h * stance, 1);
@@ -994,7 +996,7 @@ export class BattleScene {
       barY = 1.05;
     } else {
       const small = (card.count || 1) > 1 || card.token;
-      const scale = (0.24 + 0.05 * Math.min(card.cost, 6)) * (small ? 0.72 : 1);
+      const scale = (0.24 + 0.05 * Math.min(card.cost, 6)) * (small ? 0.72 : 1) * vis;
       body = this.factionShape(fac.shape, scale, mat);
       lift = unit.air ? 0.85 : (fac.shape === 'octa' ? 0.15 : 0);
       body.position.y = scale * 1.05 + lift;
@@ -1015,7 +1017,7 @@ export class BattleScene {
     group.add(body);
 
     // 贴地圆影(所有单位;飞行单位更小更淡,表示离地)。模型另外投桌面实时阴影
-    const shadow = blobShadow(unit.air ? unit.radius * 1.2 + 0.08 : unit.radius * 1.55 + 0.1, unit.air ? 0.32 : 0.55);
+    const shadow = blobShadow((unit.air ? unit.radius * 1.2 + 0.08 : unit.radius * 1.55 + 0.1) * vis, unit.air ? 0.32 : 0.55);
     group.add(shadow);
     if (!sprite) castShadows(body);
 
