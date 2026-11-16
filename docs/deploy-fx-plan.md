@@ -1,6 +1,6 @@
 # 部署落点特效 · 「天降神兵」· Research + Plan
 
-> 2026-11-16 · 分支 `feat/deploy-fx`（worktree `D:\viture\starclash-deployfx`）· 状态：**待确认**
+> 2026-11-16 · 分支 `feat/deploy-fx`（worktree `D:\viture\starclash-deployfx`）· 状态：**已实现（待验收）**（F1 `5c6b866` / F2 `05418cc` / F3 本文档提交；实现记录、偏离、调试命令见第六~八节）
 > 需求：选牌部署士兵时，场景里确定位置的那个圈，现在只是普通圆圈示意。要有英雄登场的感觉、天降神兵的感觉。
 
 ## 一、现状
@@ -53,8 +53,69 @@
 
 完成后提交在 `feat/deploy-fx` 分支，**不合并、不推送**，等你看效果。
 
-## 五、待确认
+## 五、待确认（已按推荐值定稿）
 
-- [ ] 「锁定 → 降临」两段式这个方向可以吗？
-- [ ] 4 个势力的法阵纹样要区分（推荐），还是统一一种只换颜色？
-- [ ] 桌面版要轻微震屏吗？
+- [x] 「锁定 → 降临」两段式
+- [x] 4 个势力的法阵纹样区分
+- [x] 桌面版轻微震屏 0.1 秒（XR 里不震）
+
+## 六、实现记录（2026-11-16）
+
+| 步骤 | 状态 | 提交 | 内容 |
+|-|-|-|-|
+| F1 | 完成 | `5c6b866` | 新增 `js/deploy-fx.js`：4 势力符文 + 外圈刻度环 + 准星 + 脉冲环 + 裂纹 + 光束渐变，canvas 白色线稿贴图（首次调用生成、之后复用，材质 color 染色）；`DeployMarker` 常驻网格，`scene.showPlacement` 只改变换 / 颜色，位置变了才贴地 |
+| F2 | 完成 | `05418cc` | `vfx.js` 新增 `strike` / `decal` / `descend`；`scene.descendFx` 统一分级；单位出场从 0.3 格加速落下；桌面震屏；`sfx` 新增 `descend` |
+| F3 | 完成（无头环境） | 本文档提交 | 见下方测量；真机 / 有 GPU 的帧率留人工 |
+
+**纹样**：钢铁 = 16 齿齿轮外廓 + 48 刻度 + 4 枚盾徽（内含 V 形军衔）；智械 = 双层六边形 + 18 条电路走线（径向出线、45° 拐角、焊盘）+ 顶点小六边形；虫群 = 起伏膜状外环 + 7 根递归分叉脉络 + 末端孢囊；混沌 = 十二芒尖刺星 + 断裂外环 + 14 个破碎符文。固定种子随机，每次启动长一样。
+
+**偏离 / 补充决定**
+1. **法术牌仍用原范围圈**：法阵和锁定光束只给单位 / 建筑牌（法术没有「降临」，锁定语义会误导）。原 `placeDot` 中心白点由法阵准星取代。
+2. **小兵分级条件**：原代码 `token && count>2` 实际永远不成立（token 卡没有 count）。改为 `token || count>2`：一张牌 >2 只（蜂群无人机 3、幼虫群 4）和亡语 / 虫茧召唤出的 token 都只出冲击波 + 小闪光。`count=2`（虚空蝠）仍是完整降临。
+3. **震屏只在己方完整降临时触发**（敌方 / AI 出兵不震，避免频繁晃）。实现在 `scene.render()`：渲染这一帧时临时挪相机、渲染完放回，不改视角状态。
+4. **联机去重**：`spawn_preview`（出牌瞬间）放完整降临并记下落点；1.5 秒内同卡、1.5 格内的己方 `spawn` 只让单位落下，不再放特效、不再响（`ev.fx = 'echo'`）。服务器拒绝出牌时会出现「有特效没单位」，与原来预览环的行为一致。
+5. **空投法术**（智械空投无人机）保持原 spellFx 的光柱，生成的两只无人机各自再走完整降临。
+6. 锁定光束颜色 = 势力色与白色 1:1 混合（虫群紫偏暗，纯势力色的细光束在眼镜里不够亮）。
+7. 符文旋转转的是贴图 `rotation`，不是网格：起伏地形上网格已逐顶点贴地，转网格会和地形错开。
+
+**F3 测量（无头 Chrome + SwiftShader 软件渲染，`?debug`，人机对局冻结逻辑后测）**
+- 每次降临发射粒子数（打桩计数）：普通 26、飞行 20、建筑 30，均 ≤30。
+- 连续 10 次降临（间隔 0.45 秒，轮换普通 / 飞行 / 小兵 / 建筑）：峰值发光粒子 68、烟尘 35、元件 23。
+- 结束 3 秒后：`vfx.items` 0、发光 / 烟尘粒子 0；`scene` 对象数的差值全部来自期间 AI 落下的 1 个单位（`unitMeshes` 0→1），特效无泄漏。
+- 锁定预览：4 势力符文颜色正确，不合法时变红 + 光束隐藏，`showPlacement(null)` 收起。无控制台报错。
+- 帧率：软件渲染下前后都是 7fps（无头环境没参考价值）。**真实帧率需人工**。
+
+## 七、调试命令（截图验收用）
+
+地址加 `?debug`（如 `http://localhost:8788/?debug`），进入一局人机对局后在控制台执行。想让画面静止截图，先暂停对局（暂停时特效仍在动）。
+
+```js
+const { CARDS } = await import('/js/cards.js'); const s = __bg.scene;
+
+// 锁定预览:4 个势力轮流看(x/z 是战场坐标,己方半场 z>0;radius = 部署半径)
+s.showPlacement({ x: 0, z: 4, radius: 1, isUnit: true, valid: true, card: CARDS.steel_tank });
+s.showPlacement({ x: 0, z: 4, radius: 1, isUnit: true, valid: true, card: CARDS.mecha_walker });
+s.showPlacement({ x: 0, z: 4, radius: 1, isUnit: true, valid: true, card: CARDS.swarm_brood });
+s.showPlacement({ x: 0, z: 4, radius: 1, isUnit: true, valid: true, card: CARDS.chaos_bats });
+s.showPlacement({ x: 0, z: 4, radius: 1, isUnit: true, valid: false, card: CARDS.mecha_walker });   // 不合法:红、停转、无光束
+s.showPlacement(null);   // 收起
+
+// 降临:任意位置触发一次(第 4 个参数 'p' = 己方,桌面会震屏;'e' 不震)
+s.descendFx(0, 4, CARDS.mecha_walker, 'p');        // 普通单位
+s.descendFx(0, 4, CARDS.mecha_drone, 'p');         // 飞行:光柱停在空中、无裂纹
+s.descendFx(0, 4, CARDS.chaos_obelisk, 'p');       // 建筑:更粗、扬尘更重
+s.descendFx(0, 4, CARDS.mecha_swarmdrone, 'p');    // 小兵分级:只有冲击波 + 小闪光
+
+// 连续 10 次(录屏 / 查泄漏):结束几秒后 s.vfx.items.length 应回到 0
+for (let i = 0; i < 10; i++) setTimeout(() => s.descendFx(-3 + i * 0.6, 4, CARDS.mecha_walker, 'p'), i * 450);
+```
+
+注：`descendFx` 只放特效，不生成单位，所以看不到 0.3 格下落；要看完整配合请正常出牌。卡名以 `js/cards.js` 为准（`Object.keys(CARDS)` 列出全部）。
+
+## 八、需人工验证
+
+- [ ] 桌面拖牌截图：4 个势力法阵各一张 + 不合法一张 + 裂隙内（紫）一张；起伏地形战场上法阵、脉冲是否贴地不穿模。
+- [ ] 降临观感：落雷速度、冲击强度、震屏幅度（`scene.js` 顶部 `SHAKE_AMP`）；单位 0.3 格下落和弹出是否协调。
+- [ ] 眼镜（光学透视）：锁定光束 / 法阵亮度够不够、虫群紫是否可见；XR 里确认不震屏；手持拖牌时 `showPlacement` 每帧调用无卡顿。
+- [ ] 真实帧率：桌面 + 眼镜连续部署 10 次前后的帧率和 draw call（`renderer.info.render.calls`）。
+- [ ] 联机：出牌后服务器确认时不重复放特效 / 不重复响；音效「咚 + 嗡」听感。
