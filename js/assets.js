@@ -2,7 +2,7 @@
 // 缺失的资源返回 null,调用方回退到程序化几何体 / 纯文字卡面
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mapForScene } from './map.js';
+import { mapForScene, stretchFieldZ, unstretchFieldZ, FIELD_STRETCH } from './map.js';
 import { shapeTerrain } from './obstacle-kit.js';
 import { groundUniforms, GROUND_GLSL } from './ground-look.js';
 import { drawXRIcon, XR_VECTOR_ICONS } from './xr-icons.js';
@@ -78,6 +78,45 @@ export function loadScene(id) {
   return sceneCache.get(id);
 }
 
+// 场地拉长(map.js FIELD_STRETCH):地形是按原 6.8 半长烘焙的。所有网格顶点在世界坐标里按 stretchFieldZ 拉伸
+//   (战场内等比放大、战场外到黄线那圈压缩,更外面不动),高度图按反映射重采样成覆盖新范围的同步长网格。
+//   结果写进缓存里的共享对象,只做一次
+function stretchTerrain(root, hm, spots) {
+  if (FIELD_STRETCH.to === FIELD_STRETCH.from) return;
+  root.updateMatrixWorld(true);
+  const v = new THREE.Vector3(), inv = new THREE.Matrix4();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position;
+    inv.copy(o.matrixWorld).invert();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      v.z = stretchFieldZ(v.z);
+      v.applyMatrix4(inv);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    pos.needsUpdate = true;
+    o.geometry.computeVertexNormals();
+    o.geometry.computeBoundingBox();
+    o.geometry.computeBoundingSphere();
+  });
+  // 高度图:旧网格双线性采样(越界取边缘值)
+  const old = { ...hm, data: hm.data.slice() };
+  const sample = (x, z) => {
+    const fx = Math.max(0, Math.min(old.nx - 1.001, (x - old.x0) / old.step)), fz = Math.max(0, Math.min(old.nz - 1.001, (z - old.z0) / old.step));
+    const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j, d = old.data, n = old.nx;
+    return (d[j * n + i] * (1 - tx) + d[j * n + i + 1] * tx) * (1 - tz) + (d[(j + 1) * n + i] * (1 - tx) + d[(j + 1) * n + i + 1] * tx) * tz;
+  };
+  const zMax = stretchFieldZ(old.z0 + (old.nz - 1) * old.step), z0 = stretchFieldZ(old.z0);
+  hm.z0 = z0;
+  hm.nz = Math.round((zMax - z0) / hm.step) + 1;
+  hm.data = new Float32Array(hm.nx * hm.nz);
+  for (let j = 0; j < hm.nz; j++) for (let i = 0; i < hm.nx; i++) {
+    hm.data[j * hm.nx + i] = sample(hm.x0 + i * hm.step, unstretchFieldZ(z0 + j * hm.step));
+  }
+  for (const s of spots ?? []) s[1] = stretchFieldZ(s[1]);
+}
+
 async function buildScene(id) {
   try {
     const base = `assets/terrain/${id}/`;
@@ -93,6 +132,7 @@ async function buildScene(id) {
     ]);
     const textured = !!(ground && cliff);
     const map = mapForScene(id);
+    stretchTerrain(gltf.scene, hm, spots);    // 场地拉长:地形 GLB / 高度图 / 立绘落点按 stretchFieldZ 纵向拉伸(所有场景)
     shapeTerrain(id, gltf.scene, hm, map);   // 有程序化套件的场景:玩法区压平、外圈压到台地下面(obstacle-kit.js)
     const { SCENES } = await import('./scenes.js');
     const cfg = SCENES.find(s => s.id === id);

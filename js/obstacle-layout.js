@@ -112,14 +112,16 @@ export const FLOOR = 0.03;
 export const TIER = { apron: 0.05, ledge: 0.12, step: 0.22, bench: 0.34, plateau: 0.54 };
 const RIM_INSET = 0.05;   // 台地外缘离黄线内缩一点:黄线贴着崖脚露出来,像模型摆在托盘上
 const BENCH_X = 5.62;     // 长边石台内缘(台沿 = 战场边 → 这里)
-const PLATEAU_Z = 7.45;   // 远端锻炉台前缘(|z|)
-const BENCH_END = 5.4;    // 石台在近端这里降一级(台阶)
-const STEP_END = 6.5;     // 台阶再降回台沿
-const APRON_Z = 7.6;      // 近端(靠镜头)台沿再降一级成矮台(apron),熔岩河在这里最后落一次
+// 场地拉长(map.js FIELD_STRETCH,半长 6.8 → 7.6)后,战场外到黄线只剩约 1.04 格:各级台地按新纵深重排
+const PLATEAU_Z = 8.0;    // 远端锻炉台前缘(|z|)(原 7.45)
+const BENCH_END = 6.2;    // 石台在近端这里降一级(台阶)(原 5.4)
+const STEP_END = 7.3;     // 台阶再降回台沿(原 6.5)
+const APRON_Z = 7.95;     // 近端(靠镜头)台沿再降一级成矮台(apron),熔岩河在这里最后落一次(原 7.6)
+const APRON_IN = 0.3;     // 矮台块往里伸到 APRON_Z − APRON_IN(被台沿盖住),不能伸进战场
 const RIVER_W = 0.3;
 const RIVER_X = 5.27;     // 长边熔岩河中心线(台沿上,战场边与石台之间)
 const BED_LO = RIVER_X - RIVER_W / 2 - 0.04, BED_HI = RIVER_X + RIVER_W / 2 + 0.04;   // 河床(台沿上切出的槽)
-const LEDGE_BED = TIER.ledge - 0.045, APRON_BED = TIER.apron - 0.03, APRON_BED_END = 8.42;
+const LEDGE_BED = TIER.ledge - 0.045, APRON_BED = TIER.apron - 0.03, APRON_BED_END = 8.55;
 const HEX_T = 0.14;       // 台地柱外接圆半径(柱顶对边宽约 0.24)
 const HEX_F = 0.085;      // 场内(河岸 / 岩桥 / 祭坛台)柱子更细
 
@@ -222,8 +224,8 @@ export function terraceBlocks(map) {
   for (const r of ledge) add('ledge', TIER.ledge, rectPoly(...r));
   for (const b of beds) add('bed', LEDGE_BED, rectPoly(...b));
   // 矮台(近端,带倒角)中间也切出两条河床
-  const apronOct = chamferPoly(-X, APRON_Z - 0.4, X, Z, 0.45);
-  let apron = [[-X, APRON_Z - 0.4, X, Z]];
+  const apronOct = chamferPoly(-X, APRON_Z - APRON_IN, X, Z, 0.45);
+  let apron = [[-X, APRON_Z - APRON_IN, X, Z]];
   for (const sx of [-1, 1]) apron = subtractRect(apron, sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END]);
   for (const r of apron) add('apron', TIER.apron, rectPoly(...r), apronOct);
   for (const sx of [-1, 1]) add('bed', APRON_BED, rectPoly(...(sx > 0 ? [BED_LO, APRON_Z, BED_HI, APRON_BED_END] : [-BED_HI, APRON_Z, -BED_LO, APRON_BED_END])));
@@ -353,7 +355,7 @@ export function cutColumnsLayout(map, blocks, keepOut) {
 // ── L1:边缘 ──
 // 锻炉:左长边石台靠远端的一段,炉口朝战场(上一轮在远端正中,桌面视角下被顶部 HUD 和敌方核心挡住;
 //   放到远端台地左后角也还是顶到 HUD,所以落在石台上、往镜头方向挪,桌面默认视角能看到完整轮廓)
-export const FORGE = { x: -5.98, z: -5.55, scale: 0.68, rot: Math.PI / 2 };
+export const FORGE = { x: -5.98, z: -6.3, scale: 0.68, rot: Math.PI / 2 };   // z 原 −5.55,随场地拉长后移
 // 熔岩河:三维控制点 [x, z, y, 宽?],渲染时平滑。
 //   左:锻炉炉口 → 越过石台边落进河床(熔岩瀑布)→ 左长边河床 → 近端落到矮台河床
 //   右:远端右角火山锥脚下 → 越过锻炉台前缘落进河床 → 右长边河床 → 近端
@@ -362,11 +364,11 @@ export function riverPaths() {
   const B = TIER.bench + 0.012, P = TIER.plateau + 0.012, LB = LEDGE_BED + 0.008, fz = -PLATEAU_Z;
   const AB = APRON_BED + 0.008;
   const side = (sx, z0) => [[sx * RIVER_X, z0, LB], [sx * RIVER_X, -3.2, LB], [sx * RIVER_X, 0, LB], [sx * RIVER_X, 3.2, LB], [sx * RIVER_X, 6.4, LB],
-    [sx * RIVER_X, APRON_Z - 0.08, LB], [sx * RIVER_X, APRON_Z + 0.02, LB - 0.03], [sx * RIVER_X, APRON_Z + 0.1, AB], [sx * RIVER_X, 8.3, AB]];
+    [sx * RIVER_X, APRON_Z - 0.08, LB], [sx * RIVER_X, APRON_Z + 0.02, LB - 0.03], [sx * RIVER_X, APRON_Z + 0.1, AB], [sx * RIVER_X, APRON_BED_END - 0.12, AB]];
   const fx = -BENCH_X, fzf = FORGE.z;
   const left = [[fx - 0.12, fzf, B], [fx - 0.02, fzf + 0.01, B], [fx + 0.1, fzf + 0.02, B - 0.13], [fx + 0.18, fzf + 0.05, LB],
     [-RIVER_X, fzf + 0.4, LB], ...side(-1, -4.6)];
-  const right = [[5.42, -7.82, P], [5.3, -7.62, P], [5.22, fz - 0.06, P], [5.21, fz + 0.04, P - 0.12], [5.22, fz + 0.12, LB],
+  const right = [[5.42, fz - 0.37, P], [5.3, fz - 0.17, P], [5.3, fz - 0.06, P], [5.29, fz + 0.04, P - 0.12], [5.28, fz + 0.12, LB],
     [RIVER_X, fz + 0.45, LB], ...side(1, -6.3)];
   return [left, right];
 }
@@ -392,11 +394,11 @@ function edgeLayout(map, props, rails) {
   // Tripo 配景(按 footprint 入库):铁砧 / 火盆 / 矿车在石台和锻炉台上;远端右角一座小火山锥
   const put = (name, x, z, rot, k = 1) => props.push({ name, x, z, rot, k });
   put('minecart', railX, -1.1, Math.PI / 2); put('minecart', railX, 1.3, Math.PI / 2); put('minecart', -railX, 0.3, Math.PI / 2);
-  put('anvil', -railX, -4.15, 0.3); put('anvil', 2.6, -7.75, -0.2); put('anvil', railX, -3.7, 1.2); put('anvil', -railX, 3.5, 2.0);
-  put('brazier', 1.25, -7.68, 0, 0.75); put('brazier', -1.25, -7.68, 0, 0.75);
+  put('anvil', -railX, -4.15, 0.3); put('anvil', 2.6, -8.3, -0.2); put('anvil', railX, -3.7, 1.2); put('anvil', -railX, 3.5, 2.0);
+  put('brazier', 1.25, -8.3, 0, 0.75); put('brazier', -1.25, -8.3, 0, 0.75);
   for (const [x, z] of [[railX, -5.4], [railX, -2.8], [-railX, -3.2], [railX, 3.2], [-railX, 2.8]]) put('brazier', x, z, 0.4 + x * z, 0.7);
-  put('brazier', 3.2, H + 1.0, 0, 0.6); put('brazier', -3.2, H + 1.0, 0, 0.6);
-  put('cone', 5.45, -8.1, 0.6, 0.42);
+  put('brazier', 3.2, APRON_Z + 0.35, 0, 0.6); put('brazier', -3.2, APRON_Z + 0.35, 0, 0.6);
+  put('cone', 5.5, -8.3, 0.6, 0.38);
   // 石柱群避让:配景、轨道两端之间、锻炉、火山锥
   const keepOut = props.map(p => [p.x, p.z, p.name === 'cone' ? 0.75 : 0.35]);
   for (const r of rails) for (let z = r.z1; z <= r.z2; z += 0.3) keepOut.push([r.x, z, 0.2]);

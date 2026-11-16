@@ -8,21 +8,47 @@
 
 export const ROCK_CLEARANCE = 0.10;
 
+// 场地纵向拉长(2026-11-16):基地后面到黄线内框原来空着约 1.9 格,战场半长 6.8 → 7.6 吃掉其中 0.8。
+//   棋盘底座 / 外框(arena-dims.js)不变,XR 棋盘尺寸、桌面取景都不用改;岩脊 / 岩石 / 裂隙按 z × (7.6 / 6.8) 等比平移
+//   (形状、半径不变);地形 GLB 用 stretchFieldZ 同样拉伸(战场内等比,战场外到黄线那圈压缩),高度图同步重采样
+export const FIELD_STRETCH = { from: 6.8, to: 7.6, outer: 8.99 };   // outer:黄线内框外 0.3,再往外不动
+export function stretchFieldZ(z) {
+  const { from, to, outer } = FIELD_STRETCH, a = Math.abs(z), s = Math.sign(z);
+  if (a <= from) return z * to / from;
+  if (a >= outer) return z;
+  return s * (to + (a - from) * (outer - to) / (outer - from));
+}
+export function unstretchFieldZ(z) {
+  const { from, to, outer } = FIELD_STRETCH, a = Math.abs(z), s = Math.sign(z);
+  if (a <= to) return z * from / to;
+  if (a >= outer) return z;
+  return s * (from + (a - to) * (outer - from) / (outer - to));
+}
+const K = FIELD_STRETCH.to / FIELD_STRETCH.from;
+const stretchLayout = m => {
+  for (const w of m.walls) w.pts = w.pts.map(([x, z]) => [x, z * K]);
+  for (const o of [...m.obstacles, ...m.rifts]) o.z *= K;
+  return m;
+};
+
 export const MAP = {
   W: 4.8,               // 半宽
-  HALF: 6.8,            // 半长
-  // 单位/建筑只能部署在离中线 DEPLOY_LINE 以外的己方半场。2026-11-16 从 0.8 改到 2.0:
-  //   部署区纵深 6.0 → 4.8(−20%),占半场 88% → 71%;起点落在分路岩脊转线缺口(|z| < 1.15,加岩脊半径 + 单位半径 ≈ 1.66)之后,
-  //   不能再直接空投进转线口 / 熔岩河边,出兵要多走约 1.2 格才到中线;星核祭坛(半径 1.2)与部署区之间留出 0.8 的缓冲
-  DEPLOY_LINE: 2.0,
+  HALF: 7.6,            // 半长(原 6.8,见 FIELD_STRETCH)
+  // 单位/建筑只能部署在离中线 DEPLOY_LINE 以外的己方半场。2026-11-16 两次调整:
+  //   ① 0.8 → 2.0:部署区纵深 6.0 → 4.8(−20%),占半场 88% → 71%
+  //   ② 场地拉长后 2.0 → 2.4(= 2.0 × 7.6/6.8 ≈ 2.24,取整到 2.4):纵深 5.2,占半场 68%,仍比最初的 6.0 / 88% 小;
+  //      起点落在拉长后的转线缺口(|z| < 1.29,加岩脊半径 + 单位半径 ≈ 1.8)之后,中路岩石(z = 2.35)压在线上
+  DEPLOY_LINE: 2.4,
 
-  // 防御塔(都对空)
+  // 防御塔(都对空)。场地拉长后整体后移,要求:塔 / 核心的射程够不到星核占领圈里的地面单位
+  //   (塔心到圈心距离 − 圈半径 1.2 > 射程 + 塔半径 + 单位半径 0.22;见 tests/longfield.test.mjs)
+  //   前哨塔 3.4 → 5.0(余量 0.28;原来能打到圈心外 0.1 处)、侧翼塔 4.9 → 5.7、核心 6.0 → 6.8(后沿 7.55,贴战场底边)
   towers: [
-    { kind: 'outpost', name: '前哨塔', x: 0,    z: 3.4, hp: 400, atk: 28, range: 2.8, interval: 1.0, radius: 0.5 },
-    { kind: 'pylon',   name: '侧翼塔', x: -3.3, z: 4.9, hp: 480, atk: 22, range: 2.6, interval: 1.0, radius: 0.45 },
-    { kind: 'pylon',   name: '侧翼塔', x: 3.3,  z: 4.9, hp: 480, atk: 22, range: 2.6, interval: 1.0, radius: 0.45 },
+    { kind: 'outpost', name: '前哨塔', x: 0,    z: 5.0, hp: 400, atk: 28, range: 2.8, interval: 1.0, radius: 0.5 },
+    { kind: 'pylon',   name: '侧翼塔', x: -3.3, z: 5.7, hp: 480, atk: 22, range: 2.6, interval: 1.0, radius: 0.45 },
+    { kind: 'pylon',   name: '侧翼塔', x: 3.3,  z: 5.7, hp: 480, atk: 22, range: 2.6, interval: 1.0, radius: 0.45 },
   ],
-  base: { kind: 'base', name: '核心', x: 0, z: 6.0, atk: 26, range: 2.5, interval: 1.1, radius: 0.75 },
+  base: { kind: 'base', name: '核心', x: 0, z: 6.8, atk: 26, range: 2.5, interval: 1.1, radius: 0.75 },
 
   // 分路岩脊:蜿蜒的折线 + 半径(胶囊体),阻挡地面单位与部署,不阻挡飞行单位和弹道。
   // 每侧两段,中线附近留出转线缺口(|z| < 1.15);右侧是左侧绕中心旋转 180°(双方对称)
@@ -48,6 +74,7 @@ export const MAP = {
   // 星核节点:半径内只有一方单位时推进占领进度,captureTime 秒占满;占领方法力恢复 ×(1+bonus)
   node: { x: 0, z: 0, r: 1.2, captureTime: 4, bonus: 0.35 },
 };
+stretchLayout(MAP);   // 上面岩脊 / 岩石 / 裂隙的坐标按原 6.8 半长设计,这里等比拉到 7.6
 
 // 冰封裂谷的斜向转线口位于两侧不同深度，整张地图绕星核旋转 180° 对称。
 const glacierRidges = [
@@ -59,20 +86,20 @@ const glacierRocks = [
 ];
 const glacierRift = { x: 3.65, z: 0.75, r: 1.0, slow: 0.5 };
 const mirrorPoint = point => ({ ...point, x: -point.x, z: -point.z });
-const GLACIER = {
+const GLACIER = stretchLayout({
   ...MAP,
   walls: [...glacierRidges, ...glacierRidges.map(wall => ({
     ...wall, pts: wall.pts.map(([x, z]) => [-x, -z]),
   }))],
   obstacles: [...glacierRocks, ...glacierRocks.map(mirrorPoint)],
   rifts: [mirrorPoint(glacierRift), glacierRift],
-};
+});
 // 熔岩锻炉(第三轮):两侧的圆形熔岩池(裂隙,地面减速 50%)换成一条横贯战场的熔岩河。
 //   · 河道中心线 z = amp · sin(π x / W):左右两端在边线中点落进来,绕星核旋转 180° 对称(奇函数)
 //   · 地面单位(非建筑)站在河里 → 烧灼:每 0.5 秒结算一次 dps × 0.5;离开后余烬再烧 ember 秒。飞行单位不受影响
 //   · 不烧灼的地方:只有星核祭坛(半径 = 占领圈 node.r,熔岩从祭坛下面流过)。
 //     第三轮曾有两座冷却岩桥(x = ±3.55),按用户反馈去掉:边路过河必须蹚熔岩;bridges 字段保留为空,渲染 / 寻路仍支持
-//   · 河道最宽处 |z| ≤ amp + half = 0.67 < 部署线 0.8:河在双方部署区之外,不影响部署
+//   · 河道最宽处 |z| ≤ amp + half = 0.67 < 部署线:河在双方部署区之外,不影响部署
 const VOLCANO = {
   ...MAP,
   rifts: [],
