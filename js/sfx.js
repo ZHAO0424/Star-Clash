@@ -50,6 +50,8 @@ function noise(dur, { vol = 0.4, freq = 1200, q = 0.8, delay = 0 } = {}) {
 
 const SOUNDS = {
   deploy:    () => { tone(320, 0.12, { type: 'triangle', vol: 0.35, slide: 1.8 }); },
+  // 部署降临:0.12 秒着陆时低频「咚」+ 一道高频「嗡」
+  descend:   () => { tone(320, 0.1, { type: 'triangle', vol: 0.2, slide: 1.8 }); tone(85, 0.32, { vol: 0.5, slide: 0.45, delay: 0.12 }); noise(0.18, { vol: 0.25, freq: 300, q: 0.6, delay: 0.12 }); tone(1320, 0.4, { vol: 0.08, slide: 0.85, delay: 0.12 }); },
   spell:     () => { tone(660, 0.25, { type: 'sine', vol: 0.3, slide: 1.5 }); tone(990, 0.3, { vol: 0.2, delay: 0.05 }); },
   hit:       () => { noise(0.05, { vol: 0.12, freq: 2400 }); },
   shot:      () => { tone(900, 0.06, { type: 'square', vol: 0.06, slide: 0.5 }); },
@@ -83,7 +85,8 @@ export const isMuted = () => muted;
 // 把游戏事件映射成音效(本地玩家视角:winner === 'p' 为胜)
 export function sfxForEvent(ev) {
   switch (ev.type) {
-    case 'spawn': case 'spawn_preview': return sfx('deploy');
+    case 'spawn': case 'spawn_preview':   // ev.fx 由 scene.handleEvents 标记:echo = 联机确认,出牌时已经响过
+      return ev.fx === 'echo' ? null : sfx(ev.fx === 'descend' ? 'descend' : 'deploy');
     case 'spell': return sfx('spell');
     case 'attack': return sfx(ev.ranged ? 'shot' : 'hit');
     case 'death': return sfx(ev.unit?.card?.faction === 'mecha' ? 'mechaOff' : 'death');

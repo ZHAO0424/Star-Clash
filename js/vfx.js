@@ -3,6 +3,7 @@
 //   · 元件:扩散环、光柱、护盾罩、刀光、闪光、闪电、地面法阵 —— 都挂在战场根节点下,随战场缩放(XR 里也正确)
 //   · 贴图全部用 canvas 现画,不需要额外美术资源
 import * as THREE from 'three';
+import { deployTextures } from './deploy-fx.js';
 
 const MAX_GLOW = 2400, MAX_SMOKE = 600;
 
@@ -322,6 +323,83 @@ export class VFX {
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, this.gy(x, z) + 0.07, z);
     return this.add(m, life, (k, dt) => { m.rotation.z += spin * dt; m.material.opacity = 0.85 * Math.min(1, k * 4, (1 - k) * 8 + 0.2); });
+  }
+  // ── 部署「降临」──
+  // 落雷:粗光柱从离地 height 高处 0.12 秒砸到 bottom(白芯 + 色壳),之后收窄淡出;顶端一团闪光
+  strike(x, z, color, { height = 7, bottom = null, width = 0.32, life = 0.6 } = {}) {
+    const top = this.gy(x, z) + height, y1 = bottom ?? this.gy(x, z), len = Math.max(0.5, top - y1), grp = new THREE.Group();
+    const layer = (w, col, op) => {
+      const g = new THREE.CylinderGeometry(w, w * 0.75, len, 12, 1, true);
+      g.translate(0, -len / 2, 0);   // 原点在顶端:scale.y 从 0 长到 1 = 从天上往下砸
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: C(col), transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      grp.add(m);
+      return m;
+    };
+    const shell = layer(width, color, 0.85), core = layer(width * 0.4, 0xffffff, 1);
+    grp.position.set(x, top, z);
+    grp.scale.y = 0.001;
+    this.flash(x, top, z, color, 1.6, 0.3);
+    const fall = 0.12 / life;   // 前 0.12 秒下砸
+    return this.add(grp, life, k => {
+      const t = 1 - k;
+      if (t < fall) { grp.scale.set(1, Math.max(0.001, t / fall), 1); return; }
+      const u = (t - fall) / (1 - fall);   // 余韵:收窄 + 淡出
+      grp.scale.set(1 - 0.85 * u, 1, 1 - 0.85 * u);
+      shell.material.opacity = 0.85 * (1 - u);
+      core.material.opacity = 1 - u * u;
+    });
+  }
+  // 地面贴花(着陆裂纹 / 法阵残影):加法混合的平面,淡出;rise 是整个生命周期里往上飘的高度
+  decal(x, z, r, map, color, { life = 1, opacity = 0.9, lift = 0.05, grow = 0, rise = 0, spin = 0 } = {}) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map, color: C(color),
+      transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.rotation.x = -Math.PI / 2;
+    const y0 = this.gy(x, z) + lift;
+    m.position.set(x, y0, z);
+    m.scale.setScalar(r);
+    return this.add(m, life, (k, dt) => {
+      const t = 1 - k;
+      m.scale.setScalar(r * (1 + grow * t));
+      m.position.y = y0 + rise * t;
+      m.rotation.z += spin * dt;
+      m.material.opacity = opacity * Math.min(1, k * 1.5);
+    });
+  }
+  // 部署降临:落雷 → 着陆冲击(闪光 + 冲击波 + 裂纹 + 扬尘)→ 法阵符文飘散成光点。粒子 ≤ 30
+  //   faction 势力 id(选符文贴图);air 飞行单位:光柱停在 airY 高度、不出裂纹;building 建筑:扬尘更重
+  //   lite:多只的小兵,只要冲击波 + 小闪光(不砸光柱,避免满屏光柱)
+  descend(x, z, { color, faction, air = false, airY = 1, building = false, lite = false, r = 0.7 } = {}) {
+    const gy = this.gy(x, z), hitY = air ? gy + airY : gy;
+    if (lite) {
+      this.ring(x, z, 0.05, 0.55, color, 0.35, 0.9);
+      this.flash(x, gy + 0.25, z, color, 0.5, 0.12);
+      return;
+    }
+    this.strike(x, z, color, { bottom: hitY, width: building ? 0.42 : 0.32 });
+    this.later(0.12, () => {   // 着陆冲击
+      this.flash(x, hitY + 0.2, z, 0xffffff, building ? 1.6 : 1.2, 0.16);
+      this.flash(x, hitY + 0.15, z, color, building ? 2.4 : 1.8, 0.28);
+      this.ring(x, z, 0.1, building ? 1.8 : 1.4, 0xffffff, 0.32, 1, air ? hitY - gy + 0.06 : 0.06);
+      this.ring(x, z, 0.1, building ? 1.2 : 0.9, color, 0.5, 0.9, air ? hitY - gy + 0.08 : 0.08);
+      this.sparks(x, hitY + 0.1, z, color, 8, 2.2, 0.1, 0.35);
+      if (air) return;
+      this.decal(x, z, building ? 1.1 : 0.85, deployTextures().crack, color, { life: 1, opacity: 0.85 });
+      const n = building ? 10 : 6, dust = C(0xdfe4ee);   // 扬尘向外推(亮色:眼镜里暗色等于看不见)
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2 + rnd(0, 0.5), sp = rnd(1.4, 2.2) * (building ? 1.2 : 1);
+        this.smoke.emit(x + Math.cos(a) * 0.15, gy + 0.08, z + Math.sin(a) * 0.15, Math.cos(a) * sp, rnd(0.1, 0.4), Math.sin(a) * sp,
+          dust, building ? 0.5 : 0.38, rnd(0.6, 0.9), { drag: 3.5, grow: 0.5, alpha: 0.5 });
+      }
+    });
+    this.later(0.15, () => {   // 余韵:法阵残影向上飘散 + 符文碎成光点
+      const runes = deployTextures().runes[faction] ?? deployTextures().runes.steel;
+      this.decal(x, z, r, runes, color, { life: 0.45, opacity: 0.9, lift: (air ? hitY - gy : 0) + 0.07, grow: 0.3, rise: 0.35, spin: 1.5 });
+      const c = C(color);
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2, rr = r * rnd(0.6, 0.95);
+        this.glow.emit(x + Math.cos(a) * rr, hitY + 0.08, z + Math.sin(a) * rr, Math.cos(a) * 0.15, rnd(0.9, 1.5), Math.sin(a) * 0.15, c, rnd(0.09, 0.14), rnd(0.45, 0.7), { drag: 1.2 });
+      }
+    });
   }
   bolt(points, color, life = 0.25) {   // 闪电:多条抖动的折线叠在一起 + 节点闪光
     const grp = new THREE.Group(), c = C(color);

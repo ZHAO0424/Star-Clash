@@ -30,6 +30,8 @@ function clipKey(name) {
 }
 
 const SIDE_COLOR = { p: 0x4aa8ff, e: 0xff5a4a };
+const SHAKE_T = 0.1, SHAKE_AMP = 0.06;   // 部署降临的桌面震屏:时长(秒)/ 幅度(相机位移,XR 里不震)
+const SHAKE_OFF = new THREE.Vector3();
 const UNIT_R = 0.22;
 
 // 扁平圆环(范围圈)
@@ -218,6 +220,9 @@ export class BattleScene {
     this.damageBursts = new Map();
     this.fx = [];                    // 通用定时特效 {objs, life, maxLife, update}
     this.corpses = [];               // 正在播倒地 / 下沉的单位
+    this.dropIns = new Set();        // 刚「降临」的单位 id:出场弹出时从上方 0.3 格落下
+    this.previewDescents = [];       // 联机乐观更新已经放过降临的落点 {x, z, cardId, at}(服务器确认的 spawn 不再重复放)
+    this.shakeT = 0;
     this.vfx = new VFX(this.world, (x, z) => this.heightAt(x, z));   // 粒子 / 弹道 / 法术特效
 
     this.view = { ...DEFAULT_VIEW };   // 桌面端视角(右键旋转 / 滚轮缩放 / 中键平移),默认 = 固定俯视角
@@ -271,6 +276,7 @@ export class BattleScene {
     this.map = map;
     this.activeLinks?.clear();
     this.damageBursts.clear();
+    this.dropIns.clear();
     for (const fx of this.fx) fx.objs.forEach(o => this.drop(o));
     this.fx.length = 0;
     this.linkLines?.geometry.setDrawRange(0, 0);
@@ -1079,8 +1085,13 @@ export class BattleScene {
       this.updateRiftMarker(u, g, now);
       // 出场:弹出(带一点回弹)
       const age = (now - ud.born) / 1000;
-      if (age < 0.35) g.scale.setScalar(easeOutBack(Math.max(0.05, age / 0.35)));
-      else if (g.scale.x !== 1) g.scale.setScalar(1);
+      if (age < 0.35) {
+        g.scale.setScalar(easeOutBack(Math.max(0.05, age / 0.35)));
+        if (this.dropIns.has(u.id)) g.position.y += 0.3 * (1 - (age / 0.35) ** 2);   // 降临:加速落到冲击中心
+      } else {
+        if (g.scale.x !== 1) g.scale.setScalar(1);
+        this.dropIns.delete(u.id);
+      }
       // 大范围圈在起伏地形上会穿模:单位移动超过 0.08 时重新贴地(小的阵营底环不用)
       if (this.hm && (ud.rangeRing || ud.ar) && (!ud.draped || Math.abs(ud.draped.x - u.x) + Math.abs(ud.draped.z - u.z) > 0.08)) {
         ud.draped = { x: u.x, z: u.z };
@@ -1793,6 +1804,7 @@ export class BattleScene {
       this.updateClipPlanes();
     }
     this.deployMarker?.update(dt);
+    this.shakeT = Math.max(0, this.shakeT - dt);
     this.vfx.update(dt, this.lastCam || this.camera, this.renderer);
   }
 
@@ -1911,6 +1923,16 @@ export class BattleScene {
     }
   }
 
+  // 部署降临(见 vfx.descend):多只的小兵(一张牌 >2 只,或别的牌召唤出来的 token)只出冲击波,不砸光柱。
+  // 己方完整降临时桌面版轻微震屏。返回 'descend' / 'lite'(音效据此选)
+  descendFx(x, z, card, side) {
+    const lite = !!card.token || card.count > 2;
+    this.vfx.descend(x, z, { color: FACTIONS[card.faction].color, faction: card.faction, air: !!card.air,
+      building: card.type === 'building', lite, r: card.type === 'building' ? 1.0 : 0.7 });
+    if (!lite && side === 'p') this.vfx.later(0.12, () => { this.shakeT = SHAKE_T; });
+    return lite ? 'lite' : 'descend';
+  }
+
   // 产兵建筑出兵:无人机工厂 = 青色传送门 + 上升火花;孵化巢 = 绿色黏液迸溅 + 卵壳碎片
   produceFx(maker, u) {
     const v = this.vfx, y = this.heightAt(u.x, u.z);
@@ -1979,17 +2001,17 @@ export class BattleScene {
         case 'death':
           this.deathFx(ev.unit);
           break;
-        case 'spawn': {   // 出场:地面传送环 + 光柱 + 上升光点
-          const u = ev.unit, col = FACTIONS[u.card.faction].color;
+        case 'spawn': {   // 出场:「降临」—— 落雷 + 着陆冲击 + 法阵飘散(ev.fx 标记给音效用)
+          const u = ev.unit;
           // 产兵建筑(无人机工厂 / 孵化巢)生出来的:旁边 1 格内有己方建筑且产的正是这种单位
           const maker = this.unitMeshes.size && this.lastUnits?.find(b => b.building && !b.dead && b.side === u.side
             && b.card.spawn?.card === u.card.id && Math.hypot(b.x - u.x, b.z - u.z) < 1.0);
-          if (maker) { this.produceFx(maker, u); break; }
-          if (u.card.token && u.card.count > 2) { v.ring(u.x, u.z, 0.05, 0.4, col, 0.35); break; }
-          v.ring(u.x, u.z, 0.1, 0.75, col, 0.5);
-          v.beam(u.x, u.z, col, 0.35, u.air ? 1.6 : 1.1, 0.25);
-          v.rise(u.x, u.z, col, 10, 0.35, 1.0);
-          if (u.building) v.puff(u.x, this.heightAt(u.x, u.z), u.z, 0xb0a898, 6, 0.45, 1.0, 0.4);
+          if (maker) { this.produceFx(maker, u); ev.fx = 'produce'; break; }
+          this.dropIns.add(u.id);
+          // 联机:出牌瞬间已经在这里放过降临了,服务器确认后只让单位落下
+          this.previewDescents = this.previewDescents.filter(d => now - d.at < 1500);
+          if (u.side === 'p' && this.previewDescents.some(d => d.cardId === u.card.id && Math.hypot(d.x - u.x, d.z - u.z) < 1.5)) { ev.fx = 'echo'; break; }
+          ev.fx = this.descendFx(u.x, u.z, u.card, u.side);
           break;
         }
         case 'spell':
@@ -2026,7 +2048,9 @@ export class BattleScene {
           break;
         }
         case 'spawn_preview':   // 联机乐观更新:出牌瞬间在落点先放特效,不等服务器确认
-          v.ring(ev.x, ev.z, 0.1, 0.6, FACTIONS[ev.card.faction].color, 0.4);
+          if (ev.card.type === 'spell') { v.ring(ev.x, ev.z, 0.1, 0.6, FACTIONS[ev.card.faction].color, 0.4); break; }
+          ev.fx = this.descendFx(ev.x, ev.z, ev.card, 'p');
+          this.previewDescents.push({ x: ev.x, z: ev.z, cardId: ev.card.id, at: now });
           break;
         case 'splash':
           v.ring(ev.x, ev.z, 0.1, ev.radius + 0.2, 0xffb060, 0.35);
@@ -2132,6 +2156,10 @@ export class BattleScene {
   }
 
   render() {
+    // 降临震屏:只在桌面版、只在这一帧渲染时把相机挪一下,渲染完放回(不影响视角状态)
+    const k = this.shakeT > 0 && !this.renderer.xr.isPresenting ? this.shakeT / SHAKE_T : 0;
+    if (k) this.camera.position.add(SHAKE_OFF.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * SHAKE_AMP * k));
     this.renderer.render(this.scene, this.camera);
+    if (k) this.camera.position.sub(SHAKE_OFF);
   }
 }
