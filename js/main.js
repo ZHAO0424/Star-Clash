@@ -515,6 +515,8 @@ function ensureScene() {
     onBattleAction: handleXRBattleAction,
     getNetworkStatus: () => networkStatus({ problemsOnly: true }),
     getBoardSize: () => prefs.boardSize,
+    getBoardRig: () => prefs.xrBoardRig,
+    setBoardRig: rig => { prefs.xrBoardRig = rig; },
     onPlay: (idx, x, z) => {
       if (paused) { toast(t('xrPaused')); return false; }
       if (!canPlayDuringGuide(game().p.hand[idx])) return false;

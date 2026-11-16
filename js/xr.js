@@ -6,7 +6,7 @@
 //   手牌  :头下 40cm、前方 20cm,一排 5 张,向后倾斜面向用户
 //   HUD   :战场远端上方
 //   强化/结束面板:手牌上方,需要时出现
-// 双手同时捏合(空捏)保持 1 秒 → 以当前头部重新居中
+// 重新居中在左手手心菜单里;双手同时空捏保持 0.4 秒 → 拖动旋转 / 升降 / 推拉战场(xr-board-rig.js)
 
 import * as THREE from 'three';
 import { FACTIONS, cardTags, previewRadius } from './cards.js';
@@ -18,6 +18,8 @@ import { XROpponentAvatar } from './xr-avatar.js';
 import { createHandVisual } from './xr-hand-visual.js';
 import { HandRay } from './xr-hand-ray.js';
 import { PalmMenu } from './xr-palm-menu.js';
+import { BoardRig } from './xr-board-rig.js';
+import { RIG } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -25,7 +27,6 @@ const PINCH_OFF = 0.038;     // > 3.8cm 视为松开(滞回,防抖)
 const GRAB_RADIUS = 0.06;    // 捏合点离卡牌中心 6cm 内可抓取
 const DROP_MAX_HEIGHT = 0.25;// 捏合点离战场面 25cm 内才算落在战场上
 const CARD_W = 0.072, CARD_H = 0.1, CARD_GAP = 0.082;
-const RECENTER_HOLD = 1.0;
 const BOARD_SCALES = { small: 0.044, standard: 0.052, large: 0.060 };
 const BOARD_CENTER_DISTANCE = 0.72;
 const HUD_BASE_DISTANCE = 1.25;
@@ -141,6 +142,22 @@ export class XRControls {
     this.ui = new THREE.Group();
     this.ui.visible = false;
     this.anchor.add(this.ui);
+    // 战场挂在 boardRig 下(双手操控只动战场,手牌 / HUD 留在 anchor 下不动)
+    this.boardRig = new BoardRig(this.anchor, () => bs.world.position, cb.getBoardRig?.(), rig => cb.setBoardRig?.(rig));
+    // 双手操控时的提示:两手之间一条连线 + 战场外框发光
+    this.rigLink = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.9 }));
+    this.rigLink.frustumCulled = false;
+    this.rigLink.visible = false;
+    bs.scene.add(this.rigLink);
+    const edgeX = ARENA.hx + ARENA.rim, edgeZ = ARENA.hz + ARENA.rim, edgeY = ARENA.top + 0.05;
+    this.rigOutline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-edgeX, edgeY, -edgeZ), new THREE.Vector3(edgeX, edgeY, -edgeZ),
+      new THREE.Vector3(edgeX, edgeY, edgeZ), new THREE.Vector3(-edgeX, edgeY, edgeZ),
+    ]), new THREE.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.95, depthTest: false }));
+    this.rigOutline.renderOrder = 25;
+    this.rigOutline.visible = false;
+    bs.world.add(this.rigOutline);
 
     // 手牌
     this.cardRow = new THREE.Group();
@@ -296,7 +313,7 @@ export class XRControls {
     this.settingsHeader = makePanel(0.30, 0.04, 960, 128);
     this.settingsHeader.mesh.position.y = 0.075;
     this.settings.add(this.settingsHeader.mesh);
-    this.settingsButtons = ['size', 'sound', 'hand', 'close'].map(action => {
+    this.settingsButtons = ['size', 'sound', 'hand', 'view', 'close'].map(action => {
       const button = makePanel(0.145, 0.046, 464, 148);
       button.action = action;
       this.settings.add(button.mesh);
@@ -373,7 +390,7 @@ export class XRControls {
     this.active = true;
     this.isAR = isAR;
     if (!isAR) this.loadStandingPoster();
-    this.bs.enterXRLayout(this.anchor, isAR);
+    this.bs.enterXRLayout(this.boardRig.node, isAR);
     if (!isAR) this.bs.scene.background = this.immersiveBackground();
     this.nextPoseAt = 0;
     loadXRControlArt().then(() => this.applyControlArt());
@@ -407,6 +424,7 @@ export class XRControls {
     this.palmMenu.hide();
     this.settingsOpen = false;
     this.settings.visible = false;
+    this.endBoardGesture();
     this.bothPinchTime = 0;
     this.bs.world.visible = true;
     this.lobby.visible = false;
@@ -530,6 +548,7 @@ export class XRControls {
     this.bs.world.position.z = -BOARD_CENTER_DISTANCE - shift;
     this.hud.mesh.position.z = -HUD_BASE_DISTANCE - shift - (scale - BOARD_SCALES.standard) * halfDepth;
     this.poster.position.set(0, -0.055, this.hud.mesh.position.z - POSTER_GAP);
+    this.boardRig.apply();
     this.bs.world.updateMatrixWorld(true);
   }
 
@@ -570,7 +589,10 @@ export class XRControls {
 
   settingsAction(action) {
     if (action === 'close') this.settingsOpen = false;
-    else this.cb.onBattleAction(action);   // size / sound / hand
+    else if (action === 'view') {
+      this.boardRig.reset();
+      this.cb.onToast?.(t('tViewReset'));
+    } else this.cb.onBattleAction(action);   // size / sound / hand
     this.settingsSignature = '';
   }
 
@@ -840,7 +862,7 @@ export class XRControls {
         else st.hover = game?.phase === 'battle' ? this.pick(this.cards, null, ray) : -1;
       }
     }
-    this.checkRecenter(dt);
+    this.updateBoardGesture(dt);
     this.updatePalmMenu(dt, inputReady);
     this.refreshSettings();
     if (this.confirmLeaveGame !== game || game?.phase !== 'battle') this.confirmLeaveGame = null;
@@ -879,7 +901,7 @@ export class XRControls {
     const poked = this.palmMenu.update(dt, {
       hand: left?.hand,
       head: this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()),
-      allowed: inputReady && !this.inputs.some(s => s.grab),
+      allowed: inputReady && !this.inputs.some(s => s.grab) && !this.boardRig.active,
       tip,
       hoverRay: right?.rayActive ? right.ray : null,
     });
@@ -892,11 +914,13 @@ export class XRControls {
     if (now < this.nextPoseAt) return;
     this.nextPoseAt = now + XR_POSE_INTERVAL;
     const camera = this.renderer.xr.getCamera();
-    const invAnchor = this.anchor.getWorldQuaternion(new THREE.Quaternion()).invert();
+    // 姿态在 boardRig 坐标里算(没操控时就是 anchor 坐标):双手挪过战场后,对手看到的手仍落在同一格上
+    const rig = this.boardRig.node;
+    const invAnchor = rig.getWorldQuaternion(new THREE.Quaternion()).invert();
     const ratio = BOARD_SCALES.standard / this.bs.world.scale.x;
     const boardZ = this.bs.world.position.z;
     const pack = (point, rotation, grip = false) => {
-      const local = this.anchor.worldToLocal(point);
+      const local = rig.worldToLocal(point);
       // Normalize the table coordinates so both players can point at the same cell at different tabletop sizes.
       local.x *= ratio;
       local.z = (local.z - boardZ) * ratio - BOARD_CENTER_DISTANCE;
@@ -956,7 +980,7 @@ export class XRControls {
     if (!visible) { this.opponentAvatar?.update(null, dt); return; }
     this.opponentAvatar ??= new XROpponentAvatar();
     const { root } = this.opponentAvatar;
-    const parent = this.active ? this.anchor : this.bs.world;
+    const parent = this.active ? this.boardRig.node : this.bs.world;   // 对手跟着战场走
     if (root.parent !== parent) parent.add(root);
     if (this.active) {
       root.position.set(0, 0, 2 * this.bs.world.position.z);
@@ -969,14 +993,15 @@ export class XRControls {
     const ratio = this.active ? this.bs.world.scale.x / BOARD_SCALES.standard : 1;
     const seatOffset = this.active ? BOARD_CENTER_DISTANCE * ratio + this.bs.world.position.z : 0;
     const eye = this.renderer.xr.isPresenting
-      ? this.anchor.worldToLocal(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()))
+      ? this.boardRig.node.worldToLocal(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()))
       : new THREE.Vector3();
+    // HUD 挂在 anchor 下、对手挂在 boardRig 下:遮挡判断统一换到 boardRig 坐标
+    const hud = this.active ? this.boardRig.node.worldToLocal(this.hud.mesh.getWorldPosition(new THREE.Vector3())) : null;
     const mayShow = (point, index) => {
       if (!this.active) return point.z >= -.91;
       const z = root.position.z - point.z;
       const depthMargin = index === 0 ? .12 : .08;
       if (z + depthMargin > this.bs.world.position.z) return false;
-      const hud = this.hud.mesh.position;
       if (!this.hud.mesh.visible || z + depthMargin < hud.z || eye.z <= hud.z + .05) return true;
       const projection = Math.max(0, (eye.z - z) / (eye.z - hud.z));
       const centerX = eye.x + (hud.x - eye.x) * projection;
@@ -1333,14 +1358,43 @@ export class XRControls {
     }
   }
 
-  checkRecenter(dt) {
-    const both = this.inputs.every(s => s.isHand && s.pinched && !s.grab);
-    this.bothPinchTime = both ? this.bothPinchTime + dt : 0;
-    if (this.bothPinchTime >= RECENTER_HOLD) {
-      this.bothPinchTime = -999;                 // 本次捏合只触发一次
-      this.recenter();
-      this.cb.onToast?.(t('tRecentered'));
+  // 双手空捏(没抓牌、没在用射线点按钮)保持 0.4s → 操控战场;松开任一只手结束,越界部分弹回边界
+  updateBoardGesture(dt) {
+    this.boardRig.tick(dt);
+    const hands = this.inputs.filter(s => s.isHand && s.connected && s.handPoint);
+    const both = hands.length === 2 && hands.every(s => s.pinched && !s.grab && !s.rayActive)
+      && Boolean(this.cb.getGame()) && this.ui.visible && !this.palmMenu.open;
+    if (!this.boardRig.active) {
+      this.bothPinchTime = both ? this.bothPinchTime + dt : 0;
+      if (this.bothPinchTime < RIG.HOLD) return;
+      this.bothPinchTime = 0;
+      const [left, right] = this.handPair(hands);
+      const camera = this.renderer.xr.getCamera();
+      const forward = camera.getWorldDirection(new THREE.Vector3())
+        .applyQuaternion(this.anchor.getWorldQuaternion(new THREE.Quaternion()).invert());
+      this.boardRig.begin(left, right, forward);
+      this.rigLink.visible = this.rigOutline.visible = true;
+    } else if (!both) {
+      this.endBoardGesture();
+      return;
     }
+    const [left, right] = this.handPair(hands);
+    this.boardRig.update(left, right);
+    const link = this.rigLink.geometry.attributes.position;
+    link.setXYZ(0, hands[0].handPoint.x, hands[0].handPoint.y, hands[0].handPoint.z);
+    link.setXYZ(1, hands[1].handPoint.x, hands[1].handPoint.y, hands[1].handPoint.z);
+    link.needsUpdate = true;
+  }
+
+  // 两只手的捏合点(anchor 坐标),按左右排;分不出左右时按输入顺序
+  handPair(hands) {
+    const sorted = [...hands].sort((a, b) => (a.side === 'right') - (b.side === 'right'));
+    return sorted.map(s => this.anchor.worldToLocal(s.handPoint.clone()));
+  }
+
+  endBoardGesture() {
+    this.boardRig.end();
+    this.rigLink.visible = this.rigOutline.visible = false;
   }
 
   // ── 面板重绘 ──

@@ -47,6 +47,9 @@ export const prefs = {
     return ['low', 'mid', 'high'].includes(value) ? value : 'mid';
   },
   set xrHandOpacity(value) { set('sg.xrHandOpacity', value); },
+  // 双手操控过的战场偏移 { yaw, x, y, z }(xr-board-rig.js);重新居中时保留,「视角复位」才清零
+  get xrBoardRig() { return get('sg.xrBoardRig', null); },
+  set xrBoardRig(value) { set('sg.xrBoardRig', value); },
   get firstMatchSeen() { return get('sg.firstMatchSeen', false) === true; },
   set firstMatchSeen(value) { set('sg.firstMatchSeen', Boolean(value)); },
   get entered() { return get('sg.entered', false) === true; },
