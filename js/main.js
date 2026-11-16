@@ -1114,7 +1114,26 @@ addEventListener('keydown', event => {
 });
 
 // ── 主循环 ──
-function loop(now) {   // 参数不能叫 t:会遮住翻译函数 t()
+// three 的动画循环是"先调回调、再请求下一帧":回调里任何一帧抛错,循环就永久停住(XR 里画面冻结)。
+// 所以每帧包一层 try/catch:出错只记一次日志(同一个错误不重复刷),在 XR 里 / 桌面上提示出来,照常渲染
+const loggedLoopErrors = new Set();
+function loop(now) {
+  try {
+    frame(now);
+  } catch (error) {
+    const key = String(error?.stack ?? error).split('\n').slice(0, 2).join(' ');
+    if (!loggedLoopErrors.has(key)) {
+      loggedLoopErrors.add(key);
+      console.error('[主循环] 这一帧出错,已跳过:', error);
+      const text = `${error?.name ?? 'Error'}: ${error?.message ?? error}`;
+      xr?.showError?.(text, String(error?.stack ?? '').split('\n')[1]?.trim() ?? '');
+      toast(t('loopError', { e: text }));
+    }
+    try { scene.render(); } catch { /* 渲染本身坏了就只能等下一帧 */ }
+  }
+}
+
+function frame(now) {   // 参数不能叫 t:会遮住翻译函数 t()
   const dt = lastT ? Math.max(0, Math.min((now - lastT) / 1000, 0.05)) : 0;
   lastT = now;
   if (!session) {

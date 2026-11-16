@@ -303,6 +303,15 @@ export class XRControls {
     this.lobbySignature = '';
     this.drawLobbyButton(this.lobbyReturn, t('xrHome'));
 
+    // 主循环出错提示(main.js 的 loop 兜底):挂在 anchor 下、视线正前方偏上,方便用户截图
+    this.errorPanel = makePanel(0.36, 0.09, 1152, 288);
+    this.errorPanel.mesh.material.depthTest = false;
+    this.errorPanel.mesh.renderOrder = 998;
+    this.errorPanel.mesh.position.set(0, 0.10, -0.6);
+    this.errorPanel.mesh.visible = false;
+    this.anchor.add(this.errorPanel.mesh);
+    this.errorUntil = 0;
+
     // 暂停提示:战场上方
     this.pausedPanel = makePanel(0.26, 0.07, 832, 224);
     this.pausedPanel.mesh.position.set(0, -0.36, -0.68);
@@ -411,6 +420,7 @@ export class XRControls {
     this.active = false;
     this.cb.onXRPose?.(null);
     this.poster.visible = false;
+    this.errorPanel.mesh.visible = false;
     this.clearNotice();
     for (const st of this.inputs) {
       this.release(st, true);
@@ -612,6 +622,7 @@ export class XRControls {
 
   // 退出对局:战斗按钮在时走那一排的二次确认;其它阶段联机局 3 秒内再点一次才离开(离开 = 判负)
   requestLeave(game) {
+    if (game.phase === 'end') { this.cb.onLobbyAction('home'); return; }   // 结算阶段:直接回大厅
     if (this.battleControls.visible) {
       this.confirmLeaveGame = game;
       this.battleControlsSignature = '';
@@ -626,6 +637,24 @@ export class XRControls {
     }
     this.leaveArmedAt = -Infinity;
     this.cb.onBattleAction('leave');
+  }
+
+  // 主循环某一帧出错:显示 15 秒(错误信息 + 出错位置),用户截图带回
+  showError(message, where = '') {
+    const { ctx, canvas, tex } = this.errorPanel;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(64,20,28,0.95)';
+    ctx.beginPath(); ctx.roundRect(4, 4, canvas.width - 8, canvas.height - 8, 24); ctx.fill();
+    ctx.strokeStyle = '#ff8b7f'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#ffe9e3'; ctx.font = 'bold 40px sans-serif';
+    ctx.fillText(t('xrErrorTitle'), 32, 62, canvas.width - 64);
+    ctx.font = '32px monospace';
+    wrapText(ctx, message, 32, 116, canvas.width - 64, 40, 2);
+    ctx.fillStyle = '#ffb9b2'; ctx.font = '26px monospace';
+    ctx.fillText(where.slice(0, 90), 32, 250, canvas.width - 64);
+    tex.needsUpdate = true;
+    this.errorUntil = performance.now() + 15000;
   }
 
   notify(text) {
@@ -833,6 +862,7 @@ export class XRControls {
 
   update(dt) {
     if (!this.active) return;
+    this.errorPanel.mesh.visible = performance.now() < this.errorUntil;
     if (this.notice && performance.now() >= this.notice.until) this.clearNotice();
     if (this.trashLang !== getLang()) this.drawTrash();
     if (this.calibFrames > 0 && --this.calibFrames === 0) this.recenter();
