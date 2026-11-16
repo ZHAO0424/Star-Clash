@@ -7,7 +7,7 @@
 //       3. 补援:刚发起的进攻,在坦克后方补远程/范围支援
 //       4. 反击:防守成功后,给推进中的幸存单位补兵
 //       5. 星核:星核不归自己且己方在场兵力不占优时,派耐打的单位去占
-//       6. 进攻:法力攒够才发起(坦克/攻城打头),挑防守最薄的塔,避开裂隙
+//       6. 进攻:法力攒够才发起(坦克/攻城打头),挑防守最薄的塔,避开裂隙;熔岩图从最近的不烧灼渡口出兵
 //       7. 法力将满时不浪费:出性价比最高的牌
 //   'normal' 战略 AI 的减速版:每 ~2 秒评估一次,25% 概率随手出牌(普通难度)
 //   'basic' 旧版:每 2.5~4 秒出一张牌,只按费用挑牌(简单难度,也是强度对照)
@@ -302,6 +302,13 @@ export class SimpleAI {
     if (!towers.length) return 0;
     const weak = towers.map(t => ({ t, v: t.hp + g.units.filter(u => u.side === this.foe && dist2(u, t) < 3).reduce((a, u) => a + value(u), 0) }))
       .sort((a, b) => a.v - b.v)[0].t;
+    // 熔岩锻炉:从离目标塔最近的不烧灼渡口(星核祭坛 / 两座岩桥)正后方出兵,寻路再按单位耐烧程度决定绕不绕
+    const lava = g.map.lava;
+    if (lava) {
+      const fords = [g.map.node.x, ...lava.bridges.map(b => b.x)];
+      const ford = fords.reduce((a, b) => (Math.abs(b - weak.x) < Math.abs(a - weak.x) ? b : a));
+      return clamp(ford, -FIELD_W + 0.5, FIELD_W - 0.5) + (Math.random() - 0.5) * 0.4;
+    }
     return clamp(weak.x * 0.5, -1.7, 1.7) + (Math.random() - 0.5) * 0.6;
   }
 

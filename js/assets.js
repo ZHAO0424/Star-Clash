@@ -123,7 +123,8 @@ async function buildScene(id) {
 function applyTerrainTextures(mat, { ground, cliff, hazard, isRock, cfg, map }) {
   const gU = groundUniforms(cfg.id, ground);   // 地面主题着色(ground-look.js)
   for (const t of [ground, cliff, hazard]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; }
-  const rifts = map.rifts.map(r => new THREE.Vector3(r.x, r.z, r.r));
+  // 着色器里固定 2 个裂隙槽位;熔岩锻炉没有裂隙(熔岩河是单独的网格),空槽放到很远处
+  const rifts = [0, 1].map(i => map.rifts[i] ? new THREE.Vector3(map.rifts[i].x, map.rifts[i].z, map.rifts[i].r) : new THREE.Vector3(999, 999, 0.01));
   mat.vertexColors = false;
   mat.color.set(0xffffff);
   mat.onBeforeCompile = sh => {

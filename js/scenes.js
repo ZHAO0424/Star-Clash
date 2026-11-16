@@ -37,7 +37,8 @@ export const SCENES = [
   },
   {
     id: 'volcano', name: '熔岩锻炉', en: 'Lava Forge', propKit: true,
-    desc: '火山盆地,四周是冒烟的火山锥,裂隙是滚烫的熔岩池', descEn: 'A volcanic basin of smoking cones and molten lava pools',
+    desc: '一条熔岩河横贯三路，地面单位蹚过会被烧灼;星核祭坛和两座冷却岩桥可安全通过。',
+    descEn: 'A lava river cuts across all three lanes and burns ground units. The star-core altar and two cooled bridges are safe crossings.',
     relief: 'cones', rock: 'basalt', rimHeight: 1.35,
     palette: { near: [0.58, 0.46, 0.42], far: [0.66, 0.44, 0.38], rim: [0.56, 0.44, 0.40], cliff: [0.62, 0.40, 0.32],
       hazard: [0.98, 0.48, 0.16], hazardCore: [1.0, 0.82, 0.30], crystal: [1.0, 0.55, 0.15], rock: [0.56, 0.48, 0.46] },

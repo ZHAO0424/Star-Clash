@@ -7,7 +7,7 @@
 // 机制字段说明见 cards.js 顶部
 
 import { CARDS, PRESET_DECKS, validateDeck, rollUpgrades, shuffle } from './cards.js';
-import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour } from './map.js';
+import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour, inLava } from './map.js';
 import { NavGrid } from './nav.js';
 
 export const FIELD_W = MAP.W;           // 半宽
@@ -234,7 +234,7 @@ export class Game {
       cooldown: 0.4, target: null, age: 0, auraMul: 1, auraSpeed: 1, rank: 0, links: null,
       spawnTimer: card.spawn ? card.spawn.interval * 0.5 : 0,
       pulseTimer: card.pulse ? card.pulse.interval * PACE.attack : 0,
-      status: { stun: 0, slow: 0, dot: 0, dotDps: 0, hack: 0, curse: 0, curseMul: 1, parasite: 0 },
+      status: { stun: 0, slow: 0, dot: 0, dotDps: 0, hack: 0, curse: 0, curseMul: 1, parasite: 0, burn: 0, burnTick: 0 },
     };
     this.units.push(u);
     this.events.push({ type: 'spawn', unit: u });
@@ -481,7 +481,7 @@ export class Game {
   }
 
   // 返回实际造成的伤害(实际扣掉的生命 + 被护盾吸收的部分,不含溢出),供吸血使用
-  damage(target, amount, source, { noShare = false } = {}) {
+  damage(target, amount, source, { noShare = false, burn = false } = {}) {
     if (target.dead || !(amount > 0)) return 0;
     if (target.card?.ethereal && source && Math.random() < 0.3) {
       this.events.push({ type: 'dodge', unit: target });
@@ -519,7 +519,7 @@ export class Game {
       return lost;   // 与单位一致:护盾吸收的部分不计入吸血
     }
     target.hp -= amount;
-    this.events.push({ type: 'hit', unit: target, amount: total, lost, absorbed, shieldBreak });
+    this.events.push({ type: 'hit', unit: target, amount: total, lost, absorbed, shieldBreak, ...(burn ? { burn: true } : {}) });
     if (target.hp <= 0) this.kill(target, source);
     // 返回值只用于吸血:能量护盾隔绝吸魂,护盾吸收的部分不计入(钢铁靠护盾抗混沌的吸血续航)
     return lost;
@@ -591,7 +591,7 @@ export class Game {
       u.progress = { x: u.x, z: u.z, t: this.time };
     }
     if (!u.path || u.pathTarget !== target || moved || this.time >= u.pathRefresh) {
-      u.path = this.nav.findPath(u.x, u.z, target.x, target.z, reach, melee);
+      u.path = this.nav.findPath(u.x, u.z, target.x, target.z, reach, melee, this.burnCost(u));
       u.pathTarget = target;
       u.pathFor = { x: target.x, z: target.z };
       u.pathRefresh = this.time + (target.kind || target.building ? 1.5 : 0.6) + (u.id % 7) * 0.05;   // 错开刷新,避免同一帧扎堆
@@ -602,7 +602,7 @@ export class Game {
     if (!p.length || u.pathIdx >= p.length) return target;                    // 已经站在能打到的位置
     while (u.pathIdx < p.length - 1 && Math.hypot(p[u.pathIdx].x - u.x, p[u.pathIdx].z - u.z) < 0.25) u.pathIdx++;
     for (let j = Math.min(p.length - 1, u.pathIdx + 8); j > u.pathIdx; j--) {   // 视线平滑:能直接看到更远的点就跳过去
-      if (this.nav.clearLine(u.x, u.z, p[j].x, p[j].z)) { u.pathIdx = j; break; }
+      if (this.nav.clearLine(u.x, u.z, p[j].x, p[j].z, true)) { u.pathIdx = j; break; }
     }
     const w = p[u.pathIdx];
     if (u.pathIdx === p.length - 1 && Math.hypot(w.x - u.x, w.z - u.z) < 0.25) return target;
@@ -623,7 +623,8 @@ export class Game {
     if (!target) return null;
     this.nav.updateDynamic(this.structures, this.units);
     const reach = card.range + target.radius + UNIT_RADIUS - 0.05;
-    const p = this.nav.findPath(x, z, target.x, target.z, reach, card.range <= 1.2);
+    const p = this.nav.findPath(x, z, target.x, target.z, reach, card.range <= 1.2,
+      this.burnCost({ air: false, speed: card.speed * PACE.move, maxHp: card.hp }));
     if (!p) return null;
     const out = [{ x, z }];
     let len = 0;
@@ -794,6 +795,7 @@ export class Game {
         this.damage(u, st.dotDps * dt);
         if (u.dead) continue;
       }
+      if (this.map.lava && this.burn(u, dt)) continue;
       if (c.evolveInto && u.age >= c.evolveTime) this.evolve(u);
 
       if (u.building) {
@@ -916,6 +918,29 @@ export class Game {
     const hp = this.structureHpRatio('p'), he = this.structureHpRatio('e');
     if (Math.abs(hp - he) < 1e-6) return this.finish(null, 'draw');
     this.finish(hp > he ? 'p' : 'e', 'hp');
+  }
+
+  // 熔岩锻炉 · 烧灼:地面单位在熔岩河里 → 余烬计时刷新为 ember;计时 > 0 时每 tick 秒结算一次 dps × tick 伤害
+  //   (离开河道后余烬再烧 ember 秒)。按固定间隔结算而不是每帧扣,伤害数字读得出来,联机事件也少。返回单位是否被烧死
+  burn(u, dt) {
+    const L = this.map.lava, st = u.status;
+    const inside = !u.air && !u.building && inLava(this.map, u.x, u.z);
+    if (inside) st.burn = L.ember;
+    if (!(st.burn > 1e-9)) { st.burn = 0; st.burnTick = 0; return false; }
+    st.burnTick = (st.burnTick || 0) + dt;
+    if (!inside) st.burn -= dt;   // 余烬从离开河道那一刻开始倒数
+    if (st.burnTick < L.tick - 1e-9) return false;
+    st.burnTick -= L.tick;
+    this.damage(u, L.dps * L.tick, null, { burn: true });
+    return u.dead;
+  }
+
+  // 地面单位走进熔岩的寻路代价:每格额外成本 = 烧灼 dps /(速度 × 生命)× 20,夹在 [0.5, 6]。
+  //   含义:丢 5% 生命 ≈ 多走 1 格。脆皮 / 慢速单位更愿意绕到祭坛或岩桥,坦克会直接蹚过去
+  burnCost(u) {
+    const L = this.map.lava;
+    if (!L || u.air) return 0;
+    return Math.max(0.5, Math.min(6, L.dps / (Math.max(0.1, u.speed) * Math.max(1, u.maxHp ?? u.hp)) * 20));
   }
 
   // 绕开前方的岩石:障碍在前方且比目标近时,沿切向偏转

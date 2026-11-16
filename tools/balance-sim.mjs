@@ -13,8 +13,10 @@ let seed = 12345;
 Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
 
 const DT = 0.1, MAX_T = 600;
+// 场景:环境变量 SCENE(默认 starcore);熔岩锻炉 = SCENE=volcano(地图形状不同,平衡要单独测)
+const SCENE = process.env.SCENE || 'starcore';
 function match(pf, ef) {
-  const g = new Game(pf, ef, { p: PRESET_DECKS[pf], e: PRESET_DECKS[ef] }, { sceneId: 'starcore' });
+  const g = new Game(pf, ef, { p: PRESET_DECKS[pf], e: PRESET_DECKS[ef] }, { sceneId: SCENE });
   const ais = { p: new SimpleAI(g, 'p', { level: 'smart' }), e: new SimpleAI(g, 'e', { level: 'smart' }) };
   const repair = { casts: 0, healed: 0 };
   for (const who of ['p', 'e']) {

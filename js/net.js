@@ -63,7 +63,7 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
     st: game.structures.map(s => [s.kind, V.side(s.side), r2(V.x(s.x)), r2(V.z(s.z)), Math.round(s.hp), s.dead ? 1 : 0]),
     u: game.units.map(u => {
       const st = u.status;
-      const flags = (st.stun > 0 ? 1 : 0) | (st.hack > 0 ? 2 : 0) | (st.curse > 0 ? 4 : 0) | (st.parasite > 0 ? 8 : 0) | (u.mimic ? 16 : 0);   // 16 = 基因拟态复制体
+      const flags = (st.stun > 0 ? 1 : 0) | (st.hack > 0 ? 2 : 0) | (st.curse > 0 ? 4 : 0) | (st.parasite > 0 ? 8 : 0) | (u.mimic ? 16 : 0) | (st.burn > 0 ? 32 : 0);   // 16 = 基因拟态复制体;32 = 熔岩烧灼中(含余烬)
       const t = u.target;
       return [u.id, V.side(u.side), u.card.id, r2(V.x(u.x)), r2(V.z(u.z)), Math.round(u.hp), Math.round(u.maxHp),
         Math.round(u.shield), Math.round(u.maxShield), flags, t ? r2(V.x(t.x)) : null, t ? r2(V.z(t.z)) : null, u.rank || 0, u.card.cocoon ? r2(u.hatchProgress ?? 0) : null, u.links?.length ? u.links.map(m => m.id) : null];
@@ -140,6 +140,7 @@ export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 
     u.status.stun = flags & 1 ? 1 : 0; u.status.hack = flags & 2 ? 1 : 0;
     u.status.curse = flags & 4 ? 1 : 0; u.status.parasite = flags & 8 ? 1 : 0;
     u.mimic = Boolean(flags & 16);
+    u.status.burn = flags & 32 ? 1 : 0;
     u.target = tx === null ? null : { x: tx, z: tz };
     u.rank = rank || 0;
     u.hatchProgress = hatchProgress ?? 0;

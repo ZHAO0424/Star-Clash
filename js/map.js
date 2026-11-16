@@ -64,7 +64,32 @@ const GLACIER = {
   obstacles: [...glacierRocks, ...glacierRocks.map(mirrorPoint)],
   rifts: [mirrorPoint(glacierRift), glacierRift],
 };
-export const mapForScene = id => id === 'glacier' ? GLACIER : MAP;
+// 熔岩锻炉(第三轮):两侧的圆形熔岩池(裂隙,地面减速 50%)换成一条横贯战场的熔岩河。
+//   · 河道中心线 z = amp · sin(π x / W):左右两端在边线中点落进来,绕星核旋转 180° 对称(奇函数)
+//   · 地面单位(非建筑)站在河里 → 烧灼:每 0.5 秒结算一次 dps × 0.5;离开后余烬再烧 ember 秒。飞行单位不受影响
+//   · 不烧灼的地方:星核祭坛(半径 = 占领圈 node.r,熔岩从祭坛下面流过)+ 两座冷却岩桥(|x − bridge.x| < half)
+//   · 河道最宽处 |z| ≤ amp + half = 0.67 < 部署线 0.8:河在双方部署区之外,不影响部署
+const VOLCANO = {
+  ...MAP,
+  rifts: [],
+  lava: {
+    amp: 0.25, half: 0.42,
+    dps: 8, tick: 0.5, ember: 1.0,
+    bridges: [{ x: -3.55, half: 0.3 }, { x: 3.55, half: 0.3 }],
+  },
+};
+export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ? VOLCANO : MAP;
+
+// 熔岩河中心线的 z
+export const lavaCenterZ = (lava, W, x) => lava.amp * Math.sin(Math.PI * x / W);
+// 这一点会不会被烧灼(地面单位的中心落在河道里、又不在祭坛 / 岩桥上)
+export function inLava(map, x, z) {
+  const L = map.lava;
+  if (!L || Math.abs(x) > map.W) return false;
+  if (Math.abs(z - lavaCenterZ(L, map.W, x)) >= L.half) return false;
+  if (Math.hypot(x - map.node.x, z - map.node.z) < map.node.r) return false;
+  return !L.bridges.some(b => Math.abs(x - b.x) < b.half);
+}
 
 // ── 墙的几何工具(引擎、AI、渲染、Blender 共用)──
 // 每道墙是一条折线;把它拆成线段处理
