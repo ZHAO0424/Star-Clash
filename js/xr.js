@@ -3,7 +3,7 @@
 //
 // 空间布局(anchor = 进入 XR 时用户头部位置 + 朝向):
 //   战场  :头下 50cm、前方 72cm,约 0.55m × 0.75m 的桌面;己方半场在 44~76cm,坐姿可及
-//   手牌  :头下 42cm、前方 24cm(视线下约 60°),一排 5 张,向后倾斜面向用户;能量条在手牌下面
+//   手牌  :以棋盘近边为圆心的弧上,随棋盘高度自适应、正对眼睛(cardRowPose),一排 5 张;能量条在手牌下面
 //   HUD   :战场远端上方
 //   强化/结束面板:手牌上方,需要时出现
 // 重新居中在左手手心菜单里;双手同时空捏保持 0.4 秒 → 拖动旋转 / 升降 / 推拉战场(xr-board-rig.js)
@@ -21,7 +21,7 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -37,8 +37,9 @@ const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
 const RETURN_SECONDS = 0.18;
 const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
-const COLLAPSE_HEIGHT = 0.12;// 抓起一张牌时其余手牌压到原高的 12%(手牌行底部一条细边)
-const COLLAPSE_SPEED = 14;   // 收起 / 展开的速度(1/s)
+const CARD_FADE_S = 0.15;    // 抓起一张牌时其余手牌渐隐 / 松手后渐显的时长
+const RIM_ALLOWANCE = 0.3;   // 台面以上边框 / 装饰的高度余量(战场单位),手牌行要高出它
+const CARD_ROW_SMOOTH = 0.2; // 手牌行自适应位置 / 倾角的平滑时间常数(秒)
 const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
 const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内进入近手戳、抓
 const RAY_FAR = 0.22;        // 离开 22cm 才回到射线(回差,手在边界晃动时不来回跳)
@@ -177,7 +178,7 @@ export class XRControls {
 
     // 手牌
     this.cardRow = new THREE.Group();
-    // 视线下方约 60°:压在战场近边之下,不挡战场(第三轮眼镜验收)
+    // 初始位置;进 XR 后每帧由 updateCardRow 按棋盘近边和眼睛的相对位置重算(第四轮)
     this.cardRow.position.set(0, -0.42, -0.24);
     this.cardRow.rotation.x = -0.60;
     this.ui.add(this.cardRow);
@@ -208,6 +209,7 @@ export class XRControls {
     this.trash.mesh.position.set(3 * CARD_GAP + 0.01, 0, 0);
     this.cardRow.add(this.trash.mesh);
     this.drawTrash();
+    this.cardRowNoDepthTest();
 
     // HUD
     this.hud = makePanel(0.42, 0.105, 1024, 256);
@@ -414,6 +416,7 @@ export class XRControls {
     this.lobbySignature = '';
     this.guideIndex = -1;
     this.calibFrames = 3;   // 等头部姿态就绪后再显示固定面板
+    this.cardRowPlaced = false;
     this.updateLayout(this.cb.getGame());
     this.cardSig = ''; this.upgradeFor = null; this.endFor = null;
   }
@@ -498,12 +501,19 @@ export class XRControls {
       front.renderOrder = mesh.renderOrder;
       mesh.add(front);
       mesh.material.colorWrite = false;
-      const back = new THREE.Mesh(mesh.geometry, material);
+      const back = new THREE.Mesh(mesh.geometry, material.clone());   // 每张牌一份(渐隐要单独改透明度,贴图共用)
       back.rotation.y = Math.PI;
       back.position.z = -0.001;
       back.renderOrder = mesh.renderOrder;
       mesh.add(back);
     }
+    this.cardRowNoDepthTest();
+  }
+
+  // 手牌行的面板不做深度测试(仍写深度):凹凸的棋盘边框 / 地形 / 装饰挡不住手牌;
+  // 半透明手在面板之后画、读深度,手和牌的前后遮挡不受影响
+  cardRowNoDepthTest() {
+    this.cardRow.traverse(o => { if (o.material) o.material.depthTest = false; });
   }
 
   immersiveBackground() {
@@ -881,6 +891,7 @@ export class XRControls {
     }
     this.updateBoardGesture(dt);
     this.updateUiSide(dt);
+    this.updateCardRow(dt);
     this.updatePalmMenu(dt, inputReady);
     this.refreshSettings();
     if (!game) { this.refreshLobby(); return; }
@@ -1489,8 +1500,7 @@ export class XRControls {
       const grabbedCards = this.inputs.flatMap(input => input.grab ? [input.grab] : []);
       const grabbed = grabbedCards[0];
       const aimingAtBoard = grabbedCards.some(grab => grab.hit);
-      this.collapseCards(grabbedCards, dt);
-      this.cards.forEach((card, idx) => { card.mesh.visible = Boolean(game.p.hand[idx]); });
+      this.fadeCards(game, grabbedCards, dt);
       this.refreshHandPanels(game, grabbed ? game.p.hand.find(card => card.id === grabbed.id) : game.p.hand[hover]);
       this.manaPanel.mesh.visible = !aimingAtBoard;
       if (aimingAtBoard) {
@@ -1522,18 +1532,35 @@ export class XRControls {
     this.drawLobbyButton(panel, t('xrPaused'), t('xrPausedHint'), false, 'pause');
   }
 
-  // 抓起一张牌后,其余手牌缩小下沉到手牌行底部、只留一条细边(不挡视线);松手后展开回原位
-  collapseCards(grabbedCards, dt) {
-    const k = 1 - Math.exp(-dt * COLLAPSE_SPEED);
+  // 抓起一张牌后,其余手牌 0.15s 渐隐(不挡视线);松手后渐显。透明度乘在牌面 / 牌背 / 深度占位三份材质上
+  fadeCards(game, grabbedCards, dt) {
+    const step = dt / CARD_FADE_S;
     this.cards.forEach((card, idx) => {
       const held = grabbedCards.some(grab => grab.idx === idx);
-      card.collapse = (card.collapse ?? 0) + ((grabbedCards.length && !held ? 1 : 0) - (card.collapse ?? 0)) * k;
-      if (card.collapse < 1e-3) card.collapse = 0;
-      const squash = 1 - (1 - COLLAPSE_HEIGHT) * card.collapse;
-      card.mesh.scale.set(1 - 0.1 * card.collapse, squash, 1);
-      if (held || card.returning) return;
-      card.mesh.position.set(card.home.x, card.home.y - CARD_H / 2 * (1 - squash), card.home.z);
+      const target = grabbedCards.length && !held ? 0 : 1;
+      const fade = card.fade ?? 1;
+      card.fade = target > fade ? Math.min(target, fade + step) : Math.max(target, fade - step);
+      if (card.fade !== fade || card.fadeApplied !== card.fade) {
+        card.fadeApplied = card.fade;
+        card.mesh.traverse(o => { if (o.material) o.material.opacity = card.fade; });
+      }
+      card.mesh.visible = Boolean(game.p.hand[idx]) && card.fade > 0.01;
     });
+  }
+
+  // 手牌行随棋盘高度自适应(cardRowPose):在 uiInner 坐标(换边之后)里算近边和眼睛;抓着牌时冻结
+  updateCardRow(dt) {
+    if (this.inputs.some(s => s.grab)) return;
+    const world = this.bs.world, scale = world.scale.x;
+    const half = (this.uiSide.sector % 2 ? ARENA.hx : ARENA.hz) + ARENA.rim;   // 换到侧边时面对的是棋盘侧边
+    const edge = { y: world.position.y + (ARENA.top + RIM_ALLOWANCE) * scale, z: world.position.z + half * scale };
+    const eye = this.uiInner.worldToLocal(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()));
+    const pose = cardRowPose({ y: eye.y, z: eye.z }, edge);
+    const k = this.cardRowPlaced ? 1 - Math.exp(-dt / CARD_ROW_SMOOTH) : 1;
+    this.cardRowPlaced = true;
+    this.cardRow.position.y += (pose.y - this.cardRow.position.y) * k;
+    this.cardRow.position.z += (pose.z - this.cardRow.position.z) * k;
+    this.cardRow.rotation.x += (pose.tilt - this.cardRow.rotation.x) * k;
   }
 
   refreshFirstMatch(guide) {

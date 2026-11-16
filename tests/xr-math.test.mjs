@@ -82,7 +82,7 @@ test('rubber:区间内不变,越界渐近不超过 give', () => {
 
 test('limitRig:高度、距离、横向硬限幅', () => {
   const base = { y: -0.5, z: -0.72 };
-  near(limitRig({ yaw: 0, x: 0, y: 0.5, z: 0 }, base).y, 0.3);     // 头下 0.2m 封顶
+  near(limitRig({ yaw: 0, x: 0, y: 0.5, z: 0 }, base).y, 0.2);     // 头下 0.3m 封顶
   near(limitRig({ yaw: 0, x: 0, y: -0.5, z: 0 }, base).y, -0.3);   // 头下 0.8m 封底
   near(limitRig({ yaw: 0, x: 0, y: 0, z: -1 }, base).z, -0.38);    // 最远 1.1m
   near(limitRig({ yaw: 0, x: 0, y: 0, z: 0.5 }, base).z, 0.27);    // 最近 0.45m
@@ -95,7 +95,7 @@ test('limitRig:高度、距离、横向硬限幅', () => {
 test('limitRig soft:越界只拉出不到 GIVE', () => {
   const base = { y: -0.5, z: -0.72 };
   const y = limitRig({ yaw: 0, x: 0, y: 0.5, z: 0 }, base, true).y;
-  assert.ok(y > 0.3 && y < 0.3 + RIG.GIVE);
+  assert.ok(y > 0.2 && y < 0.2 + RIG.GIVE);
 });
 
 test('sanitizeRig:坏数据当零', () => {
@@ -122,4 +122,19 @@ test('inPointingZone:手举在头前才算在指', async () => {
   assert.equal(inPointingZone({ x: 0.2, y: -0.7, z: -0.2 }), false);    // 垂在腿上
   assert.equal(inPointingZone({ x: 0, y: -0.1, z: -0.05 }), false);     // 贴着脸
   assert.equal(inPointingZone({ x: 0, y: 0.2, z: -0.4 }), false);       // 举过头顶
+});
+
+test('cardRowPose:在近边外侧、高出台面,正对眼睛,棋盘越高手牌越立', async () => {
+  const { cardRowPose, CARD_ARC } = await import('../js/xr-math.js');
+  const eye = { y: 0, z: 0 };
+  for (const below of [0.3, 0.5, 0.8]) {
+    const edge = { y: -below, z: -0.209 };
+    const p = cardRowPose(eye, edge);
+    const s = Math.sin(-p.tilt), c = Math.cos(p.tilt);
+    assert.ok(p.y - 0.127 * c >= edge.y + CARD_ARC.TOP_GAP - 1e-9, `下沿高出台面 @${below}`);
+    assert.ok(p.z - 0.05 * s >= edge.z + CARD_ARC.EDGE_GAP - 1e-9, `上沿在近边外 @${below}`);
+    assert.ok(p.tilt <= CARD_ARC.TILT[1] && p.tilt >= CARD_ARC.TILT[0]);
+  }
+  const high = cardRowPose(eye, { y: -0.3, z: -0.209 }), low = cardRowPose(eye, { y: -0.8, z: -0.209 });
+  assert.ok(high.tilt > low.tilt, '棋盘高时倾角更小(更立)');
 });

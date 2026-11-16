@@ -51,7 +51,7 @@ export const RIG = {
   GAIN_DEPTH: 1.5,              // 手前后能动的距离只有横向的一半,深度给大增益
   GAIN_LATERAL: 0.5,
   GAIN_HEIGHT: 1,
-  HEIGHT: [0.2, 0.8],           // 战场中心在头下 0.2–0.8m
+  HEIGHT: [0.3, 0.8],           // 战场中心在头下 0.3–0.8m(第四轮:原 0.2m,抬太高时手牌离眼不到 0.3m 对不上焦)
   DISTANCE: [0.45, 1.1],        // 战场中心离头的水平距离
   LATERAL: 0.3,                 // 左右最多偏 30cm
   GIVE: 0.06,                   // 越界时最多再拉出 6cm(橡皮筋),松手弹回
@@ -128,6 +128,27 @@ export function inPointingZone(local) {
   const forward = -local.z;
   return local.y >= POINT_ZONE.Y[0] && local.y <= POINT_ZONE.Y[1]
     && forward >= POINT_ZONE.FORWARD[0] && forward <= POINT_ZONE.FORWARD[1];
+}
+
+// ── 手牌行随棋盘高度自适应(第四轮)──
+// 在 yz 平面里算(UI 坐标,-z 朝前):以棋盘近边 edge 为圆心、半径 R 的弧上,比"近边 → 眼睛"的方向往下压 DROP,
+// 手牌平面法线正对眼睛;再保证整行(上沿 top、下沿 bottom,沿行本地 y 的偏移)在近边外侧 ≥ EDGE_GAP、高出台面 ≥ TOP_GAP。
+// eye / edge:{ y, z };返回 { y, z, tilt }(tilt = 手牌行 rotation.x,负数 = 上沿往远处倒)
+export const CARD_ARC = {
+  R: 0.11, DROP: 35 * Math.PI / 180, BETA: [25 * Math.PI / 180, 70 * Math.PI / 180],
+  EDGE_GAP: 0.04, TOP_GAP: 0.03, TILT: [-1.4, -0.3],
+};
+export function cardRowPose(eye, edge, { top = 0.05, bottom = 0.127 } = {}) {
+  const beta = clamp(Math.atan2(eye.y - edge.y, eye.z - edge.z), CARD_ARC.BETA[0], CARD_ARC.BETA[1]);
+  const a = beta - CARD_ARC.DROP;
+  let y = edge.y + CARD_ARC.R * Math.sin(a), z = edge.z + CARD_ARC.R * Math.cos(a), tilt = 0;
+  for (let i = 0; i < 2; i++) {   // 倾角影响上下沿位置,约束后再算一次倾角
+    tilt = clamp(-Math.atan2(eye.y - y, eye.z - z), CARD_ARC.TILT[0], CARD_ARC.TILT[1]);
+    const s = Math.sin(-tilt), c = Math.cos(tilt);
+    y = Math.max(y, edge.y + CARD_ARC.TOP_GAP + bottom * c);   // 下沿高出台面
+    z = Math.max(z, edge.z + CARD_ARC.EDGE_GAP + top * s);     // 上沿(往远处倒)仍在近边外侧
+  }
+  return { y, z, tilt };
 }
 
 // ── UI 换边(第三轮)──
