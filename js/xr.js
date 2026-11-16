@@ -21,7 +21,7 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG, UI_SIDE, uiSector, wrapAngle } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -40,7 +40,9 @@ const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
 const COLLAPSE_HEIGHT = 0.12;// 抓起一张牌时其余手牌压到原高的 12%(手牌行底部一条细边)
 const COLLAPSE_SPEED = 14;   // 收起 / 展开的速度(1/s)
 const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
-const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内用近手戳、抓,超过才出射线
+const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内进入近手戳、抓
+const RAY_FAR = 0.22;        // 离开 22cm 才回到射线(回差,手在边界晃动时不来回跳)
+const RAY_DWELL = 0.12;      // 射线在可点目标上悬停满 0.12s,捏合才算点击(扫过按钮时顺手一捏不算)
 
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 
@@ -874,7 +876,7 @@ export class XRControls {
         if (!st.isHand || !st.tracked) continue;
         this.handInput(st, st.pinchDist, st.pinchPoint);
         // 捏合瞬间射线会跳:点击用上一帧(还没捏上时)的射线
-        if (st.rayActive && !st.pinched && st.ray) st.pressRay.copy(st.ray);
+        if (st.rayActive && !st.pinched && st.ray) { st.pressRay.copy(st.ray); st.pressDwell = st.dwell; }
       }
     }
     this.updateBoardGesture(dt);
@@ -1070,17 +1072,12 @@ export class XRControls {
     return [...this.firstMatchButtons, ...this.cards, ...settings];
   }
 
-  // 只显示、不能点的面板:光标照样贴上去(看得出指在哪)
-  raySurfaces() {
-    return [this.hud, this.lobbyHeader, this.guidePanel, this.settingsHeader, this.firstMatchPrompt, this.pausedPanel,
-      this.manaPanel, this.nextCardPanel, this.cardDetailPanel, this.trash, this.upgradeWait, this.upgradeClock];
-  }
 
-  // 每帧给两只手分配指针:近手(离面板 / 手牌 15cm 内)或近手抓着牌的手不指;剩下的交给 HandArbiter 选一只。
-  // 在指的那只:光标圈常显(命中面板就贴上去),射线在找光标或指着东西时淡入
+  // 每帧给两只手分配指针:近手(离面板 / 手牌 15cm 内,离开 22cm 才算远)、近手抓着牌、手没举到头前区域的不指;
+  // 剩下的交给 HandArbiter 选一只。只有可点的目标(rayPanels + 手心菜单)才让光标贴上、射线淡入,
+  // 信息面板(HUD、提示、说明条)不吸射线;空指时光标圈和射线都隐藏(来回晃"找光标"时例外)
   updatePointers(dt, game) {
     const panels = this.rayPanels(game);
-    const surfaces = [...panels, ...this.raySurfaces()];
     const close = [...panels, this.trash];
     const menuOpen = this.palmMenu.open;
     const camera = this.renderer.xr.getCamera();
@@ -1090,10 +1087,13 @@ export class XRControls {
     for (const st of hands) {
       const menuNear = menuOpen && st.side !== 'left' && st.handPoint
         && this.palmMenu.mesh.position.distanceTo(st.handPoint) < RAY_NEAR;
+      const margin = st.near ? RAY_FAR : RAY_NEAR;
       st.near = st.grab ? !st.grab.viaRay
-        : Boolean(st.handPoint && (this.nearPanels(st.handPoint, close, RAY_NEAR) || menuNear));
+        : Boolean(st.handPoint && (this.nearPanels(st.handPoint, close, margin) || menuNear));
       const side = st.side === 'left' || st.side === 'right' ? st.side : st.i ? 'right' : 'left';
-      if (st.ray && !st.near && !this.rayBlocked(st)) {
+      const raised = st.ray && (st.grab?.viaRay
+        || inPointingZone(st.ray.origin.clone().sub(head.pos).applyQuaternion(head.q.clone().invert())));
+      if (st.ray && raised && !st.near && !this.rayBlocked(st)) {
         const { x, y, z } = st.ray.origin;   // 拷一份:ray 是每帧原地更新的,arbiter 要存上一帧的位置
         candidates[side] = { st, palm: { x, y, z }, pinch: st.pinchDist < PINCH_ON, interacting: st.rayTarget || Boolean(st.grab) };
       }
@@ -1109,11 +1109,15 @@ export class XRControls {
       if (st.rayActive && st.grab?.viaRay) {
         hit = st.grab.hit ? { distance: st.grab.hit.point.distanceTo(st.ray.origin) } : null;
       } else if (st.rayActive) {
-        hit = this.rayPanelHit(surfaces, st.ray);
-        st.rayTarget = Boolean(hit && panels.some(panel => panel.mesh === hit.object));
+        hit = this.rayPanelHit(panels, st.ray);
         const menuHit = menuOpen && st.side !== 'left' && this.palmMenu.rayHit(st.ray);
-        if (menuHit && (!hit || menuHit.distance < hit.distance)) { hit = menuHit; st.rayTarget = true; }
+        if (menuHit && (!hit || menuHit.distance < hit.distance)) hit = menuHit;
+        st.rayTarget = Boolean(hit);
       }
+      // 悬停计时:同一个目标上连续指着才累计,换目标 / 没指着清零
+      const object = st.rayTarget ? hit.object : null;
+      st.dwell = object && object === st.dwellObject ? st.dwell + dt : 0;
+      st.dwellObject = object;
       st.handRay.present({ active: st.rayActive, hitDistance: hit?.distance ?? null, headQ: head.q, now, dt, pinched: st.pinched });
     }
   }
@@ -1151,7 +1155,7 @@ export class XRControls {
       if (dist > PINCH_OFF) st.waitForOpen = false;
     } else if (!st.pinched && dist < PINCH_ON) {
       st.pinched = true;
-      if (st.rayActive) this.press(st, null, st.pressRay, true);
+      if (st.rayActive) { if (st.pressDwell >= RAY_DWELL) this.press(st, null, st.pressRay, true); }
       else this.press(st, point, null);
     } else if (st.pinched && dist > PINCH_OFF) {
       st.pinched = false;

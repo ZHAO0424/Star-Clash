@@ -1,6 +1,6 @@
 // 手部射线:每只手一根,起点和方向取 runtime 给的 targetRaySpace(aim,不用 grip)。
-// 指针手感照搬 WebXR 空间网页插件(xr-pointer.js):射线稳定(5° / 5cm)、光标圈常显(指到面板贴上去、
-// 空指停在上次的距离、深度变化限速)、射线只在「来回晃找光标」或指着东西时淡入。
+// 指针手感照搬 WebXR 空间网页插件(xr-pointer.js):射线稳定(5° / 5cm)、光标贴上面板的脉冲、深度变化限速、
+// 「来回晃找光标」。第四轮起光标圈和射线只在指着可点目标(或正在找光标)时显示,空指时都隐藏。
 // 只负责"射线在哪、画出来";两只手谁来指(HandArbiter)、点到什么,由 xr.js 决定。
 //
 //   const ray = new HandRay(scene);
@@ -82,7 +82,7 @@ export class HandRay {
     this.cursor.quaternion.copy(facing);
     this.cursor.scale.setScalar(Math.max(dist, 0.05) / RING_REF_M * fx.scale);
     this.cursor.material.color.setHex(pinched ? COLOR : 0xffffff);
-    this.cursor.visible = true;
+    this.cursor.visible = fx.attached || this.seek.seeking(now / 1000);
 
     this.line.visible = this.seekA > 0.01;
     this.line.material.opacity = 0.85 * this.seekA;

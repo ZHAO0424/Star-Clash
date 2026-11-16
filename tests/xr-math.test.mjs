@@ -115,3 +115,11 @@ test('uiSector:过 55° 才换边,换完 40° 不回,四个扇区都能到', asy
   assert.equal(uiSector(deg(178), 0), 2);
   assert.equal(uiSector(deg(-134), 2), 2);   // 跨 ±180° 也按最短角度算
 });
+
+test('inPointingZone:手举在头前才算在指', async () => {
+  const { inPointingZone } = await import('../js/xr-math.js');
+  assert.equal(inPointingZone({ x: 0.1, y: -0.3, z: -0.35 }), true);    // 胸前
+  assert.equal(inPointingZone({ x: 0.2, y: -0.7, z: -0.2 }), false);    // 垂在腿上
+  assert.equal(inPointingZone({ x: 0, y: -0.1, z: -0.05 }), false);     // 贴着脸
+  assert.equal(inPointingZone({ x: 0, y: 0.2, z: -0.4 }), false);       // 举过头顶
+});

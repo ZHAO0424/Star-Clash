@@ -119,6 +119,17 @@ export function sanitizeRig(value) {
   return out;
 }
 
+// ── 手部射线的"举手区"(第四轮)──
+// 手(射线起点)在头部坐标里:高度在头下 0.55m 到头上 0.1m、前方 0.1–0.65m 之间才算"举起来在指";
+// 垂在身侧、放在腿上、贴着脸都不出射线。范围取自 xr-pointer.js 的 FLEX 梯形区外沿
+export const POINT_ZONE = { Y: [-0.55, 0.1], FORWARD: [0.1, 0.65] };
+// local:手相对头的位置(已转到头部坐标,-z 朝前)
+export function inPointingZone(local) {
+  const forward = -local.z;
+  return local.y >= POINT_ZONE.Y[0] && local.y <= POINT_ZONE.Y[1]
+    && forward >= POINT_ZONE.FORWARD[0] && forward <= POINT_ZONE.FORWARD[1];
+}
+
 // ── UI 换边(第三轮)──
 // 棋盘转过一定角度后,手牌 / HUD 等整套 UI 绕战场中心按 90° 吸附到面向用户的那条边。
 // phi = wrap(头部水平朝向 − 棋盘朝向);current = 当前扇区(0..3,UI 绕战场中心转 current × 90°)。
