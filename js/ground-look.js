@@ -11,7 +11,8 @@ import { MAP } from './map.js';
 const THEMES = {
   starcore: { contrast: 3.2, moss: [0.36, 0.58, 0.54], dust: [0.76, 0.62, 0.50], path: [0.80, 0.76, 0.72], amount: 0.75 },
   glacier:  { contrast: 1.8, moss: [0.40, 0.58, 0.84], dust: [0.86, 0.90, 0.97], path: [0.70, 0.77, 0.86], amount: 0.65 },
-  volcano:  { contrast: 1.6, moss: [0.42, 0.26, 0.22], dust: [0.72, 0.56, 0.48], path: [0.62, 0.46, 0.38], amount: 0.65 },
+  // 熔岩:浮土原来是粉米色(0.72,0.56,0.48),叠在红地上发粉 → 改成火山灰的暖灰,熔壳色块更暗更褐
+  volcano:  { contrast: 1.5, moss: [0.30, 0.21, 0.18], dust: [0.52, 0.47, 0.43], path: [0.55, 0.45, 0.38], amount: 0.7 },
   hive:     { contrast: 2.0, moss: [0.58, 0.78, 0.34], dust: [0.66, 0.46, 0.70], path: [0.54, 0.40, 0.56], amount: 0.6 },
   jungle:   { contrast: 1.3, moss: [0.32, 0.54, 0.24], dust: [0.60, 0.50, 0.36], path: [0.70, 0.68, 0.62], amount: 0.6 },
   fortress: { contrast: 1.5, moss: [0.56, 0.46, 0.38], dust: [0.86, 0.84, 0.80], path: [0.64, 0.66, 0.70], amount: 0.5 },
