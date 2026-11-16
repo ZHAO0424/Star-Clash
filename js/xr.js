@@ -273,9 +273,9 @@ export class XRControls {
 
     // 首页按需重画 Canvas。
     this.lobby = new THREE.Group();
-    // 大厅(含教学)离远到 0.65m、整组放大 1.3 倍:视角大小基本不变,主要靠射线点
-    this.lobby.position.set(0, -0.20, -0.65);
-    this.lobby.scale.setScalar(1.3);
+    // 大厅(含教学)离头 1.0m、整组放大 2.0 倍(相对最早的 0.46m):视角大小基本不变,靠射线点(第五轮)
+    this.lobby.position.set(0, -0.31, -1.0);
+    this.lobby.scale.setScalar(2.0);
     this.lobby.visible = false;
     this.uiInner.add(this.lobby);
     this.lobbyHeader = makePanel(0.34, 0.087, 1024, 262);

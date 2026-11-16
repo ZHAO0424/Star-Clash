@@ -1217,7 +1217,7 @@ function toast(msg) {
 }
 
 // ── WebXR ──
-// 优先 immersive-ar(VITURE 等透视眼镜,真实桌面上看战场),不支持时退回 immersive-vr
+// 一律优先 immersive-vr(全景背景 + 立牌,第五轮),只有不支持 VR 时才退回 immersive-ar;设置里手动选了模式时按设置
 function handleXRHomeAction(action) {
   if (action === 'quick') {
     if (!pendingBattle) startLocal({ guided: shouldGuideFirstMatch() });
@@ -1271,7 +1271,7 @@ async function checkXRAvailability() {
   const checkId = ++xrCheckId;
   checkingXR = Boolean(navigator.xr);
   updateXREntry();
-  const modes = ['immersive-ar', 'immersive-vr'];
+  const modes = ['immersive-vr', 'immersive-ar'];   // 顺序 = 「自动」时的优先级
   const results = await Promise.all(modes.map(mode => navigator.xr?.isSessionSupported(mode).catch(() => false)));
   if (checkId !== xrCheckId) return;
   supportedXRModes = modes.filter((_, index) => results[index]);
