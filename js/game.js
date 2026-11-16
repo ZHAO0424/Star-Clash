@@ -285,8 +285,8 @@ export class Game {
       case 'buff_atk':
         mine.forEach(u => { u.atk += card.value; });
         break;
-      case 'heal_all':
-        mine.forEach(u => { u.hp = Math.min(u.maxHp, u.hp + card.value); });
+      case 'heal_area':   // 装甲维修:落点半径内的己方单位(不含建筑)
+        mine.filter(u => dist2(u, pt) <= card.radius + u.radius).forEach(u => { u.hp = Math.min(u.maxHp, u.hp + card.value); });
         break;
       case 'stun_area':
         inArea.forEach(u => {

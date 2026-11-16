@@ -56,7 +56,8 @@ const LIST = [
   unit('steel_siege', 'steel', '攻城战车', 5, 463, 62, 0.55, 0.8, 1.6, '只攻击建筑,拆塔利器', { siege: true }),
   building('steel_turret', 'steel', '防御炮台', 4, 424, 28, 2.6, 0.9, 35, '据点炮台,可对空', { hitsAir: true }),
   spell('steel_buff_atk', 'steel', '全员强化', 2, 'buff_atk', '己方所有单位 攻击+10(永久)', { value: 10 }),
-  spell('steel_repair', 'steel', '装甲维修', 2, 'heal_all', '己方所有单位 回复120生命', { value: 120 }),
+  spell('steel_repair', 'steel', '装甲维修', 2, 'heal_area', '范围内己方单位 回复150生命',
+    { value: 150, radius: 2.2, needTarget: true }),   // 第三轮:全图回 120 → 半径 2.2 内回 150(拖牌时自动吸附受伤单位,见 heal-snap.js)
   spell('steel_strike', 'steel', '轨道炮击', 4, 'strike', '1.2秒后落下:范围200伤害(对建筑40%)',
     { damage: 200, radius: 1.3, delay: 1.2, structFactor: 0.4, needTarget: true }),
   spell('steel_barrier', 'steel', '紧急护盾', 3, 'shield_area', '范围内友军 获得150护盾',

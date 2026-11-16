@@ -1837,8 +1837,9 @@ export class BattleScene {
           v.ring(g.position.x, g.position.z, 0.1, 0.5, 0xffc840, 0.5);
         }
         break;
-      case 'heal_all':     // 维修:绿色光点 + 十字闪
+      case 'heal_area':    // 维修:范围内的己方单位冒绿色光点 + 十字闪(范围圈由上面的 areaFlash 画)
         for (const g of this.sideUnits(who)) {
+          if (Math.hypot(g.position.x - x, g.position.z - z) > R + 0.3) continue;
           v.rise(g.position.x, g.position.z, 0x60ff90, 12, 0.3, 0.8, 0.1);
           v.flash(g.position.x, g.position.y + 0.6, g.position.z, 0x60ff90, 0.5, 0.3);
         }

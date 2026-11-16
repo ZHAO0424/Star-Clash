@@ -161,7 +161,17 @@ export class SimpleAI {
         if (best && best.t.card.cost >= 4 && play(best.x, best.z)) return true;
         continue;
       }
-      if ((e === 'buff_atk' || e === 'heal_all' || e === 'evolve') && mobile.length >= 3) {
+      if (e === 'heal_area') {
+        // 装甲维修:以受伤的己方单位为候选落点,按范围内实际能回的血量(每个单位封顶 value)估收益,值得才放
+        let best = null, healed = 0;
+        for (const center of mobile.filter(u => u.hp < u.maxHp)) {
+          const v = mobile.filter(m => dist2(m, center) <= c.radius + m.radius).reduce((a, m) => a + Math.min(c.value, m.maxHp - m.hp), 0);
+          if (v > healed) { healed = v; best = center; }
+        }
+        if (best && healed >= c.cost * 80 && play(best.x, best.z)) return true;
+        continue;
+      }
+      if ((e === 'buff_atk' || e === 'evolve') && mobile.length >= 3) {
         if (play()) return true;
       }
       // 灵魂抽取:有值得打的目标(高攻)或核心受伤明显时才用,避免刷小怪浪费法力

@@ -194,7 +194,7 @@ const CARD_EN = {
   steel_siege: ['Siege Engine', 'Only attacks buildings — a tower breaker'],
   steel_turret: ['Defense Turret', 'Fortified turret, hits air'],
   steel_buff_atk: ['Rally', 'All your units +10 attack (permanent)'],
-  steel_repair: ['Field Repair', 'All your units heal 120'],
+  steel_repair: ['Field Repair', 'Your units in the area heal 150'],
   steel_strike: ['Orbital Strike', 'Lands after 1.2s: 200 area damage (40% to buildings)'],
   steel_barrier: ['Emergency Shield', 'Allies in area gain a 150 shield'],
   mecha_drone: ['Scout Drone', 'Flying, fast harassment'],
