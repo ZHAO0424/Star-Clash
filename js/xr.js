@@ -16,6 +16,7 @@ import { ARENA } from './arena.js';
 import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
 import { createHandVisual } from './xr-hand-visual.js';
+import { autoTargets, healSnap } from './heal-snap.js';
 import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
@@ -1277,14 +1278,25 @@ export class XRControls {
     const boardY = this.bs.world.getWorldPosition(new THREE.Vector3()).y;
     const h = point.y - boardY;
     g.trash = this.trash.mesh.visible && this.trash.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(point) < TRASH_RADIUS;
-    g.hit = (!g.trash && h > -0.05 && h < DROP_MAX_HEIGHT) ? this.bs.worldPointToField(point) : null;
+    g.hit = this.snapHeal(g, (!g.trash && h > -0.05 && h < DROP_MAX_HEIGHT) ? this.bs.worldPointToField(point) : null);
+  }
+
+  // 装甲维修:落点吸附到最近的受伤己方单位(heal-snap.js),松手就在它身上释放;
+  // hit.point 仍是手 / 射线的实际落点(牌和光标跟着它走),hit.x / z 换成吸附点
+  snapHeal(g, hit) {
+    const game = this.cb.getGame();
+    const card = game?.p.hand.find(c => c.id === g.id);
+    if (!hit || !autoTargets(card)) return hit;
+    const heal = healSnap(game.units, 'p', card, hit.x, hit.z, g.healId);
+    g.healId = heal.target?.id ?? null;
+    return { ...hit, x: heal.x, z: heal.z, heal };
   }
 
   dragRay(st, ray) {
     const g = st.grab;
     const mesh = this.cards[g.idx].mesh;
     g.trash = this.trash.mesh.visible && this.rayHits(this.trash.mesh, ray);
-    g.hit = g.trash ? null : this.bs.rayToField(ray);
+    g.hit = g.trash ? null : this.snapHeal(g, this.bs.rayToField(ray));
     const target = g.hit
       ? g.hit.point.clone().add(new THREE.Vector3(0, 0.03, 0))
       : ray.origin.clone().addScaledVector(ray.direction, 0.4);

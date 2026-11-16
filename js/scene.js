@@ -44,6 +44,31 @@ function ringMesh(radius, color, opacity, width = 0.05) {
   return m;
 }
 
+// 治疗标记:绿色十字 + 柔光(加法混合在眼镜里黑 = 透明),第一次用到时画一次
+let healMarkTex = null;
+function healMarkTexture() {
+  if (healMarkTex) return healMarkTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const glow = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
+  glow.addColorStop(0, 'rgba(120,255,160,0.55)');
+  glow.addColorStop(1, 'rgba(120,255,160,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#eafff0';
+  ctx.strokeStyle = '#2fbf62';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.roundRect(50, 22, 28, 84, 8);
+  ctx.roundRect(22, 50, 84, 28, 8);
+  ctx.stroke();
+  ctx.fill();
+  healMarkTex = new THREE.CanvasTexture(canvas);
+  healMarkTex.colorSpace = THREE.SRGBColorSpace;
+  return healMarkTex;
+}
+
 function boardLabel(style = 'plate') {
   const canvas = document.createElement('canvas');
   canvas.width = 256; canvas.height = 64;
@@ -631,6 +656,7 @@ export class BattleScene {
 
   showPlacement(opts) {
     const show = Number.isFinite(opts?.x) && Number.isFinite(opts?.z);
+    this.showHealMarkers(show ? opts.heal : null);
     const marker = show && opts.isUnit;   // 单位 / 建筑:锁定法阵;法术:范围圈
     this.placeRing.visible = this.placeArea.visible = show && !marker;
     this.placeDot.visible = false;
@@ -842,6 +868,38 @@ export class BattleScene {
       }
       setBar(ud.bar, s.hp, s.maxHp, viewRotation, now);
     }
+  }
+
+  // 装甲维修拖牌时:吸附的主目标头顶挂大的绿色十字(带脉冲),范围内其余受伤单位挂小十字;
+  // 附近没有受伤单位时在落点上方提示「附近没有受伤的单位」(照常可放)。heal = heal-snap.js 的 healSnap 结果
+  showHealMarkers(heal) {
+    this.healMarks ??= [];
+    const list = heal ? [heal.target, ...heal.others].filter(Boolean) : [];
+    while (this.healMarks.length < list.length) {
+      const mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: healMarkTexture(), depthTest: false, depthWrite: false, transparent: true }));
+      mark.renderOrder = 17;
+      this.world.add(mark);
+      this.healMarks.push(mark);
+    }
+    const pulse = 1 + 0.12 * Math.sin(performance.now() / 120);
+    this.healMarks.forEach((mark, i) => {
+      const u = list[i];
+      mark.visible = Boolean(u);
+      if (!u) return;
+      const main = u === heal.target;
+      mark.scale.setScalar(main ? 0.9 * pulse : 0.5);
+      mark.position.set(u.x, this.bodyY(u) + (main ? 0.95 : 0.75), u.z);
+    });
+    const none = Boolean(heal && !heal.target);
+    if (none && !this.healHint) {
+      this.healHint = boardLabel();
+      this.world.add(this.healHint);
+    }
+    if (!this.healHint) return;
+    this.healHint.visible = none;
+    if (!none) return;
+    this.healHint.position.set(heal.x, this.heightAt(heal.x, heal.z) + 0.6, heal.z);
+    this.healHint.userData.setText(t('healNoTarget'), '#b8ffcc');
   }
 
   // 从场景移除并释放 GPU 资源(几何体、材质;贴图是共享缓存,不释放)

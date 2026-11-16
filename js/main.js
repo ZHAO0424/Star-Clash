@@ -2,6 +2,7 @@
 // 对局逻辑都在 session(本地人机或联机)里;这里只读 session.game、调用 session 的操作方法
 import { FACTIONS, CARDS, cardTags, previewRadius, factionPool, PRESET_DECKS, deckProblem, DECK_SIZE, MIN_DEPLOYABLES } from './cards.js';
 import { DISCARD_COST, Game, isPlaced } from './game.js';
+import { autoTargets, healSnap } from './heal-snap.js';
 import { BattleScene } from './scene.js';
 import { XRControls } from './xr.js';
 import { ready as assetsReady, cardArt, emblem, uiArt, loadScene, sceneArt, XR_GUIDE } from './assets.js';
@@ -880,8 +881,18 @@ function fieldHit(x, y) {
   return document.elementFromPoint(x, y) === $('#gl') ? scene.pickField(x, y) : null;
 }
 
+// 装甲维修:落点吸附到最近的受伤己方单位(heal-snap.js,与 XR 共用),预览和出牌都用吸附后的点
+let healSnapId = null;   // 上一帧吸附的单位(滞回用)
+function snapHeal(card, hit) {
+  if (!hit || !autoTargets(card)) return hit;
+  const heal = healSnap(game().units, 'p', card, hit.x, hit.z, healSnapId);
+  healSnapId = heal.target?.id ?? null;
+  return { ...hit, x: heal.x, z: heal.z, heal };
+}
+
 function showCardPlacement(placement, hit) {
   const { card } = placement;
+  hit = snapHeal(card, hit);
   const g = game();
   const reason = hit ? g.deployBlockReason('p', card, hit.x, hit.z) : null;
   scene.showPlacement({ ...hit, game: g, card, showDeployZone: isPlaced(card), radius: previewRadius(card), valid: !reason, isUnit: card.type !== 'spell' });
@@ -893,6 +904,7 @@ function playAt(placement, hit, pointer) {
   if (g?.phase !== 'battle' || (firstMatch && firstMatch.step !== 'deploy')) return false;
   if (!hit) { showPlacementError('deployOutside', pointer); return false; }
   if (paused) { toast(t('xrPaused')); return false; }
+  hit = snapHeal(placement.card, hit);
   const idx = g.p.hand.findIndex(card => card.id === placement.id);
   if (idx < 0) return false;
   const card = g.p.hand[idx];
