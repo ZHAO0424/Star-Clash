@@ -1,7 +1,9 @@
 // 障碍套件渲染(地图大改样板:熔岩锻炉)— 把 obstacle-layout.js 的摆放数据变成网格
-//   · 玄武岩六棱柱:全图所有柱子(墙 / 熔渣堆 / 池沿岩壳 / 边缘石柱群)一个 InstancedMesh,1 次 draw call;
+//   · 玄武岩六棱柱(墙 / 熔渣堆)一个 InstancedMesh,1 次 draw call;
 //     顶面倒角 + 顶亮侧暗的顶点色,约两成柱子顶面露出熔芯(按实例 aHeat 自发光,缓慢呼吸)
-//   · 熔岩河:沿控制点做平滑带状网格,流动着色器(热核 + 漂移的冷却壳 + 两岸变暗),1 次 draw call
+//   · 切割六棱柱(第三轮):台地、河床、场内熔岩河两岸、冷却岩桥、祭坛台 = 一整片蜂窝柱被边界平面切开,合并成 1 个网格
+//   · 熔岩河:边河 + 场内横贯河,沿控制点做平滑带状网格,流动着色器(流向 + 亮核 + 漂移的冷却壳 + 两岸变暗),1 次 draw call;
+//     场内河道上方一层加色热光(热浪)+ 沿河上升的火星(Points),各 1 次 draw call
 //   · 矿车轨道:铁轨 + 枕木一个 InstancedMesh(实例色区分材质)
 //   · 地标大锻炉:程序化,石 / 铁 / 熔光三种材质各合并成一个网格 + 两根烟囱的烟(Points,着色器驱动)
 //   · Tripo 配景(铁砧 / 火盆 / 矿车 / 火山锥)只给摆放列表,仍由 props3d.buildProps 按入库规范实例化
@@ -96,50 +98,128 @@ float lNoise(vec2 p) {
 }
 float lFbm(vec2 p) { return lNoise(p) * 0.55 + lNoise(p * 2.1 + 3.3) * 0.3 + lNoise(p * 4.3 + 7.7) * 0.15; }
 `;
-// 控制点是 [x, z, y](台地上的河 + 落下台阶的瀑布);横向用切线的水平分量,瀑布段也不会把带子压成一条线
-function riverMesh(paths, width, uTime) {
-  const geos = paths.map(path => {
-    const curve = new THREE.CatmullRomCurve3(path.map(([x, z, y]) => new THREE.Vector3(x, y, z)), false, 'centripetal');
-    const N = 320, len = curve.getLength(), pos = [], uv = [], idx = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N, p = curve.getPointAt(t), d = curve.getTangentAt(t), hl = Math.hypot(d.x, d.z) || 1;
-      const taper = Math.min(1, t / 0.02, (1 - t) / 0.03) * 0.85 + 0.15, w = width / 2 * taper * (0.85 + 0.15 * Math.sin(t * 37.0));
-      for (const sd of [-1, 1]) {
-        pos.push(p.x - d.z / hl * w * sd, p.y, p.z + d.x / hl * w * sd);
-        uv.push(t * len / width, sd < 0 ? 0 : 1);
-      }
-      if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+const RIVER_UNIT = 0.3;   // 流动纹理的尺度单位(= 边河宽);宽河道按这个单位铺,不会被横向拉伸
+// 带子网格:控制点 [x, z, y, 宽?] 平滑成曲线;横向只用切线的水平分量(瀑布段不会把带子压成一条线)。
+//   uv.x = 沿流向的弧长 / RIVER_UNIT(着色器按它往下游流),uv.y = 0..1 横向,aW = 本地宽度 / RIVER_UNIT
+function ribbonGeometry(path, defWidth, { y = 0, widthK = 1, taperIn = 0.02 } = {}) {
+  const curve = new THREE.CatmullRomCurve3(path.map(([x, z, py]) => new THREE.Vector3(x, py + y, z)), false, 'centripetal');
+  const chord = [0];
+  for (let i = 1; i < path.length; i++) chord.push(chord[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2]));
+  const widthAt = t => {   // 控制点宽度按弦长比例线性插值
+    const s = t * chord.at(-1);
+    let i = 1;
+    while (i < chord.length - 1 && chord[i] < s) i++;
+    const k = (s - chord[i - 1]) / ((chord[i] - chord[i - 1]) || 1);
+    const w0 = path[i - 1][3] ?? defWidth, w1 = path[i][3] ?? defWidth;
+    return w0 + (w1 - w0) * Math.max(0, Math.min(1, k));
+  };
+  const len = curve.getLength(), N = Math.max(60, Math.round(len / 0.035)), pos = [], uv = [], aw = [], idx = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, p = curve.getPointAt(t), d = curve.getTangentAt(t), hl = Math.hypot(d.x, d.z) || 1;
+    const taper = Math.min(1, t / taperIn, (1 - t) / 0.03) * 0.85 + 0.15, full = widthAt(t) * widthK;
+    const w = full / 2 * taper * (0.92 + 0.08 * Math.sin(t * len * 9.0));
+    for (const sd of [-1, 1]) {
+      pos.push(p.x - d.z / hl * w * sd, p.y, p.z + d.x / hl * w * sd);
+      uv.push(t * len / RIVER_UNIT, sd < 0 ? 0 : 1);
+      aw.push(full * taper / RIVER_UNIT);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    return g;
-  });
+    if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('aW', new THREE.Float32BufferAttribute(aw, 1));
+  g.setIndex(idx);
+  return g;
+}
+// 熔岩:流向(沿 uv.x 往下游漂)、亮核(河心更亮更黄)、暗壳(随流漂移的冷却壳,壳缝发亮)、两岸压暗;眼镜里黑 = 透明,主体保持亮色
+function riverMesh(paths, width, uTime) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { uTime },
-    vertexShader: /* glsl */`varying vec2 vUv;
-void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv;
+    vertexShader: /* glsl */`attribute float aW; varying vec2 vUv; varying float vW;
+void main() { vUv = uv; vW = aW; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv; varying float vW;
 ${LAVA_GLSL}
 void main() {
-  vec2 p = vec2(vUv.x * 0.9 - uTime * 0.35, vUv.y * 1.6);
-  float n = lFbm(p * vec2(1.0, 1.4));
-  float crust = smoothstep(0.56, 0.72, lFbm(vec2(vUv.x * 0.55 - uTime * 0.22, vUv.y * 2.2 + 4.0)));
-  float bank = smoothstep(0.0, 0.32, vUv.y) * smoothstep(1.0, 0.68, vUv.y);
-  vec3 hot = mix(vec3(1.0, 0.36, 0.06), vec3(1.0, 0.78, 0.32), smoothstep(0.45, 0.8, n));
-  vec3 crustC = vec3(0.32, 0.1, 0.05);
-  vec3 c = mix(crustC, hot * 1.6, bank * (1.0 - crust * 0.85));
+  float across = (vUv.y - 0.5) * vW, flow = vUv.x;
+  float n = lFbm(vec2(flow * 0.9 - uTime * 0.35, across * 1.6));
+  float cr = lFbm(vec2(flow * 0.55 - uTime * 0.22, across * 1.1 + 4.0));
+  float crust = smoothstep(0.55, 0.7, cr);
+  float seam = smoothstep(0.035, 0.0, abs(cr - 0.6));                      // 壳缝:暗壳边上一圈亮线
+  float edgeD = min(vUv.y, 1.0 - vUv.y) * vW;
+  float bank = smoothstep(0.02, 0.3, edgeD);
+  float core = smoothstep(0.0, 1.0, 1.0 - abs(vUv.y - 0.5) * 2.0);
+  // 颜色按线性空间写(输出时转 sRGB):熔岩主体 sRGB≈(1, 0.45, 0.08) 的饱和橙,河心偏黄;暗壳 sRGB≈(0.45, 0.12, 0.05) 不压成黑
+  vec3 hot = mix(vec3(1.0, 0.17, 0.008), vec3(1.0, 0.5, 0.07), smoothstep(0.42, 0.8, n) * (0.4 + 0.6 * core));
+  vec3 c = mix(vec3(0.17, 0.013, 0.004), hot * (1.0 + 0.35 * core), bank * (1.0 - crust * 0.8));
+  float streak = smoothstep(0.72, 0.95, lNoise(vec2(flow * 2.2 - uTime * 1.0, across * 5.0)));   // 顺流的细亮纹
+  c += vec3(1.0, 0.35, 0.03) * (seam * 0.7 + streak * 0.3 * (1.0 - crust)) * bank;
   gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`,
   });
-  const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+  const mesh = new THREE.Mesh(mergeGeometries(paths.map(p => ribbonGeometry(p, width))), mat);
   mesh.name = 'lavaRiver';
   mesh.frustumCulled = false;   // 它负责每帧推进共享时间,不能被裁掉
   mesh.onBeforeRender = () => { uTime.value = performance.now() / 1000; };
   return mesh;
+}
+
+// 热浪:场内河道上方一层加色的热光(比河道宽,漫到两岸柱顶),缓慢起伏的噪声让光"抖"起来
+function heatSheet(paths, uTime) {
+  const geo = mergeGeometries(paths.map(p => ribbonGeometry(p, 1, { y: 0.12, widthK: 1.7, taperIn: 0.12 })));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv;
+${LAVA_GLSL}
+void main() {
+  float a = pow(1.0 - abs(vUv.y - 0.5) * 2.0, 1.6);
+  float s = lFbm(vec2(vUv.x * 0.5 + uTime * 0.12, vUv.y * 3.0 - uTime * 0.6));
+  gl_FragColor = vec4(vec3(1.0, 0.16, 0.01) * a * (0.05 + 0.1 * s), 1.0);
+}`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'lavaHeat';
+  mesh.renderOrder = 2;
+  return mesh;
+}
+
+// 火星:沿所有熔岩河撒点,着色器里按时间上升、闪烁、淡出(不占 CPU)
+function emberPoints(paths, uTime) {
+  const pos = [], seed = [];
+  let s = 0;
+  for (const path of paths) for (let i = 0; i < path.length - 1; i++) {
+    const [x1, z1, y1] = path[i], [x2, z2, y2] = path[i + 1], n = Math.max(1, Math.round(Math.hypot(x2 - x1, z2 - z1) / 0.22));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, w = ((path[i][3] ?? 0.3) * 0.4) * Math.sin(s * 12.9898);
+      pos.push(x1 + (x2 - x1) * t, Math.min(y1, y2), z1 + (z2 - z1) * t + w);
+      seed.push((s++ * 0.6180339) % 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime, uScale: { value: 420 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`attribute float aSeed; uniform float uTime; uniform float uScale; varying float vA;
+void main() {
+  float t = fract(uTime * (0.22 + aSeed * 0.18) + aSeed * 7.0);
+  vec3 p = position + vec3(sin(aSeed * 50.0 + t * 4.0) * 0.06, t * 0.55, cos(aSeed * 31.0 + t * 3.0) * 0.06);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = (0.05 * (1.0 - t) + 0.015) * uScale / -mv.z;
+  vA = smoothstep(0.0, 0.08, t) * (1.0 - t) * (0.6 + 0.4 * sin(uTime * 23.0 + aSeed * 90.0));
+}`,
+    fragmentShader: /* glsl */`varying float vA;
+void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(vec3(1.0, 0.35, 0.05) * vA * (1.0 - d * 2.0), 1.0); }`,
+  });
+  const pts = new THREE.Points(g, mat);
+  pts.frustumCulled = false;
+  pts.name = 'lavaEmbers';
+  return pts;
 }
 
 // ── 矿车轨道:两根铁轨 + 枕木 ──
@@ -217,74 +297,113 @@ function forgeGroup(f, heightAt, envMap, uTime) {
   return g;
 }
 
-// ── 台地:倒角平顶 + 崖壁(第二轮:两侧地形)──
-//   每块是一个倒角矩形挤出(台沿带一个战场大小的洞),从台面(ARENA.top)下一点一直到台顶;全部合并成 1 个网格。
-//   不用贴图:着色器按高度画层状岩纹(深浅交替的岩层 + 细岩缝)、按崖面水平坐标画竖向柱节理(玄武岩六棱柱的侧面),
-//   崖脚压暗做接地;台顶是低饱和的暖灰,比玩法区的红地面安静
-const TERRACE_GLSL = /* glsl */`
-float tHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
-float tNoise(vec2 p) {
+// ── 切割六棱柱(第三轮:台地 / 河床 / 河岸 / 岩桥 / 祭坛台)──
+//   obstacle-layout.cutColumnsLayout 给每根柱子裁切后的凸多边形;这里把它们挤成柱子,全部合并成 1 个网格(1 次 draw call)。
+//   柱顶:扇形三角化,顶点带"到原六边形格心的六边形距离"(rim),着色器据此画格缝 → 被切开的半根柱子顶面不会多出一条缝。
+//   侧面:原生柱面 = 暗一点的竖纹;切面(落在裁切边界上的面)= 更亮、细颗粒、柱与柱之间的缝更深 —— 像切开的玄武岩柱露出截面。
+//   切面外侧是熔岩时,底部按离熔岩面的高度发红(两岸、河床壁、祭坛台边)。
+//   不用贴图:颜色走顶点色 + 着色器
+const KIND_COLOR = {   // sRGB 基色(柱顶);侧面 / 切面在着色器里再调
+  ledge: [0.4, 0.35, 0.32], apron: [0.39, 0.34, 0.31], step: [0.42, 0.37, 0.34], bench: [0.44, 0.39, 0.35], plateau: [0.47, 0.41, 0.37],
+  bed: [0.3, 0.2, 0.16], bank: [0.36, 0.29, 0.26], bridge: [0.31, 0.25, 0.22], altar: [0.45, 0.4, 0.38],
+};
+const RIM_K = { bridge: 0.86, bank: 0.94, altar: 0.94 };
+const CUT_GLSL = /* glsl */`
+float cHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
+float cNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(tHash(i), tHash(i + vec2(1, 0)), u.x), mix(tHash(i + vec2(0, 1)), tHash(i + vec2(1, 1)), u.x), u.y);
+  return mix(mix(cHash(i), cHash(i + vec2(1, 0)), u.x), mix(cHash(i + vec2(0, 1)), cHash(i + vec2(1, 1)), u.x), u.y);
 }`;
-function chamferShape(x1, z1, x2, z2, ch, hole = false) {
-  const p = [[x1 + ch, z1], [x2 - ch, z1], [x2, z1 + ch], [x2, z2 - ch], [x2 - ch, z2], [x1 + ch, z2], [x1, z2 - ch], [x1, z1 + ch]]
-    .map(([x, z]) => new THREE.Vector2(x, -z));   // 形状 y = −z(挤出后绕 X 转 −90°,形状平面落到 xz)
-  if (hole) p.reverse();
-  return p;
-}
-function terraceMesh(blocks, envMap) {
-  const BEV = 0.035, base = ARENA.top - 0.004;
-  const geos = blocks.map(b => {
-    const [x1, z1, x2, z2] = b.rect;
-    const shape = new THREE.Shape(chamferShape(x1 + BEV, z1 + BEV, x2 - BEV, z2 - BEV, b.chamfer));
-    if (b.hole) {   // 洞往外让出倒角宽度,台沿内缘正好落在战场边上
-      const [h1, k1, h2, k2] = b.hole;
-      shape.holes.push(new THREE.Path(chamferShape(h1 - BEV, k1 - BEV, h2 + BEV, k2 + BEV, 0.02, true)));
+function cutColumnsMesh(cols, envMap, uTime) {
+  let nv = 0;
+  for (const c of cols) nv += c.poly.length * 3 + c.poly.length * 6;
+  const P = new Float32Array(nv * 3), Nn = new Float32Array(nv * 3), C = new Float32Array(nv * 3), I = new Float32Array(nv * 4), Hh = new Float32Array(nv * 2);
+  let v = 0;
+  const col = new THREE.Color();
+  const put = (x, y, z, nx, ny, nz, info, h0, h1) => {
+    P.set([x, y, z], v * 3); Nn.set([nx, ny, nz], v * 3); C.set([col.r, col.g, col.b], v * 3); I.set(info, v * 4); Hh.set([h0, h1], v * 2); v++;
+  };
+  const A = Math.sqrt(3) / 2;
+  cols.forEach((c, ci) => {
+    const base = KIND_COLOR[c.kind] ?? KIND_COLOR.ledge, k = 0.88 + ((ci * 7919) % 97) / 97 * 0.24;
+    const lift = c.kind === 'bench' || c.kind === 'plateau' || c.kind === 'apron' ? Math.min(1.15, 1 + Math.max(0, c.top - ({ bench: 0.34, plateau: 0.54, apron: 0.05 })[c.kind]) * 0.4) : 1;   // 抬高的石柱群略亮
+    col.setRGB(base[0] * k * lift, base[1] * k * lift, base[2] * k * lift, THREE.SRGBColorSpace);
+    const rimK = RIM_K[c.kind] ?? 1;   // 细柱(场内)柱缝收窄,岩桥读成一整块桥面而不是格栅
+    const rim = (x, z) => {   // 到格心的六边形距离 / 边心距(格边 = 1)
+      const dx = x - c.cx, dz = z - c.cz;
+      return rimK * Math.max(Math.abs(dx * A + dz * 0.5), Math.abs(dz), Math.abs(dx * A - dz * 0.5)) / (c.R * A);
+    };
+    const poly = c.poly, n = poly.length;
+    // 柱顶:格心在多边形里就从格心扇形三角化,否则用质心
+    let ox = c.cx, oz = c.cz;
+    if (n !== 6 || c.cut.some(Boolean)) {
+      let inside = true;
+      for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i + 1) % n]; if ((b[0] - a[0]) * (oz - a[1]) - (b[1] - a[1]) * (ox - a[0]) < 0) inside = false; }
+      if (!inside) { ox = poly.reduce((s, p) => s + p[0], 0) / n; oz = poly.reduce((s, p) => s + p[1], 0) / n; }
     }
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: b.top - base - 2 * BEV, bevelEnabled: true, bevelThickness: BEV, bevelSize: BEV, bevelSegments: 2, curveSegments: 1 });
-    geo.rotateX(-Math.PI / 2);
-    geo.translate(0, base + BEV, 0);
-    return geo;
+    for (let i = 0; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n];
+      put(ox, c.top, oz, 0, 1, 0, [rim(ox, oz), 0, 0, 0], 1, c.heat);
+      put(b[0], c.top, b[1], 0, 1, 0, [rim(b[0], b[1]), 0, 0, 0], 1, c.heat);
+      put(a[0], c.top, a[1], 0, 1, 0, [rim(a[0], a[1]), 0, 0, 0], 1, c.heat);
+    }
+    // 侧面:外法线 = (dz, −dx)(多边形逆时针,内部在左)
+    for (let i = 0; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const nx = (b[1] - a[1]) / L, nz = -(b[0] - a[0]) / L, cut = c.cut[i] ? 1 : 0, glow = c.glow[i] == null ? 0 : c.glow[i] + 1;
+      const q = [[a, c.bottom, 0, 0], [b, c.bottom, 1, 0], [b, c.top, 1, 1], [a, c.top, 0, 1]];
+      for (const j of [0, 2, 1, 0, 3, 2]) {   // 朝外的绕序
+        const [p, y, u, hf] = q[j];
+        put(p[0], y, p[1], nx, 0, nz, [-1, cut, u, glow], hf, 0);
+      }
+    }
   });
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.02 });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(Nn, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  g.setAttribute('aInfo', new THREE.BufferAttribute(I, 4));
+  g.setAttribute('aH', new THREE.BufferAttribute(Hh, 2));
+  g.computeBoundingSphere();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.03 });
   applyEnv(mat, envMap, LOOK.propEnvIntensity);
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uBase = { value: base };
+    sh.uniforms.uTime = uTime;
+    sh.uniforms.uLava = { value: LAVA };
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vTerP; varying vec3 vTerN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerP = position; vTerN = normal;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aInfo; attribute vec2 aH; varying vec4 vInfo; varying vec2 vH; varying vec3 vCP; varying vec3 vCN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInfo = aInfo; vH = aH; vCP = position; vCN = normal;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uBase; varying vec3 vTerP; varying vec3 vTerN;\n${TERRACE_GLSL}`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime; uniform vec3 uLava; varying vec4 vInfo; varying vec2 vH; varying vec3 vCP; varying vec3 vCN;\n${CUT_GLSL}`)
       .replace('#include <map_fragment>', `
-vec3 tn = normalize(vTerN);
-float isTop = smoothstep(0.55, 0.9, tn.y);
-// 台顶:玄武岩柱顶铺面(六边形格,和墙柱同一母题)+ 低频色块;越高的台越亮一点,台阶层次读得出来
-float tp = tNoise(vTerP.xz * 1.6);
-vec2 hp = vTerP.xz / 0.17, hs = vec2(1.0, 1.7320508);   // 两套错位矩形格取最近格心 = 六边形格
-vec2 ha = mod(hp, hs) - hs * 0.5, hb = mod(hp - hs * 0.5, hs) - hs * 0.5;
-vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb;
-vec2 hid = hp - hl;
-vec2 hab = abs(hl);
-float hEdge = max(dot(hab, vec2(0.5, 0.8660254)), hab.x);   // 到格心的六边形距离(边 = 0.5)
-float seam = smoothstep(0.42, 0.5, hEdge);
-float cellK = 0.88 + 0.2 * tHash(floor(hid * 2.0 + 0.5) + 3.7);
-float tierK = 0.92 + 0.3 * smoothstep(0.1, 0.56, vTerP.y);
-vec3 topC = vec3(0.4, 0.35, 0.32) * (0.86 + 0.2 * tp) * cellK * tierK * (1.0 - 0.3 * seam);
-// 崖壁:按高度分层(层厚 0.075,边界随水平位置轻微起伏)+ 层间细缝 + 竖向柱节理
-float yy = vTerP.y - uBase + 0.018 * tNoise(vTerP.xz * 2.3);
-float layer = floor(yy / 0.075), lf = fract(yy / 0.075);
-float along = abs(tn.x) > abs(tn.z) ? vTerP.z : vTerP.x;
-float joint = abs(fract(along / 0.13 + tHash(vec2(layer, 1.7)) * 0.5) - 0.5) * 2.0;
-vec3 sideC = vec3(0.33, 0.28, 0.26) * (0.84 + 0.24 * tHash(vec2(layer, 4.1)));
-sideC *= 1.0 - 0.32 * smoothstep(0.12, 0.0, lf) - 0.16 * smoothstep(0.9, 1.0, joint);
-sideC *= 0.62 + 0.38 * smoothstep(0.0, 0.3, vTerP.y - uBase);   // 崖脚压暗(接地)
-diffuseColor.rgb *= pow(mix(sideC, topC, isTop), vec3(2.2));   // 上面按 sRGB 调色,这里转线性`);
+float isTop = step(0.6, normalize(vCN).y);
+float rim = vInfo.x, cutF = vInfo.y, u = vInfo.z;
+float n1 = cNoise(vCP.xz * 7.0 + vCP.y * 3.0);
+// 柱顶:靠格边一圈压暗 = 柱缝;中间略亮(柱顶微凸的读感)
+float seamT = smoothstep(0.8, 0.98, rim);
+float kTop = (0.9 + 0.14 * n1) * (1.0 - 0.45 * seamT) * (1.0 + 0.06 * (1.0 - rim));
+// 侧面:柱面竖纹 + 棱边压暗;切面:更亮、细颗粒、柱与柱的缝更深(切开的柱截面),顶上一道亮边
+float edgeS = smoothstep(0.0, 0.07, u) * smoothstep(1.0, 0.93, u);
+float grain = cNoise(vec2((vCP.x + vCP.z) * 26.0, vCP.y * 5.0));
+float kSide = 0.72 * (0.86 + 0.2 * grain) * (0.62 + 0.38 * edgeS);
+float speck = cNoise(vec2(vCP.x + vCP.z, vCP.y) * 60.0);
+float kCut = 1.05 * (0.86 + 0.2 * speck) * (0.42 + 0.58 * edgeS) * (1.0 + 0.22 * smoothstep(0.94, 1.0, vH.x));
+float ao = mix(0.5, 1.0, smoothstep(0.0, 0.5, vH.x));
+float kk = isTop > 0.5 ? kTop : mix(kSide, kCut, cutF) * ao;
+vec3 tint = isTop > 0.5 ? vec3(1.0) : mix(vec3(0.93, 0.92, 0.95), vec3(1.05, 1.0, 0.96), cutF);
+diffuseColor.rgb *= kk * tint;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+// 切面外侧是熔岩:越靠近熔岩面越红(熔岩光打在崖壁 / 岸壁上)
+float lavaGlow = vInfo.w > 0.5 ? exp(-max(0.0, vCP.y - (vInfo.w - 1.0)) / 0.05) : 0.0;
+float flick = 0.85 + 0.15 * sin(uTime * 2.1 + vCP.x * 3.0 + vCP.z * 2.3);
+// 柱顶熔光(岸柱零星几根 / 岩桥):沿柱缝发亮的裂纹
+float crack = isTop * vH.y * smoothstep(0.55, 0.95, rim + 0.25 * n1);
+totalEmissiveRadiance += uLava * (lavaGlow * 1.2 * flick + crack * 1.1 * flick);`);
   };
-  mat.customProgramCacheKey = () => 'terrace1';
-  const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+  mat.customProgramCacheKey = () => 'cutColumns1';
+  const mesh = new THREE.Mesh(g, mat);
   mesh.castShadow = mesh.receiveShadow = true;
-  mesh.name = 'terraces';
+  mesh.name = 'cutColumns';
   return mesh;
 }
 
@@ -343,7 +462,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
   return pts;
 }
 
-// 入口:返回 { group(台地 / 柱子 / 熔岩河 / 轨道 / 锻炉), props(交给 props3d.buildProps 的 Tripo 配景摆放列表),
+// 入口:返回 { group(切割柱台地 / 墙柱 / 熔岩河 + 热浪 + 火星 / 轨道 / 锻炉), props(交给 props3d.buildProps 的 Tripo 配景摆放列表),
 //   surfaceAt(战场内 = 地形高度,战场外 = 台地顶高;配景按它落地)}
 export function buildDressing(sceneId, { map, heightAt, envMap }) {
   const layout = DRESSINGS[sceneId](map);
@@ -352,9 +471,12 @@ export function buildDressing(sceneId, { map, heightAt, envMap }) {
   const group = new THREE.Group();
   group.name = 'obstacleKit';
   const uTime = timeUniform(group);
-  if (blocks.length) group.add(terraceMesh(blocks, envMap));
+  group.add(cutColumnsMesh(layout.cutColumns, envMap, uTime));
   group.add(columnsMesh(layout.columns, surfaceAt, envMap, uTime));
-  group.add(riverMesh(layout.rivers, layout.riverWidth, uTime));
+  const rivers = [...layout.rivers, ...layout.fieldRivers];
+  group.add(riverMesh(rivers, layout.riverRibbon ?? layout.riverWidth, uTime));   // 边河带子铺满河床
+  if (layout.fieldRivers.length) group.add(heatSheet(layout.fieldRivers, uTime));
+  group.add(emberPoints(rivers, uTime));
   group.add(railsMesh(layout.rails, envMap));
   group.add(forgeGroup(layout.forge, surfaceAt, envMap, uTime));
   return { group, props: layout.props, surfaceAt };

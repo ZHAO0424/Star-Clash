@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { FACTIONS, deployFxRadius, deployFxScale } from './cards.js';
 import { FIELD_W, FIELD_HALF, DEPLOY_LINE } from './game.js';
 import { t } from './i18n.js';
-import { mapForScene, wallSegments } from './map.js';
+import { mapForScene, wallSegments, inLava, lavaCenterZ } from './map.js';
 import { unitTexture, structTexture, unitModel, structModel } from './assets.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { VFX } from './vfx.js';
@@ -203,6 +203,8 @@ function setBar(bar, hp, maxHp, viewRotation, now, { visible = true, shield = 0 
   bar.number?.userData.setText(String(Math.max(0, Math.round(hp))), pct <= 0.25 ? '#ffad87' : '#ffe6b5');
 }
 
+const BURN_TINT = 0xff4a10;   // 熔岩烧灼的单位染色
+const EMBER_HOT = new THREE.Color(1.0, 0.55, 0.12), EMBER_RED = new THREE.Color(1.0, 0.25, 0.04);
 const DEFAULT_VIEW = Object.freeze({ yaw: 0, pitch: 0, zoom: 1, panX: 0, panZ: 0 });
 
 export class BattleScene {
@@ -536,6 +538,8 @@ export class BattleScene {
   buildRiftOverlays() {
     this.riftHint = null;
     this.riftPreview = null;
+    this.lavaHint = this.lavaWarn = this.lavaPreview = null;
+    if (this.map.lava) this.buildLavaWarn();
     for (const rift of this.map.rifts) {
       const edge = ringMesh(rift.r, 0xc4a1ed, 0.65, 0.045);
       const hatching = new THREE.Mesh(new THREE.RingGeometry(rift.r * 0.82, rift.r * 0.96, 48),
@@ -644,6 +648,70 @@ export class BattleScene {
     this.deployZone.material.map.needsUpdate = true;
   }
 
+  // 熔岩锻炉:拖牌时熔岩河两岸描一道脉动的亮边(熔岩本身是橙色,红边看不出来)(岩桥、祭坛处断开 = 安全渡口)+ 两侧各一个「熔岩 · 会烧灼」标签
+  buildLavaWarn() {
+    const L = this.map.lava, W = this.map.W, N = this.map.node, zc = x => lavaCenterZ(L, W, x);
+    const pos = [], idx = [];
+    const strip = (x0, x1, s) => {
+      const n = Math.max(2, Math.ceil((x1 - x0) / 0.1));
+      const i0 = pos.length / 3;
+      for (let i = 0; i <= n; i++) {
+        const x = x0 + (x1 - x0) * i / n, z = zc(x) + s * L.half, y = this.heightAt(x, z + s * 0.08) + 0.07;   // 压在岸柱顶上(岸柱比地面高 0.045)
+        pos.push(x, y, z - s * 0.04, x, y, z + s * 0.05);
+        if (i < n) idx.push(i0 + i * 2, i0 + i * 2 + 1, i0 + i * 2 + 2, i0 + i * 2 + 1, i0 + i * 2 + 3, i0 + i * 2 + 2);
+      }
+    };
+    const stops = [-W, ...[...L.bridges.flatMap(b => [b.x - b.half, b.x + b.half]), N.x - N.r, N.x + N.r].sort((a, b) => a - b), W];
+    for (let i = 0; i < stops.length - 1; i += 2) for (const s of [-1, 1]) strip(stops[i], stops[i + 1], s);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.renderOrder = 6;
+    mesh.visible = false;
+    for (const x of [-2.6, 2.6]) {
+      const label = boardLabel();
+      label.scale.multiplyScalar(0.9);
+      label.position.set(x, this.heightAt(x, zc(x)) + 0.42, zc(x));
+      label.userData.setText(t('lavaZone'), '#ffb27a');
+      mesh.add(label);
+    }
+    this.board.add(mesh);
+    this.lavaWarn = mesh;
+  }
+
+  // 拖地面单位时:预览它会走的路线(9 格),第一次踩进熔岩的位置;没有返回 null。120ms 内同一张牌复用结果
+  lavaAlongPreview({ x, z, card, game }) {
+    const now = performance.now(), prev = this.lavaPreview;
+    if (prev && prev.card === card && now - prev.at < 120 && Math.hypot(prev.x - x, prev.z - z) < 0.3) return prev.hit;
+    const path = game.previewPath('p', card, x, z, 9);
+    let hit = null;
+    for (let i = 1; path && i < path.length && !hit; i++) {
+      const a = path[i - 1], b = path[i], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.08));
+      for (let k = 1; k <= n; k++) {
+        const px = a.x + (b.x - a.x) * k / n, pz = a.z + (b.z - a.z) * k / n;
+        if (inLava(this.map, px, pz)) { hit = { x: px, z: pz }; break; }
+      }
+    }
+    this.lavaPreview = { card, at: now, x, z, hit };
+    return hit;
+  }
+
+  showLavaHint(opts, ground, showZone) {
+    const show = Number.isFinite(opts?.x) && Number.isFinite(opts?.z);
+    if (this.lavaWarn) {
+      this.lavaWarn.visible = show && !!(showZone || opts.isUnit);
+      this.lavaWarn.material.opacity = 0.6 + 0.35 * Math.abs(Math.sin(performance.now() / 260));
+    }
+    const hit = show && ground && opts.game ? this.lavaAlongPreview(opts) : null;
+    if (hit && !this.lavaHint) { this.lavaHint = boardLabel(); this.board.add(this.lavaHint); }
+    if (this.lavaHint) this.lavaHint.visible = !!hit;
+    if (hit) {
+      this.lavaHint.position.set(hit.x, this.heightAt(hit.x, hit.z) + 0.85, hit.z);   // 比两侧「会烧灼」标签高一截,不互相盖住
+      this.lavaHint.userData.setText(t('lavaBurnAhead', { n: this.map.lava.dps }), '#ffb27a');
+    }
+  }
+
   // 传 null 隐藏部署与落点提示。
   riftAlongPreview(opts) {
     const { x, z, card, game } = opts;
@@ -678,6 +746,7 @@ export class BattleScene {
     if (showZone) this.updateDeployMask(opts.game, opts.card);
     const ground = show && opts.valid && opts.card?.type === 'unit' && !opts.card.air;
     if (!ground) this.riftPreview = null;
+    if (this.map.lava) this.showLavaHint(opts, ground, showZone);
     const here = ground ? this.map.rifts.find(r => Math.hypot(opts.x - r.x, opts.z - r.z) < r.r) : null;
     const rift = here || (ground && opts.game ? this.riftAlongPreview(opts) : null);
     if (rift && !this.riftHint) {
@@ -1092,6 +1161,20 @@ export class BattleScene {
     }
   }
 
+  // 熔岩烧灼:身上往上冒火星(每 0.12 秒两颗,寿命 0.6 秒),脚下偶尔溅一点火花
+  burnEmbers(u, g, gy, now) {
+    const ud = g.userData, v = this.vfx;
+    if (!v || now - (ud.burnFxAt || 0) < 120) return;
+    ud.burnFxAt = now;
+    const top = (ud.bar?.y ?? 0.8) * 0.8;
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2, r = 0.08 + Math.random() * 0.1;
+      v.glow.emit(u.x + Math.cos(a) * r, gy + 0.08 + Math.random() * top, u.z + Math.sin(a) * r,
+        (Math.random() - 0.5) * 0.2, 0.55 + Math.random() * 0.45, (Math.random() - 0.5) * 0.2, i ? EMBER_HOT : EMBER_RED, 0.07 + Math.random() * 0.04, 0.6, { drag: 1 });
+    }
+    if (Math.random() < 0.25) v.sparks(u.x, gy + 0.05, u.z, 0xff7a2a, 3, 0.8, 0.06, 0.3);
+  }
+
   updateRiftMarker(unit, group, now) {
     const ud = group.userData;
     const inside = !unit.air && !unit.building && !unit.dead
@@ -1163,6 +1246,7 @@ export class BattleScene {
       const moving = !u.building && (ud.vel || 0) > 0.08 && u.status.stun <= 0;
       g.position.set(u.x, gy, u.z);
       this.updateRiftMarker(u, g, now);
+      if (u.status.burn > 0 && !u.air) this.burnEmbers(u, g, gy, now);
       // 出场:弹出(带一点回弹)
       const age = (now - ud.born) / 1000;
       if (age < 0.35) {
@@ -1220,7 +1304,7 @@ export class BattleScene {
       const nearPlacement = this.placeRing.visible
         && Math.hypot(u.x - this.placeRing.position.x, u.z - this.placeRing.position.z) < 0.75;
       setBar(ud.bar, u.hp, u.maxHp, viewRotation, now, {
-        visible: u.hp <= u.maxHp * 0.25 || u.shield > 0 || now - (ud.hitAt ?? -Infinity) < 950 || nearPlacement,
+        visible: u.hp <= u.maxHp * 0.25 || u.shield > 0 || now - (ud.hitAt ?? -Infinity) < 950 || now - (ud.burnHitAt ?? -Infinity) < 950 || nearPlacement,
         shield: THREE.MathUtils.clamp(u.shield / Math.max(u.maxShield, 1), 0, 1),
       });
       if (ud.hatch) {
@@ -1240,14 +1324,16 @@ export class BattleScene {
 
       // 状态染色:诅咒紫 / 寄生绿 / 狂暴红 / 眩晕暗;受击时白闪 0.14 秒
       const raging = u.card.berserk && u.hp < u.maxHp * 0.5;
-      const tint = u.status.curse > 0 ? 0x9a30ff : u.status.parasite > 0 ? 0x40ff60 : raging ? 0xff3020 : u.mimic ? 0xb070ff : null;
+      const burning = u.status.burn > 0 && !u.air;
+      const tint = u.status.curse > 0 ? 0x9a30ff : u.status.parasite > 0 ? 0x40ff60 : burning ? BURN_TINT : raging ? 0xff3020 : u.mimic ? 0xb070ff : null;
+      const tintK = tint === BURN_TINT ? 0.3 + 0.35 * Math.abs(Math.sin(now / 75 + u.id)) : 0.45;   // 烧灼:发红并快速闪烁(烤着的读感)
       const flash = Math.max(0, 1 - (now - (ud.hitAt || 0)) / 140);
       if (ud.sprite) {
-        const c = u.status.stun > 0 ? 0x777777 : tint === 0x9a30ff ? 0xd6a0ff : tint === 0x40ff60 ? 0xa8ffb0 : tint === 0xff3020 ? 0xff9a8a : 0xffffff;
+        const c = u.status.stun > 0 ? 0x777777 : tint === 0x9a30ff ? 0xd6a0ff : tint === 0x40ff60 ? 0xa8ffb0 : tint === 0xff3020 ? 0xff9a8a : tint === BURN_TINT ? 0xffb080 : 0xffffff;
         ud.sprite.material.color.setHex(c).multiplyScalar(1 + flash * 1.6);
         ud.tint = tint;
       } else if (ud.model) {
-        const e = TMP_COLOR.setHex(tint ?? 0x000000).multiplyScalar(tint ? 0.45 : 0);
+        const e = TMP_COLOR.setHex(tint ?? 0x000000).multiplyScalar(tint ? tintK : 0);
         e.r += flash * 0.9; e.g += flash * 0.9; e.b += flash * 0.9;
         for (const m of ud.model.mats) if (m.emissive && !m.userData.keepEmissive) m.emissive.copy(e);   // 自发光道具(能量球)不参与染色
       } else {
@@ -1456,7 +1542,8 @@ export class BattleScene {
     const sprite = boardLabel(style);
     sprite.material.depthTest = true;
     sprite.scale.set(style === 'blood' ? 1.42 : 1.18, style === 'blood' ? 0.355 : 0.295, 1);
-    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : '#ffdc94';
+    const color = style === 'blood' ? '#ff8cab' : style === 'shield' ? '#a1ecff' : style === 'burn' ? '#ff9a4a' : '#ffdc94';
+    if (style === 'burn') sprite.scale.multiplyScalar(0.78);   // 烧灼跳字小一号:每 0.5 秒一跳,不抢正常伤害的读数
     sprite.userData.setText(`−${value}`, color);
     sprite.position.copy(position);
     const baseY = position.y;
@@ -2073,6 +2160,12 @@ export class BattleScene {
         }
         case 'hit': {
           const g = this.unitMeshes.get(ev.unit.id);
+          if (ev.burn) {   // 熔岩烧灼:每跳都出一个小号橙色数字(不走 60 点的合并阈值),不闪白
+            if (ev.lost > 0) this.combatNumber(new THREE.Vector3(ev.unit.x + 0.12,
+              (g?.position.y ?? this.heightAt(ev.unit.x, ev.unit.z)) + (g?.userData.bar?.y ?? 1.05) + 0.22, ev.unit.z), ev.lost, 'burn');
+            if (g) g.userData.burnHitAt = now;
+            break;
+          }
           this.recordDamage(ev, ev.unit, g, now);
           if (!g) break;
           g.userData.hitAt = now;
