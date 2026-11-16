@@ -118,3 +118,14 @@ export function sanitizeRig(value) {
   for (const k of ['yaw', 'x', 'y', 'z']) out[k] = Number.isFinite(value[k]) ? value[k] : 0;
   return out;
 }
+
+// ── UI 换边(第三轮)──
+// 棋盘转过一定角度后,手牌 / HUD 等整套 UI 绕战场中心按 90° 吸附到面向用户的那条边。
+// phi = wrap(头部水平朝向 − 棋盘朝向);current = 当前扇区(0..3,UI 绕战场中心转 current × 90°)。
+// 离当前扇区中心超过 45° + hysteresis 才换到新扇区(默认 10°,即过 55° 才换),返回新扇区 0..3
+export const UI_SIDE = { HYSTERESIS: Math.PI / 18, ANIM_S: 0.35 };
+export function uiSector(phi, current, hysteresis = UI_SIDE.HYSTERESIS) {
+  const d = wrapAngle(phi - current * Math.PI / 2);
+  if (Math.abs(d) <= Math.PI / 4 + hysteresis) return current;
+  return ((Math.round(phi / (Math.PI / 2)) % 4) + 4) % 4;
+}

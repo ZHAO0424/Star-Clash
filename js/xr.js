@@ -20,7 +20,7 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
@@ -143,13 +143,20 @@ export class XRControls {
     bs.scene.add(this.anchor);
     // 战场和整套 UI(手牌、HUD、大厅 / 教学、设置、暂停提示、立牌)都挂在 boardRig 下,相对位置固定,双手操控时一起动
     this.boardRig = new BoardRig(this.anchor, () => bs.world.position, cb.getBoardRig?.(), rig => cb.setBoardRig?.(rig));
+    // UI 换边(第三轮):整套 UI 挂在 uiPivot → uiInner 下。uiPivot 放在战场中心、uiInner 反向平移回来,
+    // 所以 uiPivot 不转时和直接挂在 boardRig 下完全一样;棋盘转过 55° 后 uiPivot 绕战场中心按 90° 吸附到面向用户的一边
+    this.uiPivot = new THREE.Group();
+    this.uiInner = new THREE.Group();
+    this.uiPivot.add(this.uiInner);
+    this.boardRig.node.add(this.uiPivot);
+    this.uiSide = { sector: 0, angle: 0, from: 0, to: 0, t: 1 };
     this.poster = new THREE.Group();
     this.poster.name = 'vr:standing-poster';
     this.poster.visible = false;
-    this.boardRig.node.add(this.poster);
+    this.uiInner.add(this.poster);
     this.ui = new THREE.Group();
     this.ui.visible = false;
-    this.boardRig.node.add(this.ui);
+    this.uiInner.add(this.ui);
     // 双手操控时的提示:两手之间一条连线 + 战场外框发光
     this.rigLink = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
       new THREE.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.9 }));
@@ -258,7 +265,7 @@ export class XRControls {
     this.lobby.position.set(0, -0.20, -0.65);
     this.lobby.scale.setScalar(1.3);
     this.lobby.visible = false;
-    this.boardRig.node.add(this.lobby);
+    this.uiInner.add(this.lobby);
     this.lobbyHeader = makePanel(0.34, 0.087, 1024, 262);
     this.lobbyHeader.mesh.position.y = 0.112;
     this.lobby.add(this.lobbyHeader.mesh);
@@ -313,7 +320,7 @@ export class XRControls {
     this.settings = new THREE.Group();
     this.settings.position.set(0, 0.06, -0.5);
     this.settings.visible = false;
-    this.boardRig.node.add(this.settings);
+    this.uiInner.add(this.settings);
     this.settingsHeader = makePanel(0.30, 0.04, 960, 128);
     this.settingsHeader.mesh.position.y = 0.075;
     this.settings.add(this.settingsHeader.mesh);
@@ -551,6 +558,8 @@ export class XRControls {
     this.hud.mesh.position.z = -HUD_BASE_DISTANCE - shift - (scale - BOARD_SCALES.standard) * halfDepth;
     this.poster.position.set(0, -0.055, this.hud.mesh.position.z - POSTER_GAP);
     this.boardRig.apply();
+    this.uiPivot.position.copy(this.bs.world.position);
+    this.uiInner.position.copy(this.bs.world.position).negate();
     this.bs.world.updateMatrixWorld(true);
   }
 
@@ -868,6 +877,7 @@ export class XRControls {
       }
     }
     this.updateBoardGesture(dt);
+    this.updateUiSide(dt);
     this.updatePalmMenu(dt, inputReady);
     this.refreshSettings();
     if (!game) { this.refreshLobby(); return; }
@@ -1384,6 +1394,31 @@ export class XRControls {
     link.setXYZ(0, hands[0].handPoint.x, hands[0].handPoint.y, hands[0].handPoint.z);
     link.setXYZ(1, hands[1].handPoint.x, hands[1].handPoint.y, hands[1].handPoint.z);
     link.needsUpdate = true;
+  }
+
+  // UI 换边:头部水平朝向相对棋盘朝向分 4 个 90° 扇区,滞回 10°(过 55° 才换);
+  // 抓着牌、双手操控中、手心菜单打开时不换(免得牌在手里跳走);换边 0.35s 缓出动画,绕战场中心转
+  updateUiSide(dt) {
+    const side = this.uiSide;
+    const forward = this.renderer.xr.getCamera().getWorldDirection(new THREE.Vector3());
+    const frozen = this.inputs.some(s => s.grab) || this.boardRig.active || this.palmMenu.open;
+    if (!frozen && Math.hypot(forward.x, forward.z) > 0.2) {   // 几乎竖直往下看时朝向不可靠,不判断
+      const headYaw = Math.atan2(-forward.x, -forward.z);
+      const boardYaw = this.anchor.rotation.y + this.boardRig.rig.yaw;
+      const sector = uiSector(wrapAngle(headYaw - boardYaw), side.sector);
+      if (sector !== side.sector) {
+        side.sector = sector;
+        side.from = side.angle;
+        side.to = side.angle + wrapAngle(sector * Math.PI / 2 - side.angle);
+        side.t = 0;
+      }
+    }
+    if (side.t < 1) {
+      side.t = Math.min(1, side.t + dt / UI_SIDE.ANIM_S);
+      side.angle = side.from + (side.to - side.from) * (1 - (1 - side.t) ** 3);
+      this.uiPivot.rotation.y = side.angle;
+      this.uiPivot.updateMatrixWorld(true);
+    }
   }
 
   // 两只手的捏合点(anchor 坐标),按左右排;分不出左右时按输入顺序

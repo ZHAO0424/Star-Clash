@@ -102,3 +102,16 @@ test('sanitizeRig:坏数据当零', () => {
   assert.deepEqual(sanitizeRig(null), { ...ZERO_RIG });
   assert.deepEqual(sanitizeRig({ yaw: 'a', x: 1, y: NaN }), { yaw: 0, x: 1, y: 0, z: 0 });
 });
+
+test('uiSector:过 55° 才换边,换完 40° 不回,四个扇区都能到', async () => {
+  const { uiSector } = await import('../js/xr-math.js');
+  const deg = d => d * Math.PI / 180;
+  assert.equal(uiSector(deg(44), 0), 0);
+  assert.equal(uiSector(deg(54), 0), 0);
+  assert.equal(uiSector(deg(56), 0), 1);
+  assert.equal(uiSector(deg(40), 1), 1);     // 刚换到 1(中心 90°),回到 40° 仍在 55° 以内
+  assert.equal(uiSector(deg(34), 1), 0);     // 离 90° 超过 55° 才换回
+  assert.equal(uiSector(deg(-60), 0), 3);    // 负方向 = 扇区 3
+  assert.equal(uiSector(deg(178), 0), 2);
+  assert.equal(uiSector(deg(-134), 2), 2);   // 跨 ±180° 也按最短角度算
+});

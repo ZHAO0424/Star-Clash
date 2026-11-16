@@ -1,5 +1,5 @@
 // 双手操控战场:两手空捏保持 0.4s 后,旋转 / 升降 / 推拉战场(头显里不动相机,只动战场和挂在一起的整套 UI)。
-// 场景层级:anchor → boardRig(本模块的 node)→ scene.world + 手牌 / HUD / 大厅 / 设置等面板。
+// 场景层级:anchor → boardRig(本模块的 node)→ scene.world + uiPivot(手牌 / HUD / 大厅 / 设置等面板,见 xr.js 的 UI 换边)。
 // node 默认是单位变换,所以不操控时一切和以前一样。
 // 手势到偏移的换算、限幅、橡皮筋都在 xr-math.js(gestureRig / limitRig),这里只管状态和施加到节点上。
 //
