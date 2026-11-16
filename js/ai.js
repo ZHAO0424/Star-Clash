@@ -266,6 +266,13 @@ export class SimpleAI {
       }
     }
 
+    // 4b. 星核荒原 · 星石:己方半场有星石、附近没有己方单位 → 在它正后方出一张最便宜的单位(走过去顺路捡,+1 法力)
+    const shard = g.meteor?.shards.find(sh => sh.z * this.dir > 0 && sh.left > 4 && !mobile.some(u => Math.hypot(u.x - sh.x, u.z - sh.z) < 2));
+    if (shard && s.mana >= 3) {
+      const pick = best(deploy.filter(x => x.card.type === 'unit' && !x.card.air && x.card.cost <= 3), c => -c.cost + (c.speed || 0));
+      if (pick) { place(pick, this.own(shard.x, g.map.DEPLOY_LINE + 0.15)); return; }
+    }
+
     // 5. 星核:不归自己,且己方在星核附近的兵力不占优 → 派耐打的单位去占
     const N = this.game.map.node;
     const near = (list) => list.filter(u => !u.building && Math.hypot(u.x - N.x, u.z - N.z) < N.r + 1.5)

@@ -7,6 +7,7 @@
 // 机制字段说明见 cards.js 顶部
 
 import { CARDS, PRESET_DECKS, validateDeck, rollUpgrades, shuffle } from './cards.js';
+import { MeteorShower } from './meteor.js';
 import { MAP, ROCK_CLEARANCE, mapForScene, wallGap, pushOutOfWalls, blockingWall, detour, inLava, onIce } from './map.js';
 import { NavGrid } from './nav.js';
 
@@ -67,6 +68,9 @@ export class Game {
   // opts.autoPick: 强化暂停时自动选择的一方(单机下是 AI 一方 'e';联机时为空,双方都由玩家选)
   constructor(playerFaction, enemyFaction, decks = {}, opts = {}) {
     this.map = mapForScene(opts.sceneId);
+    // 对局种子:随机事件(星核荒原的陨星落点)用它;服务器权威,平衡模拟替换 Math.random 后可复现
+    this.seed = (opts.seed ?? Math.floor(Math.random() * 4294967296)) >>> 0;
+    this.meteor = this.map.meteor ? new MeteorShower(this, this.map.meteor, this.seed) : null;
     this.autoPick = opts.autoPick ?? ['e'];
     this.p = makeSide(playerFaction, decks.p);
     this.e = makeSide(enemyFaction, decks.e);
@@ -481,7 +485,7 @@ export class Game {
   }
 
   // 返回实际造成的伤害(实际扣掉的生命 + 被护盾吸收的部分,不含溢出),供吸血使用
-  damage(target, amount, source, { noShare = false, burn = false } = {}) {
+  damage(target, amount, source, { noShare = false, burn = false, meteor = false } = {}) {
     if (target.dead || !(amount > 0)) return 0;
     if (target.card?.ethereal && source && Math.random() < 0.3) {
       this.events.push({ type: 'dodge', unit: target });
@@ -519,7 +523,7 @@ export class Game {
       return lost;   // 与单位一致:护盾吸收的部分不计入吸血
     }
     target.hp -= amount;
-    this.events.push({ type: 'hit', unit: target, amount: total, lost, absorbed, shieldBreak, ...(burn ? { burn: true } : {}) });
+    this.events.push({ type: 'hit', unit: target, amount: total, lost, absorbed, shieldBreak, ...(burn ? { burn: true } : {}), ...(meteor ? { meteor: true } : {}) });
     if (target.hp <= 0) this.kill(target, source);
     // 返回值只用于吸血:能量护盾隔绝吸魂,护盾吸收的部分不计入(钢铁靠护盾抗混沌的吸血续航)
     return lost;
@@ -735,6 +739,7 @@ export class Game {
     const surge = this.time >= SURGE_TIME;
     if (surge && !this.surge) { this.surge = true; this.events.push({ type: 'surge' }); }
     this.updateNode(dt);
+    this.meteor?.tick(dt);   // 星核荒原 · 陨星坠落
     for (const who of ['p', 'e']) {
       const s = this.side(who);
       const nodeBonus = !this.node.contested && this.node.owner === who ? 1 + this.map.node.bonus : 1;
@@ -831,7 +836,9 @@ export class Game {
       u.target = target;
       if (!target) continue;
       const d = this.gap(u, target);
-      if (d <= u.range && !this.wallBlocksMelee(u, target)) {
+      // 星核荒原 · 陨星:站在预警圈里的单位先躲出去(不站着打)
+      const dodging = this.meteor && !u.building && this.meteor.inWarn(u.x, u.z, u.radius + 0.08);
+      if (!dodging && d <= u.range && !this.wallBlocksMelee(u, target)) {
         if (u.cooldown <= 0) {
           u.cooldown = u.interval * (raging ? 0.5 : 1) / (u.links?.length ? 1 + (this.side(u.side).linkHaste ?? LINK_HASTE) : 1);
           this.attack(u, target);
@@ -839,7 +846,15 @@ export class Game {
       } else if (!u.building) {
         let speed = u.speed * u.auraSpeed * (st.slow > 0 ? 0.5 : 1) * (raging ? 1.3 : 1);
         // 地面单位按 A* 路径走(绕岩脊、岩石、塔,权衡裂隙减速);飞行单位直线
-        const aim = u.air ? target : this.navAim(u, target);
+        let aim = u.air ? target : this.navAim(u, target);
+        if (this.meteor) {
+          // 视野里没有敌方单位(目标是建筑)时,1.4 格内有星石就先去捡;预警圈:圈里往外躲,圈外不走进去
+          const shard = (target.kind || target.building) && this.meteor.nearShard(u);
+          if (shard) aim = shard;
+          const m = this.meteor.steer(u, aim, speed * dt);
+          if (m?.hold) continue;
+          if (m) aim = m;
+        }
         const len = dist2(u, aim) || 1;
         let dx = (aim.x - u.x) / len, dz = (aim.z - u.z) / len;
         if (!u.air) {

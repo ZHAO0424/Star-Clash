@@ -70,6 +70,7 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
     }),
     up: U ? { o: U.options[forWho].map(u => u.id), pk: !!U.picked[forWho], po: !!U.picked[other], tm: r2(U.timer) } : null,
     ev: events.map(e => serializeEvent(e, V)),
+    mt: game.meteor ? game.meteor.snapshot(V, r2) : null,   // 星核荒原 · 陨星:预警圈 / 星石(重连时也靠它恢复)
   };
 }
 
@@ -154,6 +155,8 @@ export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 
     picked: { p: snap.up.pk ? true : null, e: snap.up.po ? true : null },
     timer: snap.up.tm,
   } : null;
+
+  if (snap.mt && g.meteor) g.meteor.applySnapshot(snap.mt);
 
   // 事件还原成渲染层认识的形状
   const live = new Map(g.units.map(u => [u.id, u]));

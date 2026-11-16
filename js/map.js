@@ -122,7 +122,18 @@ const VOLCANO = {
     bridges: [],
   },
 };
-export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ? VOLCANO : MAP;
+// 星核荒原 · 陨星坠落(2026-11-16,逻辑在 meteor.js):
+//   · 第 40 秒起每 40 秒一次,一对中心对称的落点先亮预警圈 3 秒,再砸下:半径 0.9 内双方地面 + 飞行单位各 120 伤害,建筑免疫
+//     120:一发清掉一团步兵级单位(步兵 115 / 幼虫 38),坦克(360)掉三分之一;3 秒预警足够走出 0.9 的圈(最慢单位约 0.25 格/秒
+//     要 3.6 秒才能从圈心走出,所以慢速重装躲不掉,是有意的代价)
+//   · 星石 15 秒,任一方单位碰到(0.4 内)+1 法力
+//   · 落点:|z| ≤ 部署线 − 0.4、离祭坛圈 ≥ 0.5、离岩脊 / 岩石 ≥ 0.35
+const STARCORE = {
+  ...MAP,
+  meteor: { first: 40, interval: 40, warn: 3, radius: 0.9, damage: 120, shardLife: 15, pickR: 0.4, mana: 1,
+    clearDeploy: 0.4, clearNode: 0.5, clearWall: 0.35 },
+};
+export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ? VOLCANO : id === 'starcore' ? STARCORE : MAP;
 
 // 熔岩河中心线的 z
 export const lavaCenterZ = (lava, W, x) => lava.amp * Math.sin(Math.PI * x / W);
