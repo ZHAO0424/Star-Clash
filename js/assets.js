@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mapForScene } from './map.js';
+import { groundUniforms, GROUND_GLSL } from './ground-look.js';
 import { drawXRIcon, XR_VECTOR_ICONS } from './xr-icons.js';
 
 export const XR_GUIDE = [
@@ -118,6 +119,7 @@ async function buildScene(id) {
 // 贴图模式的地形着色:平地用地面贴图、陡坡和岩石用岩壁贴图(三向投影,陡坡不拉伸)、裂隙用裂隙贴图并发光;
 // 乘上 Blender 烘焙的环境光遮蔽(存在 UV 的 u 里)。贴图坐标直接用战场坐标,每 2.5 格重复一次
 function applyTerrainTextures(mat, { ground, cliff, hazard, isRock, cfg, map }) {
+  const gU = groundUniforms(cfg.id, ground);   // 地面主题着色(ground-look.js)
   for (const t of [ground, cliff, hazard]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; }
   const rifts = map.rifts.map(r => new THREE.Vector3(r.x, r.z, r.r));
   mat.vertexColors = false;
@@ -131,6 +133,7 @@ function applyTerrainTextures(mat, { ground, cliff, hazard, isRock, cfg, map }) 
     sh.uniforms.uRifts = { value: rifts };
     sh.uniforms.uGlow = { value: new THREE.Color().setRGB(...cfg.palette.hazardCore).multiplyScalar(0.09) };
     sh.uniforms.uField = { value: new THREE.Vector2(map.W, map.HALF) };
+    Object.assign(sh.uniforms, gU);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vTPos; varying vec3 vTNrm; varying float vTAO;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTPos = position; vTNrm = normal; vTAO = uv.x;');
@@ -139,13 +142,15 @@ function applyTerrainTextures(mat, { ground, cliff, hazard, isRock, cfg, map }) 
 uniform sampler2D tGround; uniform sampler2D tCliff; uniform sampler2D tHazard;
 uniform float uRock; uniform vec3 uRifts[2]; uniform vec3 uGlow; uniform vec2 uField;
 varying vec3 vTPos; varying vec3 vTNrm; varying float vTAO;
-float tHazardW; vec3 tHzGlow;`)
+float tHazardW; vec3 tHzGlow;
+${GROUND_GLSL}`)
       .replace('#include <map_fragment>', `
 vec3 tN = normalize(vTNrm);
 vec3 tw = pow(abs(tN), vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
 const float S = 0.3;
 vec3 tCl = texture2D(tCliff, vTPos.zy * S).rgb * tw.x + texture2D(tCliff, vTPos.xz * S).rgb * tw.y + texture2D(tCliff, vTPos.xy * S).rgb * tw.z;
 vec3 tGr = texture2D(tGround, vTPos.xz * S).rgb;
+if (uRock < 0.5) tGr = groundLook(tGr, vTPos.xz, vTAO, uField);
 float cliffW = max(uRock, 1.0 - smoothstep(0.62, 0.84, tN.y));
 // 战场外沿的矮墙(离战场边 0~0.42):固定用岩壁贴图,和地面区分开
 vec2 tOut = max(abs(vTPos.xz) - uField, 0.0);
@@ -165,9 +170,9 @@ vec3 tHz = texture2D(tHazard, vTPos.xz * S * 0.8).rgb;
 tHzGlow = tHz;   // 裂隙按贴图本身的颜色自发光(熔岩是橙色、冰缝是青色),不会被冲白
 vec3 tCol = mix(mix(tGr, tCl, cliffW), tHz, tHazardW) * (1.0 - 0.45 * tRim);
 diffuseColor.rgb *= tCol * (0.5 + 0.5 * vTAO);`)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += (tHzGlow * 0.45 + uGlow) * tHazardW;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += (tHzGlow * 0.45 + uGlow) * tHazardW;\nif (uRock < 0.5) totalEmissiveRadiance += groundMarks(vTPos.xz, uField) * (1.0 - tHazardW);');
   };
-  mat.customProgramCacheKey = () => 'terrainTex' + (isRock ? 'R' : 'G');
+  mat.customProgramCacheKey = () => 'terrainTex2' + (isRock ? 'R' : 'G');
   mat.needsUpdate = true;
 }
 export const ready = (async () => {
