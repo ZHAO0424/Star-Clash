@@ -7,7 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAP, wallSegments } from '../js/map.js';
 import { ARENA } from '../js/arena-dims.js';
-import { volcanoLayout, hexVertices, insideHex, leanOf, ENVELOPE_TOL, WALL_MAX_H, NEAR_END_MAX_H } from '../js/obstacle-layout.js';
+import { volcanoLayout, hexVertices, insideHex, leanOf, ENVELOPE_TOL, WALL_MAX_H, NEAR_END_MAX_H,
+  fieldHeight, terraceTop, FLOOR, TIER } from '../js/obstacle-layout.js';
 
 const L = volcanoLayout(MAP);
 const walls = L.columns.filter(c => c.layer === 'wall');
@@ -66,7 +67,9 @@ test('熔渣堆贴合圆形岩石障碍(±0.08)', () => {
 
 test('墙 / 熔渣柱高度 ≤ 0.5,近端装饰 ≤ 0.6', () => {
   for (const c of [...walls, ...rocks]) assert.ok(c.h <= WALL_MAX_H, `柱高 ${c.h}`);
-  for (const c of L.columns.filter(c => c.layer === 'edge' && c.z > MAP.HALF)) assert.ok(c.h <= NEAR_END_MAX_H);
+  for (const c of L.columns.filter(c => c.layer === 'edge' && c.z > MAP.HALF)) {
+    assert.ok(c.h + terraceTop(MAP, L.terraces, c.x, c.z) <= NEAR_END_MAX_H + 1e-9, `近端装饰离地 ${c.h}`);   // 算上所在台面
+  }
 });
 
 test('交战区零装饰:边缘装饰全在战场外、黄线内框里', () => {
@@ -86,4 +89,49 @@ test('交战区零装饰:边缘装饰全在战场外、黄线内框里', () => {
 
 test('布局是确定的(双方一致)', () => {
   assert.deepEqual(volcanoLayout(MAP), L);
+});
+
+// ── 第二轮:两侧地形(玩法区压平 + 台地)──
+test('玩法区平整:星核圆台和熔岩池浅盆以外全是 FLOOR', () => {
+  const N = MAP.node;
+  let flat = 0;
+  for (let x = -MAP.W; x <= MAP.W + 1e-9; x += 0.05) for (let z = -MAP.HALF; z <= MAP.HALF + 1e-9; z += 0.05) {
+    const y = fieldHeight(MAP, x, z);
+    assert.ok(y >= FLOOR - 0.28 - 1e-9 && y <= FLOOR + 0.21 + 1e-9, `高度越界 ${y}`);
+    const nearNode = Math.hypot(x - N.x, z - N.z) < N.r + 1.2, nearRift = MAP.rifts.some(r => Math.hypot(x - r.x, z - r.z) < r.r * 1.02);
+    if (!nearNode && !nearRift) { assert.equal(y, FLOOR, `(${x.toFixed(2)},${z.toFixed(2)}) 不平`); flat++; }
+  }
+  assert.ok(flat > 20000);
+});
+
+test('台地:全在黄线内框里、高于玩法区,战场内不算台地', () => {
+  const F = ARENA.frame;
+  for (const b of L.terraces) {
+    const [x1, z1, x2, z2] = b.rect;
+    assert.ok(x1 >= -F.x && x2 <= F.x && z1 >= -F.z && z2 <= F.z, `${b.name} 越过黄线`);
+    assert.ok(b.top > FLOOR && b.top <= TIER.plateau);
+  }
+  assert.equal(terraceTop(MAP, L.terraces, 0, 0), null);
+  assert.equal(terraceTop(MAP, L.terraces, MAP.W - 0.01, MAP.HALF - 0.01), null);
+  // 每一段战场边外侧都有台沿(没有缺口让地形 GLB 露出来)
+  for (let t = -1; t <= 1; t += 0.01) {
+    for (const [x, z] of [[MAP.W + 0.02, t * MAP.HALF], [-MAP.W - 0.02, t * MAP.HALF], [t * MAP.W, MAP.HALF + 0.02], [t * MAP.W, -MAP.HALF - 0.02]]) {
+      assert.ok(terraceTop(MAP, L.terraces, x, z) >= TIER.apron, `台沿缺口 ${x.toFixed(2)},${z.toFixed(2)}`);
+    }
+  }
+});
+
+test('熔岩河贴着台面流,只在瀑布段离开台面', () => {
+  for (const path of L.rivers) {
+    let falls = 0;
+    path.forEach(([x, z, y], i) => {
+      const top = terraceTop(MAP, L.terraces, x, z);
+      if (Math.abs(y - top) < 0.02) return;
+      // 不贴台面的点必须夹在两个高度不同的点之间(瀑布中段)
+      const prev = path[i - 1], next = path[i + 1];
+      assert.ok(prev && next && prev[2] > y && y > next[2], `熔岩河悬空 ${x},${z},${y}(台面 ${top})`);
+      falls++;
+    });
+    assert.ok(falls >= 2, '每条河至少一道瀑布(源头 + 近端)');
+  }
 });
