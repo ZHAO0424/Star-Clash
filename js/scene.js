@@ -497,7 +497,7 @@ export class BattleScene {
       const heightAt = (x, z) => this.heightAt(x, z);
       if (dressed) {
         const d = buildDressing(t.id, { map: this.map, heightAt, envMap: this.getModelEnv() });
-        this.board.add(d.group, buildProps3d(kit, d.props, heightAt, this.getModelEnv()));
+        this.board.add(d.group, buildProps3d(kit, d.props, d.surfaceAt, this.getModelEnv()));   // 配景落在台地顶上
       } else this.board.add(buildProps3d(kit, layoutProps(kit, t.id), heightAt, this.getModelEnv()));
     });
   }

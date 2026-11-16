@@ -8,7 +8,8 @@
 //   · 眼镜是光学透视的:黑 = 透明。玄武岩用中灰(不压成黑),熔光是主要的亮部
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { volcanoLayout } from './obstacle-layout.js';
+import { volcanoLayout, terraceTop, fieldHeight, FLOOR } from './obstacle-layout.js';
+import { ARENA } from './arena-dims.js';
 import { LOOK, applyEnv } from './render-look.js';
 
 // 有程序化套件的场景;这些场景不再用 props3d 的区域摆放,地形 GLB 里的 Rocks / Crystals 网格也隐藏(套件替代)
@@ -95,15 +96,16 @@ float lNoise(vec2 p) {
 }
 float lFbm(vec2 p) { return lNoise(p) * 0.55 + lNoise(p * 2.1 + 3.3) * 0.3 + lNoise(p * 4.3 + 7.7) * 0.15; }
 `;
+// 控制点是 [x, z, y](台地上的河 + 落下台阶的瀑布);横向用切线的水平分量,瀑布段也不会把带子压成一条线
 function riverMesh(paths, width, uTime) {
   const geos = paths.map(path => {
-    const curve = new THREE.CatmullRomCurve3(path.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
-    const N = 260, len = curve.getLength(), pos = [], uv = [], idx = [];
+    const curve = new THREE.CatmullRomCurve3(path.map(([x, z, y]) => new THREE.Vector3(x, y, z)), false, 'centripetal');
+    const N = 320, len = curve.getLength(), pos = [], uv = [], idx = [];
     for (let i = 0; i <= N; i++) {
-      const t = i / N, p = curve.getPointAt(t), d = curve.getTangentAt(t);
-      const taper = Math.min(1, t / 0.06) * 0.85 + 0.15, w = width / 2 * taper * (0.85 + 0.15 * Math.sin(t * 37.0));
+      const t = i / N, p = curve.getPointAt(t), d = curve.getTangentAt(t), hl = Math.hypot(d.x, d.z) || 1;
+      const taper = Math.min(1, t / 0.02, (1 - t) / 0.03) * 0.85 + 0.15, w = width / 2 * taper * (0.85 + 0.15 * Math.sin(t * 37.0));
       for (const sd of [-1, 1]) {
-        pos.push(p.x - d.z * w * sd, -0.032, p.z + d.x * w * sd);
+        pos.push(p.x - d.z / hl * w * sd, p.y, p.z + d.x / hl * w * sd);
         uv.push(t * len / width, sd < 0 ? 0 : 1);
       }
       if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
@@ -145,8 +147,9 @@ function railsMesh(rails, envMap) {
   const boxes = [];
   for (const r of rails) {
     const len = r.z2 - r.z1, cz = (r.z1 + r.z2) / 2;
-    for (const sd of [-1, 1]) boxes.push({ x: r.x + sd * 0.065, z: cz, sx: 0.022, sy: 0.03, sz: len, y: -0.02, metal: true });
-    for (let z = r.z1 + 0.05; z < r.z2; z += 0.13) boxes.push({ x: r.x, z, sx: 0.2, sy: 0.022, sz: 0.045, y: -0.045, metal: false });
+    const y0 = r.y ?? 0;   // 轨道所在台面的高度
+    for (const sd of [-1, 1]) boxes.push({ x: r.x + sd * 0.065, z: cz, sx: 0.022, sy: 0.03, sz: len, y: y0 + 0.02, metal: true });
+    for (let z = r.z1 + 0.05; z < r.z2; z += 0.13) boxes.push({ x: r.x, z, sx: 0.2, sy: 0.022, sz: 0.045, y: y0 + 0.004, metal: false });
   }
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.35 });
   applyEnv(mat, envMap, LOOK.propEnvIntensity);
@@ -193,7 +196,7 @@ function forgeGroup(f, heightAt, envMap, uTime) {
   metal.push(at(new THREE.TorusGeometry(0.27, 0.045, 4, 10, Math.PI), 0, 0.52, 0.5));
   glow.push(at(new THREE.CircleGeometry(0.26, 10, 0, Math.PI), 0, 0.52, 0.485));
   glow.push(at(new THREE.PlaneGeometry(0.52, 0.28), 0, 0.38, 0.485));
-  glow.push(at(new THREE.PlaneGeometry(0.34, 0.6).rotateX(-Math.PI / 2), 0, 0.21, 0.78));
+  glow.push(at(new THREE.PlaneGeometry(0.34, 0.3).rotateX(-Math.PI / 2), 0, 0.21, 0.63));   // 只到台基前沿,后面接熔岩瀑布
   // 炉身熔缝:两圈发光细环 + 炉罩下沿一圈,炉子"烧着"的读感
   for (const [y, r] of [[0.66, 0.555], [1.1, 0.462]]) glow.push(at(new THREE.TorusGeometry(r, 0.014, 3, 8).rotateX(Math.PI / 2), 0, y, -0.08, Math.PI / 8));
   const stoneMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.4, 0.34, 0.31, THREE.SRGBColorSpace), roughness: 0.9, flatShading: true });
@@ -208,9 +211,106 @@ function forgeGroup(f, heightAt, envMap, uTime) {
     g.add(mesh);
   }
   g.add(smokePoints([[-0.86, 1.8, -0.12], [0.86, 1.8, -0.12], [0, 1.6, -0.08]], uTime));
-  g.position.set(f.x, Math.min(heightAt(f.x, f.z), -0.05), f.z);
+  g.position.set(f.x, heightAt(f.x, f.z), f.z);
+  g.rotation.y = f.rot ?? 0;
   g.scale.setScalar(f.scale ?? 1);
   return g;
+}
+
+// ── 台地:倒角平顶 + 崖壁(第二轮:两侧地形)──
+//   每块是一个倒角矩形挤出(台沿带一个战场大小的洞),从台面(ARENA.top)下一点一直到台顶;全部合并成 1 个网格。
+//   不用贴图:着色器按高度画层状岩纹(深浅交替的岩层 + 细岩缝)、按崖面水平坐标画竖向柱节理(玄武岩六棱柱的侧面),
+//   崖脚压暗做接地;台顶是低饱和的暖灰,比玩法区的红地面安静
+const TERRACE_GLSL = /* glsl */`
+float tHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
+float tNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(tHash(i), tHash(i + vec2(1, 0)), u.x), mix(tHash(i + vec2(0, 1)), tHash(i + vec2(1, 1)), u.x), u.y);
+}`;
+function chamferShape(x1, z1, x2, z2, ch, hole = false) {
+  const p = [[x1 + ch, z1], [x2 - ch, z1], [x2, z1 + ch], [x2, z2 - ch], [x2 - ch, z2], [x1 + ch, z2], [x1, z2 - ch], [x1, z1 + ch]]
+    .map(([x, z]) => new THREE.Vector2(x, -z));   // 形状 y = −z(挤出后绕 X 转 −90°,形状平面落到 xz)
+  if (hole) p.reverse();
+  return p;
+}
+function terraceMesh(blocks, envMap) {
+  const BEV = 0.035, base = ARENA.top - 0.004;
+  const geos = blocks.map(b => {
+    const [x1, z1, x2, z2] = b.rect;
+    const shape = new THREE.Shape(chamferShape(x1 + BEV, z1 + BEV, x2 - BEV, z2 - BEV, b.chamfer));
+    if (b.hole) {   // 洞往外让出倒角宽度,台沿内缘正好落在战场边上
+      const [h1, k1, h2, k2] = b.hole;
+      shape.holes.push(new THREE.Path(chamferShape(h1 - BEV, k1 - BEV, h2 + BEV, k2 + BEV, 0.02, true)));
+    }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: b.top - base - 2 * BEV, bevelEnabled: true, bevelThickness: BEV, bevelSize: BEV, bevelSegments: 2, curveSegments: 1 });
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(0, base + BEV, 0);
+    return geo;
+  });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.02 });
+  applyEnv(mat, envMap, LOOK.propEnvIntensity);
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uBase = { value: base };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTerP; varying vec3 vTerN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerP = position; vTerN = normal;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uBase; varying vec3 vTerP; varying vec3 vTerN;\n${TERRACE_GLSL}`)
+      .replace('#include <map_fragment>', `
+vec3 tn = normalize(vTerN);
+float isTop = smoothstep(0.55, 0.9, tn.y);
+// 台顶:玄武岩柱顶铺面(六边形格,和墙柱同一母题)+ 低频色块;越高的台越亮一点,台阶层次读得出来
+float tp = tNoise(vTerP.xz * 1.6);
+vec2 hp = vTerP.xz / 0.17, hs = vec2(1.0, 1.7320508);   // 两套错位矩形格取最近格心 = 六边形格
+vec2 ha = mod(hp, hs) - hs * 0.5, hb = mod(hp - hs * 0.5, hs) - hs * 0.5;
+vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb;
+vec2 hid = hp - hl;
+vec2 hab = abs(hl);
+float hEdge = max(dot(hab, vec2(0.5, 0.8660254)), hab.x);   // 到格心的六边形距离(边 = 0.5)
+float seam = smoothstep(0.42, 0.5, hEdge);
+float cellK = 0.88 + 0.2 * tHash(floor(hid * 2.0 + 0.5) + 3.7);
+float tierK = 0.92 + 0.3 * smoothstep(0.1, 0.56, vTerP.y);
+vec3 topC = vec3(0.4, 0.35, 0.32) * (0.86 + 0.2 * tp) * cellK * tierK * (1.0 - 0.3 * seam);
+// 崖壁:按高度分层(层厚 0.075,边界随水平位置轻微起伏)+ 层间细缝 + 竖向柱节理
+float yy = vTerP.y - uBase + 0.018 * tNoise(vTerP.xz * 2.3);
+float layer = floor(yy / 0.075), lf = fract(yy / 0.075);
+float along = abs(tn.x) > abs(tn.z) ? vTerP.z : vTerP.x;
+float joint = abs(fract(along / 0.13 + tHash(vec2(layer, 1.7)) * 0.5) - 0.5) * 2.0;
+vec3 sideC = vec3(0.33, 0.28, 0.26) * (0.84 + 0.24 * tHash(vec2(layer, 4.1)));
+sideC *= 1.0 - 0.32 * smoothstep(0.12, 0.0, lf) - 0.16 * smoothstep(0.9, 1.0, joint);
+sideC *= 0.62 + 0.38 * smoothstep(0.0, 0.3, vTerP.y - uBase);   // 崖脚压暗(接地)
+diffuseColor.rgb *= pow(mix(sideC, topC, isTop), vec3(2.2));   // 上面按 sRGB 调色,这里转线性`);
+  };
+  mat.customProgramCacheKey = () => 'terrace1';
+  const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  mesh.name = 'terraces';
+  return mesh;
+}
+
+// 地形 GLB + 高度图的整形(有套件的场景,加载时做一次;结果在缓存里共享):
+//   玩法区 = layout 给的 fieldHeight(平地 + 星核圆台 + 熔岩池浅盆);战场外 = 压到台沿下面(台地网格盖住)
+export function shapeTerrain(sceneId, root, hm, map) {
+  if (!DRESSINGS[sceneId]) return;
+  const F = ARENA.frame, under = FLOOR - 0.06;
+  const inField = (x, z) => Math.abs(x) <= map.W && Math.abs(z) <= map.HALF;
+  root.traverse(o => {
+    if (!o.isMesh || !/^Island/.test(o.name)) return;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (inField(x, z)) pos.setY(i, fieldHeight(map, x, z));
+      else if (y > under && Math.abs(x) <= F.x + 0.2 && Math.abs(z) <= F.z + 0.2) pos.setY(i, under);
+    }
+    pos.needsUpdate = true;
+    o.geometry.computeVertexNormals();
+    o.geometry.computeBoundingBox();
+    o.geometry.computeBoundingSphere();
+  });
+  for (let j = 0; j < hm.nz; j++) for (let i = 0; i < hm.nx; i++) {
+    const x = hm.x0 + i * hm.step, z = hm.z0 + j * hm.step;
+    hm.data[j * hm.nx + i] = inField(x, z) ? fieldHeight(map, x, z) : FLOOR;
+  }
 }
 
 // 烟:每个烟口 14 个粒子,位置 / 大小 / 透明度全在着色器里按时间算(不占 CPU)
@@ -243,15 +343,19 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
   return pts;
 }
 
-// 入口:返回 { group(柱子 / 熔岩河 / 轨道 / 锻炉), props(交给 props3d.buildProps 的 Tripo 配景摆放列表) }
+// 入口:返回 { group(台地 / 柱子 / 熔岩河 / 轨道 / 锻炉), props(交给 props3d.buildProps 的 Tripo 配景摆放列表),
+//   surfaceAt(战场内 = 地形高度,战场外 = 台地顶高;配景按它落地)}
 export function buildDressing(sceneId, { map, heightAt, envMap }) {
   const layout = DRESSINGS[sceneId](map);
+  const blocks = layout.terraces ?? [];
+  const surfaceAt = (x, z) => terraceTop(map, blocks, x, z) ?? heightAt(x, z);
   const group = new THREE.Group();
   group.name = 'obstacleKit';
   const uTime = timeUniform(group);
-  group.add(columnsMesh(layout.columns, heightAt, envMap, uTime));
+  if (blocks.length) group.add(terraceMesh(blocks, envMap));
+  group.add(columnsMesh(layout.columns, surfaceAt, envMap, uTime));
   group.add(riverMesh(layout.rivers, layout.riverWidth, uTime));
   group.add(railsMesh(layout.rails, envMap));
-  group.add(forgeGroup(layout.forge, heightAt, envMap, uTime));
-  return { group, props: layout.props };
+  group.add(forgeGroup(layout.forge, surfaceAt, envMap, uTime));
+  return { group, props: layout.props, surfaceAt };
 }

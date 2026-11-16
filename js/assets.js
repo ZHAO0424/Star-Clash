@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mapForScene } from './map.js';
+import { shapeTerrain } from './obstacle-kit.js';
 import { groundUniforms, GROUND_GLSL } from './ground-look.js';
 import { drawXRIcon, XR_VECTOR_ICONS } from './xr-icons.js';
 
@@ -92,6 +93,7 @@ async function buildScene(id) {
     ]);
     const textured = !!(ground && cliff);
     const map = mapForScene(id);
+    shapeTerrain(id, gltf.scene, hm, map);   // 有程序化套件的场景:玩法区压平、外圈压到台地下面(obstacle-kit.js)
     const { SCENES } = await import('./scenes.js');
     const cfg = SCENES.find(s => s.id === id);
     gltf.scene.traverse(o => {

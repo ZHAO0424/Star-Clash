@@ -100,68 +100,146 @@ function crustColumns(rf, R, out) {
   }
 }
 
-// ── L1:边缘 ──
-// 熔岩河:从锻炉两侧流出,沿远端台面边缘拐到两条长边,一直流到近端。只给控制点,渲染时再做平滑
-export const FORGE = { x: 0, z: -8.0, scale: 1.3 };
-export function riverPaths() {
-  const right = [[0.95, -7.72], [2.4, -7.86], [3.9, -7.68], [5.15, -7.5], [5.8, -6.9], [5.88, -5.2], [5.82, -2.6],
-    [5.9, 0], [5.84, 2.6], [5.9, 5.2], [5.86, 8.3]];
-  return [right, right.map(([x, z]) => [-x, z])];
+// ── 地形:玩法区压平 + 外圈台地(第二轮:两侧地形)──
+// 地形 GLB 的 Island 网格在战场外圈(战场边 → 黄线)是 build_terrain.py 按 relief 风格生成的起伏(熔岩 = 'cones',
+// 最高 1.68),再被外框裁剪面切断 → 两条长边一排排随意鼓包。熔岩图改成:
+//   · 玩法区(|x| ≤ W、|z| ≤ HALF)= 平地 FLOOR,只保留两个有意的形体:星核圆台、熔岩池浅盆(都是平滑解析形状)
+//   · 战场外 = 程序化玄武岩台地,三级高差、每级是平顶 + 倒角崖壁:
+//       台沿(ledge)环绕战场一圈,低;长边外侧是石台(bench),在近端前一级台阶收住;远端是最高的锻炉台(plateau)
+//   · Island 网格战场外的部分整体压到台沿下面(被台地盖住),heightAt 的高度图同步压平
+export const FLOOR = 0.03;
+export const TIER = { apron: 0.05, ledge: 0.12, step: 0.22, bench: 0.34, plateau: 0.54 };
+const RIM_INSET = 0.05;   // 台地外缘离黄线内缩一点:黄线贴着崖脚露出来,像模型摆在托盘上
+const BENCH_X = 5.62;     // 长边石台内缘(台沿 = 战场边 → 这里)
+const PLATEAU_Z = 7.45;   // 远端锻炉台前缘(|z|)
+const BENCH_END = 5.4;    // 石台在近端这里降一级(台阶)
+const STEP_END = 6.5;     // 台阶再降回台沿
+const APRON_Z = 7.6;      // 近端(靠镜头)台沿再降一级成矮台(apron),熔岩河在这里最后落一次
+
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// 玩法区地面高度:平地 + 星核圆台(顶 ≈ FLOOR+0.21)+ 熔岩池浅盆(底 ≈ FLOOR−0.28)
+export function fieldHeight(map, x, z) {
+  const N = map.node;
+  let y = FLOOR + 0.21 * (1 - smooth(N.r + 0.25, N.r + 1.2, Math.hypot(x - N.x, z - N.z)));
+  for (const r of map.rifts) y -= 0.28 * (1 - smooth(r.r * 0.3, r.r * 1.02, Math.hypot(x - r.x, z - r.z)));
+  return y;
 }
+
+// 台地块:{ name, top, rect: [x1, z1, x2, z2], chamfer(四角倒角), hole?: rect(挖空,只有台沿用)}
+export function terraceBlocks(map) {
+  const F = ARENA.frame, X = F.x - RIM_INSET, Z = F.z - RIM_INSET;
+  const blocks = [{ name: 'ledge', top: TIER.ledge, rect: [-X, -Z, X, APRON_Z], chamfer: 0.45, hole: [-map.W, -map.HALF, map.W, map.HALF] },
+    { name: 'apron', top: TIER.apron, rect: [-X, APRON_Z - 0.4, X, Z], chamfer: 0.45 }];
+  for (const sx of [-1, 1]) {
+    const [a, b] = sx > 0 ? [BENCH_X, X] : [-X, -BENCH_X];
+    blocks.push({ name: 'bench', top: TIER.bench, rect: [a, -Z, b, BENCH_END], chamfer: 0.14 });
+    const [sa, sb] = sx > 0 ? [a + 0.12, b] : [a, b - 0.12];   // 台阶内缘比石台再退一点,读成一级一级往下
+    blocks.push({ name: 'step', top: TIER.step, rect: [sa, BENCH_END - 0.2, sb, STEP_END], chamfer: 0.14 });
+  }
+  blocks.push({ name: 'plateau', top: TIER.plateau, rect: [-X, -Z, X, -PLATEAU_Z], chamfer: 0.3 });
+  return blocks;
+}
+
+// 战场外某点的台地顶高;在战场内返回 null(交给地形高度图)
+export function terraceTop(map, blocks, x, z) {
+  if (Math.abs(x) <= map.W && Math.abs(z) <= map.HALF) return null;
+  let top = FLOOR;
+  for (const b of blocks) {
+    const [x1, z1, x2, z2] = b.rect;
+    if (x >= x1 && x <= x2 && z >= z1 && z <= z2) top = Math.max(top, b.top);
+  }
+  return top;
+}
+
+// ── L1:边缘 ──
+// 锻炉:左长边石台靠远端的一段,炉口朝战场(上一轮在远端正中,桌面视角下被顶部 HUD 和敌方核心挡住;
+//   放到远端台地左后角也还是顶到 HUD,所以落在石台上、往镜头方向挪,桌面默认视角能看到完整轮廓)
+export const FORGE = { x: -5.98, z: -5.55, scale: 0.68, rot: Math.PI / 2 };
 const RIVER_W = 0.3;
+const RIVER_X = 5.27;     // 长边熔岩河中心线(台沿上,战场边与石台之间;离战场边 ≥ 0.3 + 半河宽)
+// 熔岩河:三维控制点 [x, z, y],渲染时平滑。
+//   左:锻炉炉口 → 越过石台边落下(熔岩瀑布)→ 左长边台沿 → 近端
+//   右:远端右角火山锥脚下 → 越过锻炉台前缘落下(熔岩瀑布)→ 右长边台沿 → 近端
+//   瀑布 = 唇口(台顶)+ 外挑一点 + 崖脚(台沿),几个点挨得很近,平滑后仍是一道陡帘
+export function riverPaths() {
+  const B = TIER.bench + 0.012, P = TIER.plateau + 0.012, L = TIER.ledge + 0.008, fz = -PLATEAU_Z;
+  const A = TIER.apron + 0.008;
+  // 长边 → 近端:在台沿尽头再落一小级到矮台(apron)上收尾
+  const side = (sx, z0) => [[sx * RIVER_X, z0, L], [sx * RIVER_X, -3.2, L], [sx * RIVER_X, 0, L], [sx * RIVER_X, 3.2, L], [sx * RIVER_X, 6.4, L],
+    [sx * RIVER_X, APRON_Z - 0.08, L], [sx * RIVER_X, APRON_Z + 0.02, L - 0.03], [sx * RIVER_X, APRON_Z + 0.1, A], [sx * RIVER_X, 8.3, A]];
+  const fx = -BENCH_X, fzf = FORGE.z;
+  const left = [[fx - 0.12, fzf, B], [fx - 0.02, fzf + 0.01, B], [fx + 0.1, fzf + 0.02, B - 0.11], [fx + 0.18, fzf + 0.05, L],
+    [-RIVER_X, fzf + 0.4, L], ...side(-1, -4.6)];
+  const right = [[5.42, -7.82, P], [5.3, -7.62, P], [5.22, fz - 0.06, P], [5.21, fz + 0.04, P - 0.12], [5.22, fz + 0.12, L],
+    [RIVER_X, fz + 0.45, L], ...side(1, -6.3)];
+  return [left, right];
+}
 
 function edgeLayout(map, R, cols, props, rails) {
-  const W = map.W, H = map.HALF, F = ARENA.frame;
+  const H = map.HALF, F = ARENA.frame, X = F.x - RIM_INSET;
   const col = (x, z, Rr, h, heat = 0) => cols.push({ x, z, R: Rr, h, rot: R() * Math.PI, tilt: [(R() - 0.5) * 0.12, (R() - 0.5) * 0.12], heat, layer: 'edge' });
-  // 河岸岩壳:沿两条河两侧密排扁岩板
+  // 河岸岩壳:沿两条河两侧密排扁岩板(瀑布段跳过)
   for (const path of riverPaths()) {
     for (let i = 0; i < path.length - 1; i++) {
-      const [x1, z1] = path[i], [x2, z2] = path[i + 1], L = Math.hypot(x2 - x1, z2 - z1), nx = -(z2 - z1) / L, nz = (x2 - x1) / L;
+      const [x1, z1, y1] = path[i], [x2, z2, y2] = path[i + 1], L = Math.hypot(x2 - x1, z2 - z1), nx = -(z2 - z1) / L, nz = (x2 - x1) / L;
+      if (Math.abs(y2 - y1) > 0.01 || Math.abs(z1 - APRON_Z) < 0.2) continue;
       for (let t = 0; t < L; t += 0.13) for (const sd of [-1, 1]) {
-        const off = RIVER_W / 2 + 0.05 + R() * 0.06, x = x1 + (x2 - x1) * t / L + nx * off * sd, z = z1 + (z2 - z1) * t / L + nz * off * sd;
-        if (Math.abs(x) > F.x - 0.1 || Math.abs(z) > F.z - 0.1) continue;
-        col(x, z, 0.06 + R() * 0.04, 0.03 + R() * 0.04, R() < 0.3 ? 0.5 : 0);
+        const off = RIVER_W / 2 + 0.05 + R() * 0.05, x = x1 + (x2 - x1) * t / L + nx * off * sd, z = z1 + (z2 - z1) * t / L + nz * off * sd;
+        if (Math.abs(x) > X - 0.1 || Math.abs(z) > F.z - 0.15) continue;
+        if (Math.abs(x) > BENCH_X - 0.06 && Math.abs(x) < BENCH_X + 0.06) continue;   // 不压在石台崖边上
+        if (Math.abs(x) <= map.W + 0.3 && Math.abs(z) <= H + 0.3) continue;            // 拐角内侧:离战场太近
+        col(x, z, 0.06 + R() * 0.035, 0.025 + R() * 0.035, R() < 0.3 ? 0.5 : 0);
       }
     }
   }
-  // 长边外沿(河外侧)石柱群:每 0.55 一簇 2–4 根,高低错落
-  for (const sx of [-1, 1]) for (let z = -6.6; z <= 8.2; z += 0.5 + R() * 0.5) {
-    if (R() < 0.2) continue;   // 留几处空当,不排成栅栏
-    const n = 1 + Math.floor(R() * 4), cx = sx * (6.1 + R() * 0.04), cz = z + (R() - 0.5) * 0.25;
-    const cap = z > H ? NEAR_END_MAX_H : 0.75;
-    for (let i = 0; i < n; i++) col(cx + (R() - 0.5) * 0.16, cz + (R() - 0.5) * 0.3, 0.07 + R() * 0.04, cap * (0.35 + R() * 0.65), R() < 0.15 ? 0.6 : 0);
+  // 瀑布落点:崖脚一小圈发红的岩壳(溅落池)
+  const splash = [[-5.38, FORGE.z - 0.22], [-5.45, FORGE.z - 0.38], [-5.15, FORGE.z - 0.3],
+    [4.95, -7.32], [5.05, -7.4], [5.48, -7.34], [5.52, -7.18]];
+  for (const [x, z] of splash) col(x, z, 0.055 + R() * 0.02, 0.025 + R() * 0.02, 0.8);
+  // 长边石台外沿石柱群:簇状、留空当,高度随石台走(石台在近端前降级,柱子也跟着矮);锻炉那段让开
+  for (const sx of [-1, 1]) for (let z = -6.9; z <= BENCH_END - 0.3; z += 0.55 + R() * 0.5) {
+    if (R() < 0.25) continue;   // 留几处空当,不排成栅栏
+    if (sx < 0 && Math.abs(z - FORGE.z) < 1.15) continue;
+    const n = 1 + Math.floor(R() * 3), cx = sx * (X - 0.2), cz = z + (R() - 0.5) * 0.25;
+    for (let i = 0; i < n; i++) col(cx + (R() - 0.5) * 0.12, cz + (R() - 0.5) * 0.28, 0.065 + R() * 0.035, 0.12 + R() * 0.32, R() < 0.15 ? 0.6 : 0);
   }
-  // 近端(+Z,靠镜头)横带:低矮石柱群 + 岩板,限高 NEAR_END_MAX_H
+  // 近端(+Z,靠镜头)矮台:低矮岩板 + 偶尔一根矮柱;离地总高(矮台 + 柱)≤ NEAR_END_MAX_H
   for (let x = -5.6; x <= 5.6; x += 0.5) {
     const cz = H + 1.0 + R() * 0.55, n = 1 + Math.floor(R() * 2), tall = R() < 0.3;
-    for (let i = 0; i < n; i++) col(x + (R() - 0.5) * 0.3, cz + (R() - 0.5) * 0.3, 0.07 + R() * 0.04, NEAR_END_MAX_H * (tall ? 0.45 + R() * 0.4 : 0.06 + R() * 0.1), R() < 0.2 ? 0.6 : 0);
+    const cap = NEAR_END_MAX_H - TIER.apron;
+    for (let i = 0; i < n; i++) {
+      const px = x + (R() - 0.5) * 0.3, pz = cz + (R() - 0.5) * 0.3, h = cap * (tall ? 0.45 + R() * 0.4 : 0.06 + R() * 0.1), heat = R() < 0.2 ? 0.6 : 0;
+      if (Math.abs(Math.abs(px) - RIVER_X) > 0.28) col(px, pz, 0.07 + R() * 0.04, h, heat);   // 让开熔岩河的末段
+    }
   }
-  // 远端(-Z)锻炉两侧:河外侧的高石柱群,把锻炉"框"起来
-  for (const sx of [-1, 1]) for (let x = 2.0; x <= 5.0; x += 0.4 + R() * 0.4) {
-    if (R() < 0.25) continue;
-    const cz = -(F.z - 0.3) + R() * 0.08, n = 1 + Math.floor(R() * 3), near = 1 - (x - 2.0) / 3.0;   // 越靠锻炉越高
-    for (let i = 0; i < n; i++) col(sx * (x + (R() - 0.5) * 0.2), cz + (R() - 0.5) * 0.12, 0.08 + R() * 0.04, 0.25 + R() * 0.3 + near * 0.35, R() < 0.2 ? 0.7 : 0);
+  // 远端锻炉台后沿:几簇高低错落的石柱群(簇间留大空当,不排成栅栏;右角让给火山锥),当舞台背板
+  for (let x = -5.7; x <= 4.2; x += 0.9 + R() * 0.7) {
+    if (R() < 0.3) continue;
+    const n = 2 + Math.floor(R() * 3), cz = -(F.z - 0.4) + R() * 0.08, peak = 0.22 + R() * 0.32;
+    for (let i = 0; i < n; i++) col(x + (R() - 0.5) * 0.36, cz + (R() - 0.5) * 0.22, 0.075 + R() * 0.04, peak * (0.45 + 0.55 * R()), R() < 0.2 ? 0.7 : 0);
   }
-  // 矿车轨道:长边中段、路缘石和河之间
-  for (const sx of [-1, 1]) rails.push({ x: sx * 5.42, z1: -2.3, z2: 2.3 });
-  // Tripo 配景(按 footprint 入库):铁砧 / 火盆 / 矿车 / 远端角上一座小火山锥
+  // 矿车轨道:长边石台中段
+  const railX = (BENCH_X + X) / 2 - 0.06;
+  for (const sx of [-1, 1]) rails.push({ x: sx * railX, z1: -2.3, z2: 2.3, y: TIER.bench });
+  // Tripo 配景(按 footprint 入库):铁砧 / 火盆 / 矿车在石台和锻炉台上;远端右角一座小火山锥
   const put = (name, x, z, rot, k = 1) => props.push({ name, x, z, rot, k });
-  put('minecart', 5.42, -1.1, Math.PI / 2); put('minecart', 5.42, 1.3, Math.PI / 2); put('minecart', -5.42, 0.3, Math.PI / 2);
-  put('anvil', 1.45, -7.32, 0.3); put('anvil', -1.5, -7.3, -0.2); put('anvil', 5.4, -3.6, 1.2); put('anvil', -5.4, 3.4, 2.0);
-  put('brazier', 0.78, -7.28, 0, 0.75); put('brazier', -0.78, -7.28, 0, 0.75);
-  for (const z of [-5.6, -3.0, 3.0, 5.6]) for (const sx of [-1, 1]) put('brazier', sx * 5.33, z + sx * 0.2, R() * Math.PI, 0.7);
+  put('minecart', railX, -1.1, Math.PI / 2); put('minecart', railX, 1.3, Math.PI / 2); put('minecart', -railX, 0.3, Math.PI / 2);
+  put('anvil', -railX, -4.15, 0.3); put('anvil', 2.6, -7.75, -0.2); put('anvil', railX, -3.7, 1.2); put('anvil', -railX, 3.5, 2.0);
+  put('brazier', 1.25, -7.68, 0, 0.75); put('brazier', -1.25, -7.68, 0, 0.75);
+  for (const [x, z] of [[railX, -5.4], [railX, -2.8], [-railX, -3.2], [railX, 3.2], [-railX, 2.8]]) put('brazier', x, z, R() * Math.PI, 0.7);
   put('brazier', 3.2, H + 1.0, 0, 0.6); put('brazier', -3.2, H + 1.0, 0, 0.6);
-  put('cone', 5.35, -8.0, 0.6, 0.42);
+  put('cone', 5.45, -8.1, 0.6, 0.42);
 }
 
-// 全部布局:{ columns, props, rails, rivers, forge }
+// 全部布局:{ columns, props, rails, rivers, forge, terraces }
 export function volcanoLayout(map) {
   const R = rng('volcano-kit'), columns = [], props = [], rails = [];
   for (const w of map.walls) wallColumns(w, R, columns);
   for (const o of map.obstacles) rockColumns(o, R, columns);
   for (const rf of map.rifts) crustColumns(rf, R, columns);
   edgeLayout(map, R, columns, props, rails);
-  return { columns: dedupe(columns), props, rails, rivers: riverPaths(), riverWidth: RIVER_W, forge: FORGE };
+  return { columns: dedupe(columns), props, rails, rivers: riverPaths(), riverWidth: RIVER_W, forge: FORGE, terraces: terraceBlocks(map) };
 }
 
 // 去重:圆心距 < 0.35R(几乎重合)的墙柱只留先放的
