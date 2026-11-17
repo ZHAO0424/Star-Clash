@@ -170,7 +170,7 @@ const VOLCANO = {
   rifts: [],
   lava: {
     amp: 0.25, half: 0.42,
-    dps: 8, tick: 0.5, ember: 1.0,
+    dps: 6, tick: 0.5, ember: 1.0,   // 8 → 6(2026-11-17:分路后侧路单位都蹚河,混沌 43% → 45.5%)
     bridges: [],
   },
 };

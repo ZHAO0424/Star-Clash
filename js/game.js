@@ -15,6 +15,11 @@ export const FIELD_W = MAP.W;           // 半宽
 export const FIELD_HALF = MAP.HALF;     // 半长
 export const DEPLOY_LINE = MAP.DEPLOY_LINE;
 export const SIGHT = 3.5;               // 单位视野半径
+// 分路(用户规则 2026-11-17):单位按出生位置归到左 / 中 / 右一路,没发现敌人时只打本路的塔(本路塔都倒了才打核心),
+//   不会因为中路前哨炮(x ±1.1)路程更近就从侧路斜穿祭坛。|x| > LANE_X 是侧路(岩脊在 |x| ≈ 1.9–2.3)
+export const LANE_X = 2.0;
+const laneOf = x => (x < -LANE_X ? -1 : x > LANE_X ? 1 : 0);
+const inLane = (lane, s) => s.kind === 'base' || (s.kind === 'pylon' ? Math.sign(s.x) === lane : s.kind === 'outpost' ? lane === 0 : true);
 export const DISCARD_COST = 1;
 export const SURGE_TIME = 120;          // 开局 2 分钟后进入能量涌潮:法力恢复 ×2(打破僵局)
 export const REGULATION = 180;          // 常规时间 3 分钟:结束时摧毁副塔多的一方获胜
@@ -666,10 +671,11 @@ export class Game {
       }
       return best;
     }
+    u.lane ??= laneOf(u.x);
     if (u.card.siege) {
       let best = null, bd = Infinity;
       for (const o of [...this.structures, ...this.units.filter(x => x.building)]) {
-        if (o.dead || o.side === u.side) continue;
+        if (o.dead || o.side === u.side || (o.kind && !inLane(u.lane, o))) continue;
         const d = this.pathGap(u, o);
         if (d < bd) { bd = d; best = o; }
       }
@@ -686,7 +692,7 @@ export class Game {
     if (best) return best;
     let bs = null, bsd = Infinity;
     for (const s of this.structures) {
-      if (s.dead || s.side === u.side) continue;
+      if (s.dead || s.side === u.side || !inLane(u.lane, s)) continue;   // 只打本路的塔(核心永远算本路)
       const d = this.pathGap(u, s);
       if (d < bsd) { bsd = d; bs = s; }
     }
