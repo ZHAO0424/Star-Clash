@@ -33,7 +33,7 @@ let paused = false;   // 本地人机对局暂停:loop 里跳过 session.tick(�
 
 const game = () => session?.game;
 // 调试:地址带 ?debug 时把场景 / 对局挂到 window 上,方便在控制台里看特效、模型
-if (new URLSearchParams(location.search).has('debug')) window.__bg = { get scene() { return scene; }, get game() { return game(); }, get session() { return session; } };
+if (new URLSearchParams(location.search).has('debug')) window.__bg = { get scene() { return scene; }, get game() { return game(); }, get session() { return session; }, get xr() { return xr; } };
 const SCREENS = ['#title-screen', '#home-screen', '#select-screen', '#deck-screen', '#online-screen', '#codex-screen', '#settings-screen'];
 let activeScreen = '#front-loading';
 function showScreen(sel) {
