@@ -104,7 +104,7 @@ const GLACIER = stretchLayout({
 //   锯齿边、宽窄不一、两头收尖、主缝断成三截(边路 / 中路 / 边路)、主缝上岔出细支缝。整体仍斜插过三条进攻路线,
 //   一方 6 条(3 主 + 3 支),和另一方的 6 条互为绕星核旋转 180° 的镜像(p / e 公平),在两侧边路交错成网。
 //   · 「露出的部分」= 裂隙在地面上露出的冰面:每条裂隙是一个多边形(左沿 + 右沿),判定(onIce)和渲染用同一份顶点
-//   · 地面单位在冰面上移速 ×ice.slow(0.75),飞行不受影响;总面积约 13(第五轮冰路 13.3,±20% 内)
+//   · 地面单位在冰面上移速 ×ice.slow(0.85),飞行不受影响;总面积约 13(第五轮冰路 13.3,±20% 内)
 //   · 冰面不进部署区(|z| + 单位半径 < 部署线)、不压祭坛占领圈(冰面顶点离圈 ≥ 0.15)
 //   · 冰面只是代价、不参与寻路(和熔岩一样):nav 不读它,单位转向 / AI 出兵也不看它——单位照常走,不会刻意找冰少的路
 // 脊线控制点 [x, z, 左半宽, 右半宽](左 = 沿脊线前进方向的左手边);半宽 0 = 尖头
@@ -151,7 +151,7 @@ function crevasse(ctrl, seed) {
 const crevassesA = crevasseSpines.map((c, i) => crevasse(c, i + 1));
 const rot180 = pts => pts.map(([x, z]) => [-x, -z]);
 GLACIER.ice = {
-  slow: 0.75,   // 2026-11-17 平衡第二轮:×0.5 时冰川上地面近战势力比另两图低 5–8 点(见 docs/balance-2026-11.md)
+  slow: 0.85,   // 平衡:×0.5 / ×0.75 时冰川上地面近战势力偏弱、智械偏强;换成裂隙网后 ×0.85 四势力回到 47–52(docs/balance-2026-11.md)
   cracks: [...crevassesA, ...crevassesA.map(c => ({ left: rot180(c.left), right: rot180(c.right) }))].map(c => {
     const poly = [...c.left, ...[...c.right].reverse()].filter((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 1e-6);   // 尖头左右沿重合,去掉重复点
     if (Math.hypot(poly[0][0] - poly.at(-1)[0], poly[0][1] - poly.at(-1)[1]) <= 1e-6) poly.pop();
