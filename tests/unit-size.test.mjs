@@ -28,6 +28,15 @@ test('体型档相对第一轮整体缩小:步兵 / 载具都比第一轮 1.3 �
   assert.ok(SIZE_CLASSES.swarm.h < SIZE_CLASSES.infantry.h && SIZE_CLASSES.infantry.h < SIZE_CLASSES.medium.h && SIZE_CLASSES.medium.h < SIZE_CLASSES.giant.h);
 });
 
+test('第二轮整体再缩约 15%:各档高度和占地都按同一比例缩,档间关系不变', () => {
+  // 第一轮分档(2026-11-16)的值
+  const prev = { swarm: [0.6, 0.68], infantry: [0.9, 1.0], medium: [1.06, 1.12], heavy: [0.86, 1.12], giant: [1.28, 1.45], air: [0.78, 1.12] };
+  for (const [cls, [h, foot]] of Object.entries(prev)) {
+    assert.ok(Math.abs(SIZE_CLASSES[cls].h / h - 0.85) < 0.01, `${cls} h`);
+    assert.ok(Math.abs(SIZE_CLASSES[cls].foot / foot - 0.85) < 0.01, `${cls} foot`);
+  }
+});
+
 test('飞行单位(含一次出多只的)按飞行档,不缩成虫群小兵', () => {
   for (const c of units.filter(c => c.air)) assert.equal(sizeClassOf(c, 'rigid'), 'air', c.id);
 });

@@ -10,6 +10,7 @@ import { VFX } from './vfx.js';
 import { DeployMarker } from './deploy-fx.js';
 import { attachWeapon } from './weapons.js';
 import { unitDisplaySize } from './unit-size.js';
+import { closeLoopTrack, despikeTrack } from './anim-loop.js';
 import { loadKit, layoutProps, buildProps as buildProps3d } from './props3d.js';
 import { hasDressing, buildDressing, HIDDEN_TERRAIN_MESHES } from './obstacle-kit.js';
 import { buildArena, animateArena, ARENA } from './arena.js';
@@ -19,6 +20,7 @@ import { setupLook, LOOK, applyEnv, castShadows, receiveShadows, blobShadow } fr
 
 const TMP_COLOR = new THREE.Color();
 const easeOutBack = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+const LOOP_CLOSED = new WeakSet();   // 已做过首尾对齐的动画片段
 // Tripo 动画片段名 → 状态机用的键
 function clipKey(name) {
   const n = (name || '').toLowerCase();
@@ -1329,7 +1331,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
     }
     group.userData = { ...ud0, body, bar, hatch, ring, rangeRing, baseY: body.position.y, side: unit.side,
       cardId: card.id, tint: null, mat, sprite, model, shadow, facing: unit.side === 'p' ? 1 : -1,
-      wantModel: !!mdl && !mdl.ready, born: performance.now(),
+      wantModel: !!mdl && !mdl.ready, born: performance.now(), heavy: size.cls === 'heavy',
       hover: unit.air || (!sprite && !model && fac.shape === 'octa') };
     this.world.add(group);
     return group;
@@ -1490,10 +1492,13 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         // 程序化步伐:没有骨骼动画的(立绘 / 刚体模型)走路时上下颠 + 左右摆
         if (moving) ud.walkPhase = (ud.walkPhase || 0) + dtF * (8 + (ud.vel || 0) * 6);
         const procedural = !ud.model?.mixer;
-        const step = moving && procedural && !u.air ? Math.abs(Math.sin(ud.walkPhase)) * 0.05 : 0;
+        //   重型载具(坦克 / 攻城车 / 吞噬者)不蹦:|sin| 每步落地是个尖角,一辆车每秒蹦 3 下 5cm 看起来就是一顿一顿;
+        //   改成没有尖角的 sin² 小起伏(履带 / 底盘的颠簸感),也不左右摆
+        const step = !moving || !procedural || u.air ? 0
+          : ud.heavy ? Math.sin(ud.walkPhase) ** 2 * 0.012 : Math.abs(Math.sin(ud.walkPhase)) * 0.05;
         const hover = ud.hover && u.status.stun <= 0 ? Math.sin(now / 300 + u.id) * 0.05 : 0;
         ud.body.position.y = ud.baseY + step + hover;
-        const sway = moving && procedural ? Math.sin(ud.walkPhase) * 0.07 : 0;
+        const sway = moving && procedural && !ud.heavy ? Math.sin(ud.walkPhase) * 0.07 : 0;
         if (ud.sprite) ud.sprite.material.rotation = sway * ud.facing;
         else if (ud.model) ud.model.inner.rotation.z = sway * 0.6;
       }
@@ -1594,12 +1599,43 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       mixer = new THREE.AnimationMixer(root);
       for (const clip of entry.gltf.animations) {
         const key = clipKey(clip.name);
+        // 循环片段(走 / 站)首尾对齐一次(同一模型的实例共用片段):不然每圈从末帧跳回首帧会卡一下
+        if ((key === 'walk' || key === 'idle' || key === 'run') && !LOOP_CLOSED.has(clip)) {
+          LOOP_CLOSED.add(clip);
+          const preset = clip.name.startsWith('preset:');   // Tripo 程序化预设(六足 / 蛇形):每段步态开头有毛刺帧
+          for (const tr of clip.tracks) {
+            if (preset) despikeTrack(tr.times, tr.values, tr.getValueSize());   // 人形 walk 不去毛刺:脚趾一屈一伸是真动作
+            closeLoopTrack(tr.times, tr.values, tr.getValueSize());
+          }
+        }
         if (key && !actions[key]) actions[key] = mixer.clipAction(clip);
       }
       if (!actions.walk && actions.run) actions.walk = actions.run;
       if (!actions.attack && actions.shoot) actions.attack = actions.shoot;
+      // 贴地:走 / 站姿势比绑定姿势低(六足 walk 的腿往下伸),按绑定姿势对齐脚底会陷进地里 3–10cm。
+      //   每种模型对每个循环片段采样一圈(16 个姿势)的最低点,取第 3 低(约 1/8 分位)当地面(root 局部坐标):
+      //   取绝对最低会让整体上下起伏的蛇形 / 六足大部分时间悬空,取偏低分位则大部分时间贴地、偶尔轻微下探
+      if (!entry.floors) {
+        entry.floors = {};
+        const probe = new THREE.AnimationMixer(root), bb = new THREE.Box3();
+        for (const key of ['walk', 'idle']) {
+          const clip = actions[key]?.getClip();
+          if (!clip || entry.floors[key] !== undefined) continue;
+          const act = probe.clipAction(clip).play();
+          const lows = [];
+          for (let i = 0; i < 16; i++) {
+            probe.setTime(clip.duration * i / 16);
+            outer.updateMatrixWorld(true);
+            lows.push(bb.setFromObject(root, true).min.y);
+          }
+          act.stop();
+          lows.sort((a, b) => a - b);
+          entry.floors[key] = lows[2] / k - root.position.y;   // 世界最低点 = k × (root.y + 局部最低点)
+        }
+        probe.uncacheRoot(root);
+      }
     }
-    outer.userData.model = { mixer, actions, mats, inner, cur: null, busyUntil: 0 };
+    outer.userData.model = { mixer, actions, mats, inner, root, floors: entry.floors, cur: null, busyUntil: 0 };
     outer.userData.height = size.y * k;   // 实际高度(占地受限时比目标矮),血条按它摆
     return outer;
   }
@@ -1616,7 +1652,10 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         m.cur = want;
       }
       if (want && want === m.actions.walk) want.timeScale = Math.max(0.6, Math.min(1.8, (ud.vel || 0) * 1.8));
+      const floor = m.floors?.[want === m.actions.walk ? 'walk' : 'idle'];
+      if (floor !== undefined) m.floorY = -floor;   // 攻击 / 受击期间保持上一个循环片段的贴地高度
     }
+    if (m.floorY !== undefined) m.root.position.y += (m.floorY - m.root.position.y) * Math.min(1, dt * 8);   // 走 ↔ 站切换时平滑过渡
     m.mixer.update(dt);
   }
 
