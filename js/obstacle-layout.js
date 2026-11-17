@@ -439,14 +439,14 @@ function themedLayout(map, seedStr, props, opts) {
 }
 const P = (name, x, z, rot, k, keep) => ({ name, x, z, rot, k, keep });
 export const starcoreLayout = map => themedLayout(map, 'starcore-kit', [
-  P('mesa', 4.55, -8.3, 0.4, 0.26, 0.8), P('monolith', -4.7, -8.3, 0.2, 0.5, 0.5),
+  P('mesa', BX, -6.3, 0.4, 0.26, 0.8), P('monolith', -BX, -6.3, 0.2, 0.5, 0.5),   // 地标从远端两角挪到长边石台远段(远角被顶部 HUD 挡,同熔岩锻炉)
   P('drill', BX, -2.4, Math.PI / 2, 0.62, 0.5), P('crates', BX, -1.5, 0.3, 0.9), P('beacon', -BX, -4.6, 0, 0.8), P('beacon', BX, 3.2, 0, 0.8),
   P('crates', -BX, 2.2, 1.1, 0.9), P('drill', -BX, 0.2, -Math.PI / 2, 0.62, 0.5),
 ], { raiseHeat: 0.85 });
 export const glacierLayout = map => themedLayout(map, 'glacier-kit', [
-  P('icepeak', 4.5, -8.3, 0.5, 0.27, 0.8), P('obelisk', -4.7, -8.3, 0.1, 0.5, 0.5),
+  P('icepeak', BX, -6.3, 0.5, 0.27, 0.8), P('obelisk', -BX, -6.3, 0.1, 0.5, 0.5),   // 同上
   P('sled', -BX, -2.0, Math.PI / 2, 0.95), P('beacon', BX, 3.2, 0, 0.8), P('beacon', -BX, -4.6, 0, 0.8),
-  P('pine', BX, -5.4, 0, 0.5), P('pine', -BX, 4.6, 1.3, 0.45), P('hut', BX, -0.6, -Math.PI / 2, 0.55, 0.5),
+  P('pine', BX, -4.3, 0, 0.5), P('pine', -BX, 4.6, 1.3, 0.45), P('hut', BX, -0.6, -Math.PI / 2, 0.55, 0.5),
 ], { raiseHeat: 0 });
 
 // 去重:圆心距 < 0.35R(几乎重合)的墙柱只留先放的

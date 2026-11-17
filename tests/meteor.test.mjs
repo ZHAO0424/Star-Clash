@@ -42,18 +42,14 @@ test('砸下:圈内双方地面 / 飞行单位各受 120,建筑免疫', () => {
   assert.equal(g.meteor.shards.length + ev.filter(e => e.type === 'shard_pick').length, 2, '两块星石(站在落点的单位当场捡走)');
 });
 
-test('预警圈里能动的单位会躲出去', () => {
-  // 挑一个落点不在裂隙(减速)里的种子:步兵从圈心走出 1.2 格要 1.9 秒 < 3 秒预警
-  let seed = 1;
-  while (M.rifts.some(r => { const [x, z] = game(seed).meteor.pickSite(); return Math.hypot(x - r.x, z - r.z) < r.r + 1.3 || Math.hypot(-x - r.x, -z - r.z) < r.r + 1.3; })) seed++;
-  const g = game(seed);
+test('单位不自动躲预警圈:圈里交战的双方站着挨砸', () => {
+  const g = game();
   toWarn(g);
   const w = g.meteor.warns[0];
-  const u = g.spawnUnit('p', CARDS.steel_infantry, w.x, w.z, 1)[0];
-  const hp0 = u.hp;
+  const a = g.spawnUnit('p', CARDS.steel_tank, w.x, w.z, 1)[0], b = g.spawnUnit('e', CARDS.steel_tank, w.x + 0.3, w.z, 1)[0];
   run(g, C.warn + 0.1);
-  assert.equal(u.hp, hp0, '躲开了');
-  assert.ok(Math.hypot(u.x - w.x, u.z - w.z) > C.radius + u.radius);
+  const hits = g.drainEvents().filter(e => e.type === 'hit' && e.meteor).map(e => e.unit);
+  assert.ok(hits.includes(a) && hits.includes(b), '双方都被砸到');
 });
 
 test('星石:单位碰到给该方 +1 法力,星石消失;15 秒没人捡就消失', () => {

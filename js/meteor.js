@@ -4,7 +4,7 @@
 //   · 落点留下一块星石,持续 shardLife 秒;任一方单位先碰到(中心距 ≤ pickR)就为该方 +1 法力,星石消失
 //   · 落点:不进部署区、不压祭坛占领圈、不落在岩脊 / 岩石里;用对局种子(mulberry32)生成 → 联机由服务器决定,
 //     重连靠快照,平衡模拟替换 Math.random 后可复现
-//   · 单位行为(双方一致,属于引擎规则):在预警圈里的往圈外躲,圈外的不主动走进去;视野里没有敌方单位时,1.4 格内有星石就去捡
+//   · 单位行为(双方一致,属于引擎规则):单位不自动躲预警圈(躲不躲靠玩家判断);视野里没有敌方单位时,1.4 格内有星石就去捡
 import { wallGap } from './map.js';
 
 export function mulberry32(seed) {
@@ -77,28 +77,6 @@ export class MeteorShower {
       } else if (s.left <= 0) g.events.push({ type: 'shard_fade', x: s.x, z: s.z });
     }
     this.shards = this.shards.filter(s => s.left > 0);
-  }
-
-  inWarn(x, z, pad = 0) { return this.warns.find(w => Math.hypot(x - w.x, z - w.z) < this.cfg.radius + pad) || null; }
-
-  // 单位这一步要往哪走:在预警圈里 → 往圈外躲;下一步会走进预警圈 → 原地等;没有更好的点返回 null(按原路走)
-  steer(u, aim, step) {
-    const pad = u.radius + 0.08;
-    const w = this.inWarn(u.x, u.z, pad);
-    if (w) {   // 往最近的、在战场里又不压岩脊的圈外点躲(8 个方向里挑)
-      const m = this.g.map, out = this.cfg.radius + pad + 0.3;
-      let best = null, bd = Infinity;
-      for (let k = 0; k < 8; k++) {
-        const a = k / 8 * Math.PI * 2, x = w.x + Math.cos(a) * out, z = w.z + Math.sin(a) * out;
-        if (Math.abs(x) > m.W - 0.3 || Math.abs(z) > m.HALF - 0.3 || wallGap(x, z, m) < u.radius) continue;
-        const d = Math.hypot(x - u.x, z - u.z);
-        if (d < bd) { bd = d; best = { x, z }; }
-      }
-      return best;
-    }
-    const len = Math.hypot(aim.x - u.x, aim.z - u.z) || 1;
-    if (this.inWarn(u.x + (aim.x - u.x) / len * step, u.z + (aim.z - u.z) / len * step, pad)) return { x: u.x, z: u.z, hold: true };
-    return null;
   }
 
   // 视野里没有敌方单位时,附近的星石

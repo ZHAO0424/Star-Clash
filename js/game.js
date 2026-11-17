@@ -848,9 +848,7 @@ export class Game {
       u.target = target;
       if (!target) continue;
       const d = this.gap(u, target);
-      // 星核荒原 · 陨星:站在预警圈里的单位先躲出去(不站着打)
-      const dodging = this.meteor && !u.building && this.meteor.inWarn(u.x, u.z, u.radius + 0.08);
-      if (!dodging && d <= u.range && !this.wallBlocksMelee(u, target)) {
+      if (d <= u.range && !this.wallBlocksMelee(u, target)) {
         if (u.cooldown <= 0) {
           u.cooldown = u.interval * (raging ? 0.5 : 1) / (u.links?.length ? 1 + (this.side(u.side).linkHaste ?? LINK_HASTE) : 1);
           this.attack(u, target);
@@ -860,12 +858,9 @@ export class Game {
         // 地面单位按 A* 路径走(绕岩脊、岩石、塔,权衡裂隙减速);飞行单位直线
         let aim = u.air ? target : this.navAim(u, target);
         if (this.meteor) {
-          // 视野里没有敌方单位(目标是建筑)时,1.4 格内有星石就先去捡;预警圈:圈里往外躲,圈外不走进去
+          // 视野里没有敌方单位(目标是建筑)时,1.4 格内有星石就先去捡;预警圈不躲(用户 2026-11-17:躲闪让陨星几乎砸不到人)
           const shard = (target.kind || target.building) && this.meteor.nearShard(u);
           if (shard) aim = shard;
-          const m = this.meteor.steer(u, aim, speed * dt);
-          if (m?.hold) continue;
-          if (m) aim = m;
         }
         const len = dist2(u, aim) || 1;
         let dx = (aim.x - u.x) / len, dz = (aim.z - u.z) / len;
