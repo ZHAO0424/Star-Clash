@@ -244,6 +244,7 @@
  "chaos_wraith": {
   "file": "chaos_wraith.glb",
   "rig": "biped",
+  "hover": 0.12,
   "clips": [
    "walk",
    "idle",

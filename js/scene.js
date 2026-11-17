@@ -1635,7 +1635,8 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         probe.uncacheRoot(root);
       }
     }
-    outer.userData.model = { mixer, actions, mats, inner, root, floors: entry.floors, cur: null, busyUntil: 0 };
+    outer.userData.model = { mixer, actions, mats, inner, root, floors: entry.floors, cur: null, busyUntil: 0,
+      hover: entry.meta.hover ? entry.meta.hover / k : 0, k };   // 飘行单位(models.json hover = 离地高度,世界单位)
     outer.userData.height = size.y * k;   // 实际高度(占地受限时比目标矮),血条按它摆
     return outer;
   }
@@ -1645,7 +1646,8 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
     const m = ud.model;
     m.mixer.timeScale = u.status.stun > 0 ? 0 : 1;
     if (now >= m.busyUntil) {
-      const want = moving ? (m.actions.walk || m.actions.idle) : (m.actions.idle || m.actions.walk);
+      // 飘行单位(幽灵类,没有脚):移动时也不播走路,保持悬浮姿势,靠下面的上下浮动表现飘
+      const want = moving && !m.hover ? (m.actions.walk || m.actions.idle) : (m.actions.idle || m.actions.walk);
       if (want && want !== m.cur) {
         want.reset().setLoop(THREE.LoopRepeat).fadeIn(0.2).play();
         m.cur?.fadeOut(0.2);
@@ -1654,6 +1656,13 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       if (want && want === m.actions.walk) want.timeScale = Math.max(0.6, Math.min(1.8, (ud.vel || 0) * 1.8));
       const floor = m.floors?.[want === m.actions.walk ? 'walk' : 'idle'];
       if (floor !== undefined) m.floorY = -floor;   // 攻击 / 受击期间保持上一个循环片段的贴地高度
+    }
+    if (m.hover && m.floorY !== undefined) {   // 悬空 + 缓慢上下浮动(每个单位相位不同),移动时略往前倾
+      const bob = Math.sin(now / 1000 * 2.4 + (u.id || 0) * 1.7) * 0.25;
+      m.root.position.y = m.floorY + m.hover * (1 + bob);
+      m.inner.rotation.x += ((moving ? 0.18 : 0) - m.inner.rotation.x) * Math.min(1, dt * 4);
+      m.mixer.update(dt);
+      return;
     }
     if (m.floorY !== undefined) m.root.position.y += (m.floorY - m.root.position.y) * Math.min(1, dt * 8);   // 走 ↔ 站切换时平滑过渡
     m.mixer.update(dt);
