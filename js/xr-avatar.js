@@ -17,25 +17,6 @@ function capsule(group, radius, length, material, x, y, z, rx = Math.PI / 2) {
   return mesh;
 }
 
-// 顶点 alpha 渐隐:沿某个轴从 from(不透明)到 to(全透明)平滑过渡(three r151+ 支持 4 分量顶点色的 alpha)
-function fadeAlong(geometry, axis, from, to) {
-  const pos = geometry.attributes.position, n = pos.count, col = new Float32Array(n * 4);
-  for (let i = 0; i < n; i++) {
-    const v = pos.getComponent(i, axis), k = THREE.MathUtils.clamp((v - from) / (to - from), 0, 1);
-    col.set([1, 1, 1, 1 - k * k * (3 - 2 * k)], i * 4);
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(col, 4));
-  return geometry;
-}
-function gradientSkin(color) {
-  const m = skin(color);
-  m.vertexColors = true;
-  m.transparent = true;
-  m.depthWrite = false;          // 渐隐的部分不能挡住后面的东西
-  m.userData.gradient = true;
-  return m;
-}
-
 export class XROpponentAvatar {
   constructor() {
     this.root = new THREE.Group();
@@ -70,13 +51,7 @@ export class XROpponentAvatar {
       group.name = side < 0 ? 'opponent left glove' : 'opponent right glove';
       const palm = part(group, new THREE.SphereGeometry(1, 12, 8), glove, 0, 0, -0.039);
       palm.scale.set(0.043, 0.019, 0.057);
-      // 腕带:包住掌根的椭圆筒(原来是方盒,硬边插进圆掌根看起来像穿模);后面接一截往肘部渐隐的前臂
-      const cuff = part(group, new THREE.CylinderGeometry(1, 1, 0.026, 16, 1), strap, 0, 0, 0.012);
-      cuff.rotation.x = Math.PI / 2;
-      cuff.scale.set(0.033, 1, 0.022);
-      const arm = new THREE.CylinderGeometry(0.03, 0.026, 0.16, 14, 6, true).rotateX(Math.PI / 2).translate(0, 0, 0.1);
-      const forearm = part(group, fadeAlong(arm, 2, 0.03, 0.18), gradientSkin(0x54415c), 0, 0, 0);
-      forearm.scale.set(1, 0.72, 1);
+      part(group, new THREE.BoxGeometry(0.065, 0.031, 0.031), strap, 0, 0, 0.004);
       const plate = part(group, new THREE.SphereGeometry(1, 12, 8), pad, 0, 0.015, -0.043);
       plate.scale.set(0.032, 0.009, 0.036);
       const fingers = [];
@@ -97,18 +72,7 @@ export class XROpponentAvatar {
       group.userData.thumb = thumb;
       return group;
     };
-    // 身体:挂在头下方,只跟头的偏航转(低头 / 歪头不带动身体),往下渐渐隐去;不单独同步,由头的姿态推出来
-    const body = new THREE.Group();
-    body.name = 'opponent body';
-    const torsoGeo = fadeAlong(new THREE.CapsuleGeometry(0.11, 0.2, 6, 18).translate(0, -0.35, 0), 1, -0.22, -0.52);   // 肩顶约在头心下 0.14,胸口往下渐隐
-    part(body, torsoGeo, gradientSkin(0x6a5776), 0, 0, 0).scale.set(1.75, 1, 0.62);
-    const collarGeo = fadeAlong(new THREE.TorusGeometry(0.075, 0.018, 8, 20).rotateX(Math.PI / 2).translate(0, -0.135, 0), 1, -0.2, -0.3);
-    part(body, collarGeo, gradientSkin(0xbfb1aa), 0, 0, 0).scale.set(1, 1, 0.75);
-    part(body, new THREE.CylinderGeometry(0.036, 0.042, 0.08, 12), skin(0xb58372), 0, -0.105, 0);   // 脖子
-    this.body = body;
-    this.bodyYaw = 0;
-
-    this.parts = [head, makeHand(-1), makeHand(1), body];
+    this.parts = [head, makeHand(-1), makeHand(1)];
     this.targets = this.parts.map(() => ({ p: new THREE.Vector3(), q: new THREE.Quaternion() }));
     for (const model of this.parts) {
       model.visible = false;
@@ -139,7 +103,6 @@ export class XROpponentAvatar {
   update(pose, dt, planarScale = 1, seatOffset = 0, mayShow = () => true) {
     const blend = 1 - Math.exp(-Math.max(0, dt) * 19);
     this.parts.forEach((part, index) => {
-      if (part === this.body) return;
       const data = pose?.[index];
       const { p, q } = this.targets[index];
       if (data) {
@@ -164,24 +127,9 @@ export class XROpponentAvatar {
       part.visible = fade > 0;
       for (const mat of part.userData.fadeMaterials) {
         mat.opacity = fade;
-        mat.depthWrite = fade >= .99 && !mat.userData.gradient;
+        mat.depthWrite = fade >= .99;
       }
     });
-    // 身体跟着头:位置 = 头,朝向只取头的偏航(平滑),透明度跟头
-    const head = this.parts[0], body = this.body;
-    if (head.visible) {
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(head.quaternion);
-      let yaw = Math.atan2(fwd.x, fwd.z), d = yaw - this.bodyYaw;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.bodyYaw += body.visible ? d * (1 - Math.exp(-Math.max(0, dt) * 6)) : d;
-      body.position.copy(head.position);
-      body.rotation.set(0, this.bodyYaw, 0);
-    }
-    body.visible = head.visible;
-    for (const mat of body.userData.fadeMaterials) {
-      mat.opacity = head.userData.fade;
-      mat.depthWrite = head.userData.fade >= .99 && !mat.userData.gradient;
-    }
     this.root.visible = this.parts.some(part => part.visible);
   }
 }
