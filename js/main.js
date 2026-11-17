@@ -925,7 +925,12 @@ function playAt(placement, hit, pointer) {
   if (!g.canPlay('p', idx)) { toast(t('tNoMana')); return false; }
   if (firstMatch && card.type !== 'unit') { showPlacementError('firstDeployTitle', pointer); return false; }
   const reason = g.deployBlockReason('p', card, hit.x, hit.z);
-  if (reason) { showCardPlacement(placement, hit); showPlacementError(reason, pointer); return false; }
+  if (reason) {
+    // 点选模式(牌仍选中)才留着预览圈;拖拽松手时预览已在 endDrag 收起,不能再画出来(否则圈卡在场上不消失)
+    if (placement === selectedCard) showCardPlacement(placement, hit);
+    showPlacementError(reason, pointer);
+    return false;
+  }
   if (!session.play(idx, hit.x, hit.z)) return false;
   firstDeploymentPlayed();
   selectCard(null);
