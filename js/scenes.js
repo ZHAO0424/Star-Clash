@@ -7,8 +7,8 @@
 export const SCENES = [
   {
     id: 'starcore', name: '星核荒原', en: 'Starcore Plateau', propKit: true,
-    desc: '外星岩石高原。每隔一阵会有陨星坠落:先亮预警圈,砸中双方单位,落点留下可拾取的星石(+1 法力)。',
-    descEn: 'An alien rock plateau. Meteors fall from time to time: a warning ring appears, the impact hits both sides, and the crater leaves a star shard (+1 mana).',
+    desc: '外星岩石高原。每隔一阵会有陨星坠落:先亮预警圈,砸中双方单位并眩晕,落点砸出短暂的陨坑(会把地面单位轻轻吸向坑心),坑心留下可拾取的星石(+1 法力)。',
+    descEn: 'An alien rock plateau. Meteors fall from time to time: a warning ring appears, the impact hits and stuns both sides, and leaves a short-lived crater that gently pulls ground units in, with a star shard (+1 mana) at its center.',
     relief: 'mesa', rock: 'pillar', rimHeight: 1.0,
     palette: { near: [0.50, 0.56, 0.62], far: [0.64, 0.52, 0.48], rim: [0.42, 0.58, 0.46], cliff: [0.66, 0.56, 0.48],
       hazard: [0.52, 0.32, 0.86], hazardCore: [0.82, 0.62, 1.0], crystal: [0.55, 0.30, 1.0], rock: [0.62, 0.58, 0.56] },

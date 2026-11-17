@@ -1,7 +1,10 @@
 // 星核荒原 · 陨星坠落(纯逻辑,浏览器与 Node 服务器共用;服务器权威,客户端只渲染快照里的状态)
 //   · 每 interval 秒,在一对绕星核旋转 180° 对称的位置(双方各一处)先亮预警圈,warn 秒后陨星砸下:
 //     圈内双方地面 + 飞行单位各受 damage 点伤害;建筑免疫(落点不在部署区,本来也砸不到建筑,免疫让规则好记)
+//     并且瘫痪 stun 秒(混沌构造体这类 unstoppable 免控单位只吃伤害)
 //   · 落点留下一块星石,持续 shardLife 秒;任一方单位先碰到(中心距 ≤ pickR)就为该方 +1 法力,星石消失
+//   · 落点砸出陨坑,持续 craterLife 秒:半径 craterR 内的地面单位(不含飞行、建筑)每秒被拉向坑心 pull 格。
+//     吸力小于最慢单位的步速(炮兵 0.245),正常行走能走出去;坑不叠加伤害,星石照旧在坑心
 //   · 落点:不进部署区、不压祭坛占领圈、不落在岩脊 / 岩石里;用对局种子(mulberry32)生成 → 联机由服务器决定,
 //     重连靠快照,平衡模拟替换 Math.random 后可复现
 //   · 单位行为(双方一致,属于引擎规则):单位不自动躲预警圈(躲不躲靠玩家判断);视野里没有敌方单位时,1.4 格内有星石就去捡
@@ -25,6 +28,7 @@ export class MeteorShower {
     this.next = cfg.first;
     this.warns = [];    // { x, z, left }(left = 离砸下还有几秒)
     this.shards = [];   // { id, x, z, left }
+    this.craters = [];  // { x, z, left }
     this.nextId = 1;
   }
 
@@ -54,12 +58,27 @@ export class MeteorShower {
       w.left -= dt;
       if (w.left > 0) continue;
       for (const u of [...g.units]) {
-        if (!u.dead && !u.building && Math.hypot(u.x - w.x, u.z - w.z) <= c.radius + u.radius) g.damage(u, c.damage, null, { meteor: true });
+        if (u.dead || u.building || Math.hypot(u.x - w.x, u.z - w.z) > c.radius + u.radius) continue;
+        g.damage(u, c.damage, null, { meteor: true });
+        if (!u.dead && !u.card.unstoppable) u.status.stun = Math.max(u.status.stun, c.stun);
       }
       this.shards.push({ id: this.nextId++, x: w.x, z: w.z, left: c.shardLife });
+      this.craters.push({ x: w.x, z: w.z, left: c.craterLife });
       g.events.push({ type: 'meteor_hit', x: w.x, z: w.z, r: c.radius });
     }
     this.warns = this.warns.filter(w => w.left > 0);
+    // 陨坑:向心吸力(每帧位移 ≤ 到坑心的距离,不会越过坑心来回抖)
+    for (const cr of this.craters) {
+      cr.left -= dt;
+      for (const u of g.units) {
+        if (u.dead || u.building || u.air) continue;
+        const dx = cr.x - u.x, dz = cr.z - u.z, d = Math.hypot(dx, dz);
+        if (d > c.craterR || d < 1e-6) continue;
+        const k = Math.min(d, c.pull * dt) / d;
+        u.x += dx * k; u.z += dz * k;
+      }
+    }
+    this.craters = this.craters.filter(cr => cr.left > 0);
     // 星石:最近的单位先捡到(同一帧两方都碰到时按距离裁决,结果确定)
     for (const s of this.shards) {
       s.left -= dt;
@@ -91,11 +110,13 @@ export class MeteorShower {
 
   // 联机快照(视角映射 V:x / z 镜像)
   snapshot(V, r2) {
-    return { w: this.warns.map(w => [r2(V.x(w.x)), r2(V.z(w.z)), r2(w.left)]), s: this.shards.map(s => [s.id, r2(V.x(s.x)), r2(V.z(s.z)), r2(s.left)]), n: r2(this.next) };
+    return { w: this.warns.map(w => [r2(V.x(w.x)), r2(V.z(w.z)), r2(w.left)]), s: this.shards.map(s => [s.id, r2(V.x(s.x)), r2(V.z(s.z)), r2(s.left)]),
+      c: this.craters.map(cr => [r2(V.x(cr.x)), r2(V.z(cr.z)), r2(cr.left)]), n: r2(this.next) };
   }
   applySnapshot(mt) {
     this.warns = mt.w.map(([x, z, left]) => ({ x, z, left }));
     this.shards = mt.s.map(([id, x, z, left]) => ({ id, x, z, left }));
+    this.craters = (mt.c ?? []).map(([x, z, left]) => ({ x, z, left }));
     this.next = mt.n;
   }
 }
