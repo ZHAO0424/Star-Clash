@@ -441,14 +441,24 @@
  },
  "swarm_flyer": {
   "file": "swarm_flyer.glb",
-  "rig": "rigid",
-  "clips": [],
+  "rig": "winged",
+  "clips": [
+   "fly",
+   "attack",
+   "hurt",
+   "die"
+  ],
   "yaw": -1.5708
  },
  "chaos_bats": {
   "file": "chaos_bats.glb",
-  "rig": "rigid",
-  "clips": [],
+  "rig": "winged",
+  "clips": [
+   "fly",
+   "attack",
+   "hurt",
+   "die"
+  ],
   "yaw": -1.5708
  }
 }

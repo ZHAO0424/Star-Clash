@@ -26,6 +26,7 @@ function clipKey(name) {
   const n = (name || '').toLowerCase();
   if (/idle/.test(n)) return 'idle';
   if (/walk|march/.test(n)) return 'walk';
+  if (/fly/.test(n)) return 'fly';   // 飞行单位扇翅循环(tools/blender/wing_anim.py),移动和站立都播它
   if (/run/.test(n)) return 'run';
   if (/shoot/.test(n)) return 'shoot';
   if (/slash|attack|punch|bite/.test(n)) return 'attack';
@@ -1600,7 +1601,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       for (const clip of entry.gltf.animations) {
         const key = clipKey(clip.name);
         // 循环片段(走 / 站)首尾对齐一次(同一模型的实例共用片段):不然每圈从末帧跳回首帧会卡一下
-        if ((key === 'walk' || key === 'idle' || key === 'run') && !LOOP_CLOSED.has(clip)) {
+        if ((key === 'walk' || key === 'idle' || key === 'run' || key === 'fly') && !LOOP_CLOSED.has(clip)) {
           LOOP_CLOSED.add(clip);
           const preset = clip.name.startsWith('preset:');   // Tripo 程序化预设(六足 / 蛇形):每段步态开头有毛刺帧
           for (const tr of clip.tracks) {
@@ -1611,6 +1612,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         if (key && !actions[key]) actions[key] = mixer.clipAction(clip);
       }
       if (!actions.walk && actions.run) actions.walk = actions.run;
+      if (actions.fly) { actions.walk ??= actions.fly; actions.idle ??= actions.fly; }   // 飞行:走 / 站是同一个扇翅循环,不切换
       if (!actions.attack && actions.shoot) actions.attack = actions.shoot;
       // 贴地:走 / 站姿势比绑定姿势低(六足 walk 的腿往下伸),按绑定姿势对齐脚底会陷进地里 3–10cm。
       //   每种模型对每个循环片段采样一圈(16 个姿势)的最低点,取第 3 低(约 1/8 分位)当地面(root 局部坐标):
@@ -1620,7 +1622,8 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         const probe = new THREE.AnimationMixer(root), bb = new THREE.Box3();
         for (const key of ['walk', 'idle']) {
           const clip = actions[key]?.getClip();
-          if (!clip || entry.floors[key] !== undefined) continue;
+          //   飞行单位(扇翅循环)不贴地:离地高度由 lift 定,按绑定姿势对齐;否则下扑的翼尖会被当成「脚底」把整只往上顶
+          if (!clip || entry.floors[key] !== undefined || actions[key] === actions.fly) continue;
           const act = probe.clipAction(clip).play();
           const lows = [];
           for (let i = 0; i < 16; i++) {
@@ -1650,10 +1653,11 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       const want = moving && !m.hover ? (m.actions.walk || m.actions.idle) : (m.actions.idle || m.actions.walk);
       if (want && want !== m.cur) {
         want.reset().setLoop(THREE.LoopRepeat).fadeIn(0.2).play();
+        if (want === m.actions.fly) want.time = Math.random() * want.getClip().duration;   // 随机起拍:同一张牌的两只蝙蝠不同步扇翅
         m.cur?.fadeOut(0.2);
         m.cur = want;
       }
-      if (want && want === m.actions.walk) want.timeScale = Math.max(0.6, Math.min(1.8, (ud.vel || 0) * 1.8));
+      if (want && want === m.actions.walk && want !== m.actions.idle) want.timeScale = Math.max(0.6, Math.min(1.8, (ud.vel || 0) * 1.8));
       const floor = m.floors?.[want === m.actions.walk ? 'walk' : 'idle'];
       if (floor !== undefined) m.floorY = -floor;   // 攻击 / 受击期间保持上一个循环片段的贴地高度
     }
