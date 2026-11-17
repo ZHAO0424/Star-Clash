@@ -181,13 +181,13 @@ const VOLCANO = {
 //   · 星石 15 秒,任一方单位碰到(0.4 内)+1 法力
 //   · 落点:|z| ≤ 部署线 − 0.4、离祭坛圈 ≥ 0.5、离岩脊 / 岩石 ≥ 0.35
 //   · 2026-11-17(第六轮):砸中的单位额外瘫痪 stun 1.5 秒(免控单位免疫);落点留下陨坑 craterLife 8 秒,
-//     半径 craterR 1.1 内的地面单位每秒被拉向坑心 pull 0.15 格(最慢的炮兵步速 0.245,走得出去)
+//     半径 craterR 1.1 内的地面单位每秒被拉向坑心「自身步速 × pull 30%」格(按百分比,再慢的单位也走得出去;飞行单位也吃眩晕)
 //   · 两侧圆形裂隙去掉(rifts 置空;MAP 本体给未开放地图共用,不动)
 const STARCORE = {
   ...MAP,
   rifts: [],
   meteor: { first: 40, interval: 40, warn: 3, radius: 0.9, damage: 120, shardLife: 15, pickR: 0.4, mana: 1,
-    stun: 1.5, craterLife: 8, craterR: 1.1, pull: 0.15,
+    stun: 1.5, craterLife: 8, craterR: 1.1, pull: 0.3,
     clearDeploy: 0.4, clearNode: 0.5, clearWall: 0.35 },
 };
 export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ? VOLCANO : id === 'starcore' ? STARCORE : MAP;

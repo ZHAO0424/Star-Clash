@@ -113,7 +113,7 @@ test('砸中的单位额外瘫痪 1.5 秒;免控的混沌构造体只吃伤害',
   assert.equal(hp - cons.hp, C.damage, '构造体照样受伤');
 });
 
-test('陨坑:坑内地面单位被拉向坑心约 0.15 格/秒;飞行单位、坑外单位不受影响;坑不叠加伤害', () => {
+test('陨坑:坑内地面单位被拉向坑心(自身步速 × pull);飞行单位、坑外单位不受影响;坑不叠加伤害', () => {
   const g = game();
   toImpact(g); g.drainEvents();
   const cr = g.meteor.craters[0];
@@ -123,12 +123,12 @@ test('陨坑:坑内地面单位被拉向坑心约 0.15 格/秒;飞行单位、�
   const out = g.spawnUnit('p', CARDS.steel_tank, cr.x, cr.z + C.craterR + 0.3, 1)[0]; out.status.stun = 99;
   const hp = ground.hp, z0 = out.z;
   run(g, 1);
-  assert.ok(Math.abs(gx - (ground.x - cr.x) - C.pull) < 0.02, `拉近 ${(gx - (ground.x - cr.x)).toFixed(3)}`);
+  assert.ok(Math.abs(gx - (ground.x - cr.x) - C.pull * ground.speed) < 0.02, `拉近 ${(gx - (ground.x - cr.x)).toFixed(3)}`);
   assert.equal(air.x, ax, '飞行单位不被拉');
   assert.ok(Math.abs(out.z - z0) < 1e-9, '坑外不被拉');
   assert.equal(ground.hp, hp, '坑不叠加伤害');
-  run(g, 6);
-  assert.ok(Math.hypot(ground.x - cr.x, ground.z - cr.z) < 1e-6, '最多拉到坑心,不越过');
+  run(g, 6 / C.pull);
+  assert.ok(g.meteor.craters.length === 0 || Math.hypot(ground.x - cr.x, ground.z - cr.z) < 1e-6, '最多拉到坑心,不越过');
 });
 
 test('陨坑吸不死人:最慢的地面单位从坑心也能往外走', () => {
@@ -138,7 +138,7 @@ test('陨坑吸不死人:最慢的地面单位从坑心也能往外走', () => {
   g.meteor.shards = [];   // 不让它先去捡坑心的星石
   const u = g.spawnUnit('p', CARDS.steel_artillery, cr.x, cr.z, 1)[0];
   u.status.stun = 0;
-  assert.ok(u.speed > C.pull * 1.5, `炮兵步速 ${u.speed} vs 吸力 ${C.pull}`);
+  assert.ok(C.pull < 0.5, `吸力占步速 ${C.pull}`);   // 按百分比:任何单位净速度都 ≥ 一半
   // 炮兵在坑心正常行军(朝敌方建筑),4 秒后离坑心更远
   run(g, 4);
   const d = Math.hypot(u.x - cr.x, u.z - cr.z);

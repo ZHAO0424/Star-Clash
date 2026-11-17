@@ -3,8 +3,8 @@
 //     圈内双方地面 + 飞行单位各受 damage 点伤害;建筑免疫(落点不在部署区,本来也砸不到建筑,免疫让规则好记)
 //     并且瘫痪 stun 秒(混沌构造体这类 unstoppable 免控单位只吃伤害)
 //   · 落点留下一块星石,持续 shardLife 秒;任一方单位先碰到(中心距 ≤ pickR)就为该方 +1 法力,星石消失
-//   · 落点砸出陨坑,持续 craterLife 秒:半径 craterR 内的地面单位(不含飞行、建筑)每秒被拉向坑心 pull 格。
-//     吸力小于最慢单位的步速(炮兵 0.245),正常行走能走出去;坑不叠加伤害,星石照旧在坑心
+//   · 落点砸出陨坑,持续 craterLife 秒:半径 craterR 内的地面单位(不含飞行、建筑)每秒被拉向坑心「自身步速 × pull」格。
+//     吸力按百分比,永远小于单位自己的步速,正常行走能走出去;坑不叠加伤害,星石照旧在坑心
 //   · 落点:不进部署区、不压祭坛占领圈、不落在岩脊 / 岩石里;用对局种子(mulberry32)生成 → 联机由服务器决定,
 //     重连靠快照,平衡模拟替换 Math.random 后可复现
 //   · 单位行为(双方一致,属于引擎规则):单位不自动躲预警圈(躲不躲靠玩家判断);视野里没有敌方单位时,1.4 格内有星石就去捡
@@ -74,7 +74,7 @@ export class MeteorShower {
         if (u.dead || u.building || u.air) continue;
         const dx = cr.x - u.x, dz = cr.z - u.z, d = Math.hypot(dx, dz);
         if (d > c.craterR || d < 1e-6) continue;
-        const k = Math.min(d, c.pull * dt) / d;
+        const k = Math.min(d, c.pull * u.speed * dt) / d;   // 吸力 = 单位自身步速的 pull 倍(<1):再慢的单位也走得出去
         u.x += dx * k; u.z += dz * k;
       }
     }
