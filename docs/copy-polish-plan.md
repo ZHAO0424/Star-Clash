@@ -1,6 +1,6 @@
 # 星轨对决 · 全游戏文案精炼方案（copy polish plan）
 
-> 状态：**已落地**（2026-11-17，用户批准「按推荐落地」；第 5 节一律取默认建议，第 3 节改名全部不采纳）。落地偏离与未做项见第 6 节。
+> 状态：**已落地**（2026-11-17，用户批准「按推荐落地」；第 5 节一律取默认建议，第 3 节改名全部不采纳）。落地偏离与未做项见第 6 节；英文版专项审查见第 7 节。
 > 日期：2026-11-17 · 分支：main
 > 目标：用户原话「游戏整体的文字是不是可以专业化游戏化，精炼一点」。
 > 原则：**只改字面，不改数值、不改玩法、不改 i18n 键名**。数值全部对照 `js/cards.js` / `js/game.js` 核过。
@@ -529,3 +529,244 @@
 - **L13 描述数值一致性测试**：未加。
 - **L12 `viewer.html` 缺失**：未处理。
 - XR 内实机截图：无头浏览器进不了 XR，以 6.3 的宽度推算代替；首次进眼镜时建议看一眼顶栏和设置按钮。
+
+---
+
+## 7. 英文版审查（2026-11-17）
+
+> 用户原话「修改检测英文版本」。目标：英文像母语游戏文案——准确、地道、统一、简短。
+> 规则不变：**只改英文值和必要的 i18n 接线；中文文本、i18n 键名、数值一律不动**。中文键（`TAG_EN` 的中文 key、`^建筑(\d+)秒$` 正则）不动。
+
+### 7.1 英文文案规则（本轮定下，之后新增文案照此写）
+
+| 类别 | 规则 | 例 |
+|---|---|---|
+| 按钮 / 标题 / 面板名 / 教程步骤标题 | Title Case | Quick Battle、Edit Deck、Play Again、Skip Tutorial、Pinch to Grab |
+| 提示 / toast / 状态行 | Sentence case，短语不加句号；两句以上的说明才加句号 | Wait for the countdown；Leaving counts as a loss. Tap again within 3s. |
+| `·` 分段 | 每段首字母大写 | Overtime · First tower wins、Contested · Bonus paused |
+| 卡牌描述 | 完整句、第三人称现在时、句号结尾 | Deals 45 area damage and stuns for 2.5s. |
+| 强化描述 | 数值行，不加句号 | All units +15% ATK |
+| 地形标签 | `<地形> · <效果>` | Lava · Burn 6/s、Ice · Slow 15%、Rift · Slow 50% |
+| 单复数 | 有 `{n}` 的键可加 `键_one`，`t()` 在 n = 1 时自动取用 | 1 tile / 1.5 tiles；Upgrade in 1 card |
+| 秒 / 每秒 / 百分比 | `{n}s`、`{n}/s`、`+15%`，数字与单位不空格 | Lasts 35s、26 corrosion/s |
+
+**术语（英文）**：Mana · Core（主基地）· Starcore（中央点，永远一个词）· Tower（前哨炮 + 侧翼塔，不含 Core）· Building（建筑卡）· **Structures**（= Tower + Core + Building，攻城 / 轨道炮击 / 自爆邪徒统一用它）· Deploy / Cast / Play · Stun · Hack · Rank（钢铁军衔）· Arena（战场，替换残留的 Battlefield）· **XR Lobby**（替换 Spatial lobby，与 Online Lobby 成对）· Overtime（HUD 和结算不再缩写 OT）· Opponent（指人）/ Enemy（指阵营、单位），不再用 Foe。
+侧翼塔 / 前哨炮的英文名在游戏里**没有任何地方显示**（`map.js` 的 `name` 只是内部标签），所以没给 Pylon 定英文名；玩家只看到 Tower。
+
+### 7.2 问题清单
+
+共改 155 条英文值（界面 98 键、卡名 15、卡牌描述 30、势力副标题 3、强化 8、关键词 1）+ 1 处代码缺陷；每条按主要原因只计入一类。
+
+| 类 | 条数 | 说明 |
+|---|---|---|
+| A 漏翻 / 英文模式下出现中文 | 0（客户端） | Grep `js/` + `index.html` 所有中文字面量：客户端玩家可见的都走 `t()`；`index.html` 的中文只是首帧兜底，`applyStaticText()` 会覆盖；无头浏览器逐屏扫可见文字 + `title/placeholder/aria-label`，只剩语言切换按钮「中文」（故意）。**剩下的中文全部来自服务器**，见 7.5 |
+| B 语法 / 大小写 / 标点 / 单复数 | 54 | 按钮大小写混用（Edit deck / Create room / Play again…）；`·` 后段首大小写不一；`{n} s` 多空格；单复数：图鉴「Range 1 tiles」、HUD「Upgrade in 1 plays」；卡牌描述祈使句与第三人称混用（Heal / Deals）；逗号连句（Open left palm, tap Resume）；Swarm 作为势力名未大写 |
+| C 术语不统一 | 21 | Spatial lobby vs XR Lobby；Battlefield vs Arena；Foe vs Enemy / Opponent；OT vs Overtime；mana vs Mana；Core 被用作形容词（Core swarm melee 与主基地 Core 撞词）；Frontline tank（护盾兵）与 Heavy Tank 撞词；攻城目标写成 buildings and towers（漏了 Core） |
+| D 不准确 / 不地道 | 51 | 「Upgrade in 20 plays (both)」；「Rapid Deploy」实际效果是移速（只改英文为 Forced March，中文名不动）；「Turns the strongest enemy」意思不明；「Lightning chains 4 times」没说首个目标；「Leaving = loss」；「Blank = guest name」；「Artillery Post」是会走的单位却叫 Post；「Sniper Unit / Tactical Mech」生硬 |
+| E 长度 / 折行 / 压扁 | 29 | 势力副标题折行 2 条（Maya / Chaos，钢铁 235/236px 擦边）；手牌卡名折两行 16 个（13px 粗体、88px 宽）→ 现 3 个；XR 卡名被压扁 9 个（4–40%，Assimilation Spores 最重）→ 0；XR 卡面「Building · Building 35s」重复且压扁 21%；XR 板面标签 `Crosses lava · burn 6/s` / `Crosses ice · slow 15%` 压扁 41–42%（中文同处也超 18–23%）；XR 落点提示 `No injured allies nearby` 超 10%；XR 引导「重新居中」3 行被截；联机昵称占位符被截断；强化卡孤字换行（8s / -15% / 10s / damage） |
+| F 代码层英文缺陷 | 1 | **XR 画布 `wrapText` 逐字符折行**：英文单词会被从中间截断（教程、强化描述、卡牌详情、引导都受影响）。改成中文逐字、英文按词折行（`js/xr.js`） |
+
+数值：69 条英文描述（47 张卡 + 4 势力特性 + 15 强化 + 3 地图）用脚本逐条比对中文原文的数字集合（中文上一轮已对过 `cards.js` / `game.js`）：**无不一致**。6 处脚本报差异均为表述等价：「1 只 / 一架」写成 a / an（4 处），狂战士「半血 / ×2」写成 Below 50% HP / double（`game.js:852` 阈值 0.5、攻速 ×0.5 间隔）。
+
+### 7.3 改动表（原英文 → 新英文）
+
+#### 界面（`UI.en`，98 键）
+
+| 键 | 原英文 | 新英文 |
+|---|---|---|
+| `firstMatchHome` | First match includes a quick tutorial. | Your first match includes a quick tutorial. |
+| `firstMatchSkip` | Skip guide | Skip Tutorial |
+| `firstDeployXRText` | Pinch the glowing card, move it over blue ground, release. Controller: hold trigger, aim, release. | Pinch the glowing card and release it over the blue zone. Controller: hold the trigger, aim, release. |
+| `firstDeployTitle` | Deploy a unit | Deploy a Unit |
+| `firstWatchTitle` | Units advance on their own | Units Fight on Their Own |
+| `firstWatchText` | Deployed units move and fight automatically. | Deployed units march and attack automatically. |
+| `firstCoreText` | Hold the golden ring for faster Mana. Glowing rifts slow ground units. | Hold the golden ring to regen Mana faster. Glowing rifts slow ground units. |
+| `upgradeTimeout` | Auto-picks on timeout | Auto-picks when time's up |
+| `matchCores` | Cores (You/Foe) | Cores (You / Enemy) |
+| `xrAuto` | Automatic | Auto |
+| `xrCompatible` | XR Lobby ready | XR Lobby available |
+| `xrUnavailable` | XR unavailable. See Settings for help. | XR not available on this device. See Settings. |
+| `roomIdentity` | Name: {name} | Playing as {name} |
+| `guestPlaceholder` | Blank = guest name | Guest if blank |
+| `gridUnits_one` | （新增，n=1 时用） | {n} tile |
+| `seconds` | {n} s | {n}s |
+| `codexEdit` | Edit {f} deck | Edit {f} Deck |
+| `muteTip` | Sound on/off | Toggle sound |
+| `deckErr_size` | Deck needs exactly {n} cards | A deck needs exactly {n} cards |
+| `deckErr_dup` | No duplicates | No duplicate cards |
+| `deckErr_deploy` | Needs {n}+ units/buildings | Include at least {n} units or buildings |
+| `battleCardHelp` | Drag a card, or tap it then the arena. | Drag a card to play, or tap it, then tap the arena |
+| `selectBattleCard` | Select {name}, cost {cost} | {name}, {cost} Mana |
+| `cancelConnection` | Cancel connection | Cancel |
+| `connectionCancelled` | Cancelled | Connection cancelled |
+| `roomCopyManually` | Selected — copy manually | Code selected. Copy it manually. |
+| `randomFieldHelp` | Arena picked at random. | A random arena each battle. |
+| `deckFull` | Deck full. Remove a card. | Deck is full. Remove a card first. |
+| `battleUnavailable` | Couldn't load the arena. Enable WebGL and retry. | Couldn't load the arena. Enable WebGL and try again. |
+| `xrLeftField` | Returned to the spatial lobby | Back in the XR Lobby |
+| `xrPausedHint` | Open left palm, tap Resume | Open your left palm and tap Resume |
+| `xrPalmHint` | Turn left palm toward you → Menu | Look at left palm → Menu |
+| `healNoTarget` | No injured allies nearby | No injured allies here |
+| `xrErrorTitle` | Error skipped · Please screenshot | Error skipped · Please send a screenshot |
+| `pausedResume` | Paused · click to resume | Paused · Click to resume |
+| `deployOccupied` | Spot occupied | Spot taken |
+| `coreContested` | Contested · bonus paused | Contested · Bonus paused |
+| `coreCaptureBlue` | Capturing | Capturing Starcore |
+| `coreCaptureRed` | Enemy capturing | Enemy capturing Starcore |
+| `guidePrev` | Previous | Back |
+| `guide_pinch` | Pinch to pick | Pinch to Grab |
+| `guideDesc_pinch` | Pinch a card with thumb and index, and hold. | Pinch a card with your thumb and index finger, and hold. |
+| `guide_release` | Release to play | Release to Play |
+| `guideDesc_release` | Move over open blue ground; release when the marker lights up. | Move it over open blue ground. Release when the marker lights up. |
+| `guideDesc_recenter` | Turn left palm toward you, tap Recenter. Pinch both hands 0.4s, then drag to rotate, raise or move the arena. | Left palm → Recenter. Pinch both hands for 0.4s, then drag to rotate, lift or move the arena. |
+| `xrHome` | Spatial lobby | XR Lobby |
+| `xrFaction` | Next faction | Next Faction |
+| `xrSoundOn` | Sound on | Sound On |
+| `xrSoundOff` | Sound off | Sound Off |
+| `enterGame` | Enter game | Enter Game |
+| `pickFaction` | Choose Faction | Choose Your Faction |
+| `editDeck` | Edit deck | Edit Deck |
+| `stats` | {w}W {l}L{d} · {r}% · Best streak {b} | {w}W {l}L{d} · Win rate {r}% · Best streak {b} |
+| `presetDeck` | Recommended deck | Preset Deck |
+| `customDeck` | Custom deck | Custom Deck |
+| `deckTitle` | {f} · Deck builder | {f} · Deck Builder |
+| `deckCount` | {n}/{max} · Avg {avg} · Tap to add/remove | {n}/{max} · Avg cost {avg} · Tap cards to add or remove |
+| `preset` | Preset | Load Preset |
+| `createHint` | Create a room, share the code | Create a room and share the code |
+| `create` | Create room | Create Room |
+| `joinHint` | Enter room code | Enter a room code |
+| `noServer` | Offline. Run node server/server.mjs | Can't reach the server (run node server/server.mjs) |
+| `staticNoOnline` | Web demo is vs-AI only | The web demo is vs AI only |
+| `goOnline` | Open the online version | Open Online Version |
+| `codeLen` | Room code is 4 characters | Room codes are 4 characters |
+| `needServer` |  (needs node server/server.mjs) |  (start it with node server/server.mjs) |
+| `upgradeSub` | Pick 1 of 3 · Opponent upgrades too | Pick 1 of 3 · Your opponent picks too |
+| `again` | Play again | Play Again |
+| `streak` |  · {s} win streak! |  · {s}-win streak! |
+| `riftSlowAhead` | Route slowed −{n}% | Rift · Slow {n}% |
+| `lavaBurnAhead` | Crosses lava · burn {n}/s | Lava · Burn {n}/s |
+| `lavaZone` | Lava · burns | Lava · Burns |
+| `iceZone` | Ice · slows | Ice · Slows |
+| `iceSlowAhead` | Crosses ice · slow {n}% | Ice · Slow {n}% |
+| `toUpgrade` | Upgrade in {n} plays (both) | Upgrade in {n} cards (both sides) |
+| `toUpgrade_one` | （新增，n=1 时用） | Upgrade in {n} card (both sides) |
+| `otTag` | OT · First tower wins | Overtime · First tower wins |
+| `battlefield` | Battlefield | Arena |
+| `tSurge` | Mana Surge: regen ×2 | Mana Surge! Regen ×2 |
+| `tNodeMine` | Starcore taken: faster Mana | Starcore taken · Faster Mana |
+| `tNodeEnemy` | Enemy took the Starcore | Enemy captured the Starcore |
+| `tPicks` | You: {a} · Foe: {b} | You: {a} · Opponent: {b} |
+| `tDiscardCost` | Discard costs {n} Mana | Discarding costs {n} Mana |
+| `tLeave` | Leaving = loss. Tap again within 3s. | Leaving counts as a loss. Tap again within 3s. |
+| `tConnLost` | Disconnected | Disconnected from server |
+| `tOpDc` | Opponent dropped · {s}s to return | Opponent disconnected · {s}s to return |
+| `tStart` | Battle! vs {op} · {f} | Fight! vs {op} · {f} |
+| `tNoXR` | WebXR not supported | This browser doesn't support WebXR |
+| `tXRFail` | XR failed: {e} | Couldn't enter XR: {e} |
+| `tXRHelp` | Drag a card to your half to play · Drop on the bin to discard · Recenter from the left palm · Pinch both hands 0.4s to move the arena | Drag a card to your half to play · Drop it on the bin to discard · Recenter from your left palm · Pinch with both hands for 0.4s to move the arena |
+| `pinch` | Pinch to pick | Pinch to choose |
+| `reason_crowns` | Time up · More towers | Time's up · More towers destroyed |
+| `reason_overtime` | OT · First tower | Overtime · First tower destroyed |
+| `reason_hp` | OT over · Higher tower HP | Overtime over · More defense HP left |
+| `reason_draw` | OT over · Equal HP | Overtime over · Defense HP tied |
+| `reason_mutual` | Both Cores fell | Both Cores destroyed |
+| `tCantConnect` | Can't reach server | Can't reach the server |
+| `tNoMana` | Not enough mana | Not enough Mana |
+
+#### 卡牌（`CARD_EN`，名 15 改 / 描述 30 改）
+
+不能缩短、在 88px 手牌里仍折两行（按词折，不截断）的：**Drone Swarm、Drone Factory、Brood Mother**——都是两词通用名，缩成一词会丢信息。
+
+| 中文名 | 英文名 | 英文描述 |
+|---|---|---|
+| 联盟步兵 | Alliance Rifleman → **Rifleman** | Frontline rifleman. Hits air. → Standard infantry. Hits air. |
+| 重装坦克 | Heavy Tank | Heavy armor, slow advance. → Heavy armor. Slow to advance. |
+| 火炮哨站 | Artillery Post → **Artillery** | （不变） |
+| 护盾兵 | Shield Trooper → **Shieldbearer** | Starts with a 200 shield. Frontline tank. → Starts with a 200 shield. Holds the front line. |
+| 军旗手 | Standard Bearer → **Bannerman** | Aura: nearby allies +40% ATK, +20% speed. → Aura: nearby allies get +40% ATK and +20% speed. |
+| 攻城战车 | Siege Engine | Targets buildings and towers only. → Only attacks structures. Built to break towers. |
+| 防御炮台 | Defense Turret → **Gun Turret** | Defensive turret. Hits air. → Stationary defense. Hits air. |
+| 装甲维修 | Field Repair | Heal allies in area for 150. → Heals allies in the area for 150. |
+| 轨道炮击 | Orbital Strike | After 1.2s: 200 area damage (40% to structures). → After 1.2s, deals 200 area damage (40% to structures). |
+| 紧急护盾 | Emergency Shield → **Barrier** | Allies in area gain a 150 shield. → Gives allies in the area a 150 shield. |
+| 战术机甲 | Tactical Mech → **Battle Mech** | Balanced main battle mech. → Balanced main battle unit. |
+| 狙击单元 | Sniper Unit → **Sniper** | Extreme range, heavy single shots. → Extreme range. Heavy single shots. |
+| 无人机工厂 | Drone Factory | Builds a Scout Drone every 9s. → Produces a Scout Drone every 9s. |
+| EMP脉冲 | EMP Pulse | 45 area damage, stun 2.5s. → Deals 45 area damage and stuns for 2.5s. |
+| 黑客入侵 | Hack | Turns the strongest enemy in area for 3s. → The strongest enemy in the area fights for you for 3s. |
+| 连锁闪电 | Chain Lightning → **Chain Bolt** | Lightning chains 4 times, 110 each. → Hits an enemy, then chains to 4 more. 110 damage each. |
+| 无人机空投 | Drone Airdrop → **Airdrop** | （不变） |
+| 战斗虫 | Warrior Bug | Core swarm melee. → Main Swarm melee fighter. |
+| 吞噬者 | Devourer | On kill: heal 30% of the victim's max HP. → On kill: heals 30% of the victim's max HP. |
+| 孵化母虫 | Brood Mother | On death: 4 Larvae. → On death: hatches 4 Larvae. |
+| 同化孢子 | Assimilation Spores → **Assimilate** | Permanently convert an enemy (cost ≤4), lowest HP first. → Permanently converts an enemy costing 4 or less, lowest HP first. |
+| 基因拟态 | Gene Mimicry → **Mimicry** | Copy the costliest enemy in area (cost ≤5) at 70% HP. → Copies the costliest enemy in the area (cost 5 or less) at 70% HP. |
+| 寄生 | Parasite | Poison enemies in area for 8s; any that die become 2 Larvae. → Poisons enemies in the area for 8s. Each one that dies becomes 2 Larvae. |
+| 幼虫 | Larva | Hatched swarm spawn. → Hatched Swarm spawn. |
+| 扭曲战士 | Twisted Warrior → **Twisted One** | （不变） |
+| 灵魂体 | Wraith | Ethereal: 30% dodge. → Ethereal: 30% chance to dodge attacks. |
+| 恶魔构造体 | Demon Construct → **Colossus** | （不变） |
+| 狂战士 | Berserker | Below 50% HP: attack speed ×2. → Below 50% HP: double attack speed. |
+| 虚空蝠 | Void Bats | 2 flying bats, 20% lifesteal. → 2 flying bats with 20% lifesteal. |
+| 腐化方尖碑 | Blight Obelisk → **Obelisk** | 26 corrosion/s within 2.2 tiles, incl. air. → Deals 26 corrosion/s to enemies within 2.2 tiles, air included. |
+| 腐化之雨 | Blight Rain | 22 corrosion/s in area for 4s. → Deals 22 corrosion/s in the area for 4s. |
+| 灵魂抽取 | Soul Drain | Deal 125 to the strongest enemy; heal your Core 125. → Deals 125 damage to the strongest enemy and heals your Core for 125. |
+| 献祭 | Sacrifice | Detonate allies in area for 120% of their remaining HP. → Detonates allies in the area for 120% of their remaining HP. |
+| 诅咒 | Curse | Enemies in area take +60% damage for 7s. → Enemies in the area take 60% more damage for 7s. |
+
+#### 势力副标题（`FACTION_EN`，12px 字、236px 宽内一行）
+
+| 位置 | 原英文 | 新英文 |
+|---|---|---|
+| 钢铁联盟 副标题 | Veterancy · Shields & auras · Steady push | Veteran ranks · Shields · Auras |
+| 玛雅智械 副标题 | Air squadrons · Hacking · Auto-production | Air power · Hacking · Factories |
+| 混沌腐化 副标题 | Sacrifice · Lifesteal & rage · Curses & blight | Sacrifice · Lifesteal · Curses |
+
+#### 强化（`UPGRADE_EN`）
+
+| 中文名 | 原 名 / 描述 | 新 名 / 描述 |
+|---|---|---|
+| 快速部署 | Rapid Deploy / All units +15% speed | Forced March / All units +15% speed |
+| 战争狂热 | War Frenzy / Attack interval -15% | War Frenzy / All attack intervals -15% |
+| 核心加固 | Fortify Core / Core heals 200 | Fortify Core / Restores 200 Core HP |
+| 战地晋升 | Field Promotion / Rank up every 8s | Field Promotion / Units rank up every 8s |
+| 防御网络 | Defense Network / Network damage share 50% | Defense Network / Network: shared damage 50% |
+| 突击网络 | Assault Network / Network attack speed +50% | Assault Network / Network: attack speed +50% |
+| 血契 | Blood Pact / Blood Price: 90 Core HP per Mana | Blood Pact / Blood Price costs 90 Core HP per Mana |
+| 再祭 | Second Offering / Blood Price cooldown 10s | Second Offering / Blood Price every 10s |
+
+#### 卡面关键词
+
+| 中文 | 原英文 | 新英文 |
+|---|---|---|
+| 建筑N秒 | Building 35s | Lasts 35s |
+
+#### 代码接线（2 处）
+
+| 文件 | 改动 |
+|---|---|
+| `js/i18n.js` `t()` | 支持 `键_one`：`vars.n === 1` 且当前语言有该键时取单数形式。新增 `gridUnits_one`、`toUpgrade_one` 两个英文键（中文不需要） |
+| `js/i18n.js` `tagName()` | 「建筑N秒」英文 `Building Ns` → `Lasts Ns`（卡面类型行已有 Building，原来显示成 Building · Building 35s） |
+| `js/xr.js` `wrapText()` | 英文按词折行，中文仍逐字；行尾空格去掉 |
+
+### 7.4 验证
+
+- `npm test`：101/101 通过。
+- **XR 画布宽度**（截不到图，用无头 Chrome 的 canvas `measureText` 按实际字体实测 347 条：XR 卡名、卡面类型行、卡牌详情两行、HUD 队伍 / 目标格 / 提示条、落点提示、板面标签、大厅 / 设置 / 引导 / 教程按钮、强化卡、结算、暂停、手心菜单）：
+
+  | | 修改前英文 | 修改后英文 | 中文（对照） |
+  |---|---|---|---|
+  | 超宽被压扁 / 超行截断 | 25 | 12 | 5 |
+
+  剩余 12 条：XR 卡面类型行 `Building · Lasts 30s` 等 5 条压 4–5%、`Unit · Unstoppable` 压 4%（肉眼难辨）；HUD 目标格 `Upgrade in 20 cards (both sides)` 压 6%（选了通顺优先，见 7.5）；其余 5 条只在**联机且网络状态行同时显示**、提示条被一分为二（每格 439px）时才会压扁，中文同样超（tPicks / tStart 中文也是 1.5–1.7 倍）。其中 `tLeave`（1.17→1.50）、`tOpDc`（1.17→1.33）因改得更完整而变长，单格（896px）时都放得下；`tLeave` 只由桌面「Leave」按钮触发，XR 里走手心菜单的两段确认，基本不会出现在 XR 提示条。
+- **截图**（1600×900，`?debug`，本地 8796 端口，语言 en）：`docs/graphics/en-{home,lobby,codex,deck,settings,online,hud,upgrade,end}.png`。逐张看过：无中文残留（只有语言切换按钮「中文」），势力副标题一行，手牌 5 张卡名一行，强化卡无孤字换行，联机昵称占位符完整显示。
+
+### 7.5 未做 / 遗留
+
+- **服务器文案仍只有中文**（协议没改）：英文玩家会直接看到——`server.mjs:189` 服务器模拟出错,本局已终止；`:301/:303` 服务器房间已满,请稍后再试；`:305/:316` 这个昵称已被其他设备使用,请换一个；`:313` 房间不存在；`:314` 房间已满；`:323` 无法重连:对局已结束；`:347` 等待超时,房间已关闭；`:281` 游客名「玩家123」（对手名、`Playing as …`、开局 toast 都会显示）。这些错误显示在联机大厅 `#online-err`（`main.js:444`）。要双语需服务器改发错误码，另立任务。
+- **英文名与中文名不再逐字对应**：15 个英文卡名（Chain Bolt、Bannerman、Colossus…）和强化名 Forced March为了一行放下或名实相符做了调整，中文名未动。如需中英一致，下一轮改中文名（见第 3 节）。
+- `toUpgrade` 在 XR 顶栏压 6%：更短的说法（Upgrade: 20 cards…）读起来像标签，保留通顺版本。
+- 首页「XR Lobby」按钮与旁边的「XR Lobby available」重复一个词，可读，未处理。
+- 卡组页最后一行卡被底栏挡住一半（布局问题，与文案无关）。
+- 已无人引用的 10 个键（2.6.8 的 8 个 + `ot` / `surge`）英文值未改。
+- 截图只覆盖 1600×900；矮屏 / 竖屏手机布局未逐一截图。

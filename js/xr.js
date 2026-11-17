@@ -65,15 +65,17 @@ function makePanel(wM, hM, wPx, hPx) {
   return { mesh, ctx, tex, canvas };
 }
 
+// 中文逐字折行;英文按词折行(原来逐字折,英文单词会被从中间截断)
+const WRAP_TOKEN = /[⺀-鿿＀-￯]|[^\s⺀-鿿＀-￯]+\s*|\s+/g;
 function wrapText(ctx, text, x, y, maxW, lineH, maxLines = 3) {
   let line = '', lines = 0;
-  for (const ch of text) {
-    if (ctx.measureText(line + ch).width > maxW && line) {
-      ctx.fillText(line, x, y); y += lineH; line = ch;
+  for (const tok of text.match(WRAP_TOKEN) ?? []) {
+    if (ctx.measureText((line + tok).trimEnd()).width > maxW && line) {
+      ctx.fillText(line.trimEnd(), x, y); y += lineH; line = tok.trimStart();
       if (++lines >= maxLines) return;
-    } else line += ch;
+    } else line += tok;
   }
-  if (line) ctx.fillText(line, x, y);
+  if (line) ctx.fillText(line.trimEnd(), x, y);
 }
 
 function drawCard(panel, card, affordable, hover, blood = null) {
