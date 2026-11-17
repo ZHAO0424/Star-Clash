@@ -24,9 +24,7 @@ export class NavGrid {
         const k = j * this.cols + i, x = this.x0 + i * STEP, z = this.z0 + j * STEP;
         const blocked = wallGap(x, z, map) < CLEAR || map.obstacles.some(o => Math.hypot(x - o.x, z - o.z) < o.r + CLEAR + ROCK_CLEARANCE);
         this.staticBlock[k] = blocked ? 1 : 0;
-        let slow = 1;
-        for (const r of map.rifts) if (Math.hypot(x - r.x, z - r.z) < r.r) slow = Math.min(slow, r.slow);
-        this.costMul[k] = 1 / slow;
+        this.costMul[k] = 1;   // 减速区(裂隙 / 冰面 / 熔岩)不进寻路代价:用户规则 2026-11-17,只是走过去的代价
       }
     }
     this.dynKey = '';

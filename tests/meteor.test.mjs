@@ -89,3 +89,71 @@ test('同一种子落点序列相同,不同种子不同;快照能恢复预警 / 
   const mine = cli.meteor.warns.map(w => [w.x, w.z]).sort(), real = srv.meteor.warns.map(w => [-w.x, -w.z].map(v => Math.round(v * 100) / 100)).sort();
   assert.deepEqual(mine, real);
 });
+
+// ── 第六轮(2026-11-17):眩晕、陨坑、去掉两侧裂隙 ──
+const toImpact = g => { toWarn(g); run(g, C.warn + 0.05); };
+
+test('星核荒原没有两侧圆形裂隙(其它未开放地图仍用 MAP 默认的两个)', () => {
+  assert.equal(M.rifts.length, 0);
+  assert.equal(mapForScene('hive').rifts.length, 2);
+});
+
+test('砸中的单位额外瘫痪 1.5 秒;免控的混沌构造体只吃伤害', () => {
+  const g = game();
+  toWarn(g);
+  const [a, b] = g.meteor.warns;
+  run(g, C.warn - 0.1);   // 临砸下前才放单位(飞得快的无人机 3 秒能飞出圈)
+  const tank = g.spawnUnit('p', CARDS.steel_tank, a.x, a.z, 1)[0], drone = g.spawnUnit('p', CARDS.mecha_drone, a.x, a.z, 1)[0];
+  const cons = g.spawnUnit('e', CARDS.chaos_construct, b.x, b.z, 1)[0];
+  const hp = cons.hp;
+  run(g, 0.2);
+  assert.ok(Math.abs(tank.status.stun - C.stun) < 0.25, `坦克瘫痪 ${tank.status.stun}`);
+  assert.ok(drone.dead || drone.status.stun > C.stun - 0.25, '飞行单位也被砸晕');
+  assert.equal(cons.status.stun, 0, '构造体免疫瘫痪');
+  assert.equal(hp - cons.hp, C.damage, '构造体照样受伤');
+});
+
+test('陨坑:坑内地面单位被拉向坑心(自身步速 × pull);飞行单位、坑外单位不受影响;坑不叠加伤害', () => {
+  const g = game();
+  toImpact(g); g.drainEvents();
+  const cr = g.meteor.craters[0];
+  assert.equal(g.meteor.craters.length, 2);
+  const mk = (id, dx) => { const u = g.spawnUnit('p', CARDS[id], cr.x + dx, cr.z, 1)[0]; u.status.stun = 99; return u; };   // 瘫痪:站着不动,只看吸力
+  const ground = mk('steel_tank', 0.7), air = mk('mecha_drone', -0.7), ax = air.x, gx = ground.x - cr.x;
+  const out = g.spawnUnit('p', CARDS.steel_tank, cr.x, cr.z + C.craterR + 0.3, 1)[0]; out.status.stun = 99;
+  const hp = ground.hp, z0 = out.z;
+  run(g, 1);
+  assert.ok(Math.abs(gx - (ground.x - cr.x) - C.pull * ground.speed) < 0.02, `拉近 ${(gx - (ground.x - cr.x)).toFixed(3)}`);
+  assert.equal(air.x, ax, '飞行单位不被拉');
+  assert.ok(Math.abs(out.z - z0) < 1e-9, '坑外不被拉');
+  assert.equal(ground.hp, hp, '坑不叠加伤害');
+  run(g, 6 / C.pull);
+  assert.ok(g.meteor.craters.length === 0 || Math.hypot(ground.x - cr.x, ground.z - cr.z) < 1e-6, '最多拉到坑心,不越过');
+});
+
+test('陨坑吸不死人:最慢的地面单位从坑心也能往外走', () => {
+  const g = game();
+  toImpact(g);
+  const cr = g.meteor.craters[0];
+  g.meteor.shards = [];   // 不让它先去捡坑心的星石
+  const u = g.spawnUnit('p', CARDS.steel_artillery, cr.x, cr.z, 1)[0];
+  u.status.stun = 0;
+  assert.ok(C.pull < 0.5, `吸力占步速 ${C.pull}`);   // 按百分比:任何单位净速度都 ≥ 一半
+  // 炮兵在坑心正常行军(朝敌方建筑),4 秒后离坑心更远
+  run(g, 4);
+  const d = Math.hypot(u.x - cr.x, u.z - cr.z);
+  assert.ok(d > 0.3, `4 秒走出 ${d.toFixed(2)}`);
+});
+
+test('陨坑 8 秒后消失;快照能恢复陨坑(e 方视角镜像)', () => {
+  const srv = game(5), cli = game(99);
+  toImpact(srv);
+  applySnapshot(cli, makeSnapshot(srv, 'e', []));
+  const mine = cli.meteor.craters.map(c => [c.x, c.z]).sort(), real = srv.meteor.craters.map(c => [-c.x, -c.z].map(v => Math.round(v * 100) / 100)).sort();
+  assert.deepEqual(mine, real);
+  assert.ok(Math.abs(cli.meteor.craters[0].left - C.craterLife) < 0.2);
+  run(srv, C.craterLife + 0.1);
+  assert.equal(srv.meteor.craters.length, 0);
+  applySnapshot(cli, makeSnapshot(srv, 'p', []));
+  assert.equal(cli.meteor.craters.length, 0);
+});

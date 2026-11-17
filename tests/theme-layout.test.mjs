@@ -57,8 +57,8 @@ for (const [id, layout] of CASES) {
     }
     assert.equal(L.rivers.length + L.fieldRivers.length, 0);
     assert.equal(L.forge, null);
-    if (id === 'glacier') assert.ok(L.ice && L.ice.paths.length === 2);
-    if (id === 'starcore') assert.equal(M.rifts.length, 2, '星核保留两个裂隙');
+    if (id === 'glacier') assert.ok(L.ice && L.ice.cracks.length === 12);
+    if (id === 'starcore') assert.equal(M.rifts.length, 0, '星核两侧裂隙已去掉(第六轮,改成陨坑)');
   });
 
   test(`${id}:布局确定(双方一致)`, () => assert.deepEqual(layout(M), L));

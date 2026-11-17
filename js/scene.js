@@ -602,9 +602,10 @@ export class BattleScene {
   // 星核荒原 · 陨星:按游戏状态(本地模拟或联机快照)每帧同步
   //   预警圈:亮金色外环 + 脉动的橙色圈面(越临近越快)+ 顺时针收缩的倒计时弧;最后 1.4 秒陨星带拖尾斜着砸下来
   //   星石:发光脉动、上下浮动的星晶(八面体 + 光晕)
+  //   陨坑(第六轮):贴地的碗形明暗贴花 + 隆起的碎石坑沿 + 向坑心流的尘土;0.25 秒砸出,最后 1.5 秒平复
   syncMeteor(game) {
     const M = game?.meteor;
-    if (!this.meteorVis) this.meteorVis = { warns: new Map(), shards: new Map() };
+    if (!this.meteorVis) this.meteorVis = { warns: new Map(), shards: new Map(), craters: new Map() };
     const vis = this.meteorVis, now = performance.now() / 1000, warnT = M?.cfg.warn ?? 3;
     const seenW = new Set(), seenS = new Set();
     for (const w of M?.warns ?? []) {
@@ -638,6 +639,98 @@ export class BattleScene {
       o.gem.scale.setScalar(0.6 + 0.4 * fade);
     }
     for (const [id, o] of vis.shards) if (!seenS.has(id)) { this.drop(o.group); vis.shards.delete(id); }
+    const seenC = new Set();
+    for (const c of M?.craters ?? []) {
+      const key = c.x.toFixed(2) + ',' + c.z.toFixed(2);
+      seenC.add(key);
+      let o = vis.craters.get(key);
+      if (!o) { o = this.makeCrater(c, M.cfg.craterR); vis.craters.set(key, o); }
+      const age = M.cfg.craterLife - c.left, k = Math.min(1, age / 0.25) * Math.min(1, c.left / 1.5);
+      o.u.uK.value = k;
+      o.u.uHot.value = Math.max(0, 1 - age / 2.5);
+      o.u.uTime.value = now;
+      if (Math.abs(o.k - k) > 0.004) {   // 坑沿高度跟着砸出 / 平复
+        o.k = k;
+        const pos = o.lip.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setY(i, o.lipY[i] + o.lipBump[i] * k);
+        pos.needsUpdate = true;
+        o.lip.geometry.computeVertexNormals();
+      }
+    }
+    for (const [key, o] of vis.craters) if (!seenC.has(key)) { this.drop(o.group); vis.craters.delete(key); }
+  }
+
+  // 陨坑:地形是烘好的网格 + 高度图,没法真挖下去,用「碗形明暗贴花 + 真实隆起的坑沿」读出凹陷
+  makeCrater(c, R) {
+    const group = new THREE.Group(), y0 = this.heightAt(c.x, c.z);
+    group.position.set(c.x, 0, c.z);
+    const u = { uK: { value: 0 }, uHot: { value: 1 }, uTime: { value: 0 }, uR: { value: R } };
+    // 贴花:碗内按坡向打光(背光一侧暗、迎光一侧亮)+ 坑心余热 + 坑外放射状溅射纹;全部用暖砂色,不压到黑
+    const decal = new THREE.Mesh(new THREE.RingGeometry(0.001, R * 1.4, 48, 10), new THREE.ShaderMaterial({
+      uniforms: u, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      vertexShader: /* glsl */`varying vec3 vP; void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */`uniform float uK; uniform float uHot; uniform float uR; varying vec3 vP;
+float h1(float a) { return fract(sin(a * 91.7) * 43758.5); }
+void main() {
+  float d = length(vP.xz), r = d / uR; vec2 dir = vP.xz / max(d, 1e-4);
+  float ang = atan(dir.y, dir.x);
+  float s = r < 0.8 ? 2.6 * pow(r / 0.8, 1.5) : 0.0;                              // 碗壁坡度:越靠坑沿越陡
+  vec3 n = normalize(vec3(-dir.x * s, 1.0, -dir.y * s));                  // 碗内法线朝坑心倾斜
+  vec3 L = normalize(vec3(-0.45, 1.0, -0.35));
+  float shade = clamp(dot(n, L), 0.0, 1.0) / 0.88;
+  float rimShadow = smoothstep(0.45, 0.78, r) * (1.0 - smoothstep(0.78, 0.86, r)) * max(0.0, dot(dir, normalize(L.xz)));   // 迎光一侧的坑沿把阴影投进碗里
+  vec3 c = vec3(0.4, 0.33, 0.33) * (0.4 + 0.95 * shade) * (1.0 - 0.4 * rimShadow);   // 碗内:灰紫岩色(贴近地面),最暗处 ≈ sRGB 0.45,不压到黑
+  c = mix(c, vec3(1.0, 0.42, 0.12), uHot * (1.0 - smoothstep(0.0, 0.4, r)) * 0.9);    // 坑心余热
+  float ray = smoothstep(0.55, 1.0, h1(floor(ang * 9.0))) * (1.0 - smoothstep(1.0, 1.4, r));
+  c = mix(c, vec3(0.72, 0.64, 0.6), r > 0.9 ? ray * 0.7 : 0.0);          // 坑外溅射纹
+  float a = r < 0.9 ? 0.92 : ray * 0.75 * (1.0 - smoothstep(1.2, 1.4, r));
+  gl_FragColor = vec4(c, a * uK);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+    }));
+    decal.rotation.x = -Math.PI / 2;
+    decal.renderOrder = 3;
+    group.add(decal);
+    this.board.add(group);
+    this.drape(decal, c.x, c.z, 0.014);
+    // 坑沿:径向隆起(内壁陡、外坡缓)+ 按角度起伏的碎石感,最高 0.12
+    const lipGeo = new THREE.RingGeometry(R * 0.7, R * 1.15, 56, 5);
+    lipGeo.rotateX(-Math.PI / 2);
+    const pos = lipGeo.attributes.position, lipY = [], lipBump = [];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i), d = Math.hypot(x, z), t = Math.max(0, Math.min(1, (d - R * 0.7) / (R * 0.45))), a = Math.atan2(z, x);
+      lipY.push(this.heightAt(c.x + x, c.z + z) + 0.006);
+      lipBump.push(Math.sin(Math.PI * Math.pow(t, 0.7)) * 0.12 * (0.55 + 0.45 * Math.abs(Math.sin(a * 7 + 1.3) * Math.cos(a * 3))));   // 内壁陡、外坡缓
+      pos.setY(i, lipY[i]);
+    }
+    const lip = new THREE.Mesh(lipGeo, new THREE.MeshStandardMaterial({ color: 0xb59f98, roughness: 0.95, flatShading: true }));
+    lip.receiveShadow = true;
+    group.add(lip);
+    // 尘土:沿螺旋流向坑心的小颗粒(着色器里动,不占 CPU)
+    const N = 36, dp = [], seed = [];
+    for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; dp.push(Math.cos(a), y0, Math.sin(a)); seed.push((i * 0.6180339) % 1); }
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute('position', new THREE.Float32BufferAttribute(dp, 3));
+    dg.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
+    const dust = new THREE.Points(dg, new THREE.ShaderMaterial({
+      uniforms: { ...u, uScale: { value: 420 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */`attribute float aSeed; uniform float uTime; uniform float uR; uniform float uK; uniform float uScale; varying float vA;
+void main() {
+  float t = fract(uTime * (0.35 + aSeed * 0.2) + aSeed * 5.0);
+  float a = atan(position.z, position.x) + t * 0.9, rad = uR * (1.25 - 1.1 * t);
+  vec3 p = vec3(cos(a) * rad, position.y + 0.04 + 0.1 * sin(t * 3.1416) * (0.4 + aSeed), sin(a) * rad);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = (0.05 + 0.03 * aSeed) * uScale / -mv.z;
+  vA = sin(t * 3.1416) * uK;
+}`,
+      fragmentShader: /* glsl */`varying float vA;
+void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(vec3(1.0, 0.82, 0.58) * vA * 0.55 * (1.0 - d * 2.0), 1.0); }`,
+    }));
+    dust.frustumCulled = false;
+    group.add(dust);
+    return { group, lip, lipY, lipBump, u, k: -1 };
   }
 
   makeMeteorWarn(w, r) {
@@ -756,7 +849,7 @@ export class BattleScene {
     this.lavaWarn = mesh;
   }
 
-  // 冰封裂谷:拖牌时在冰路上显示两个「冰面 · 减速」标签(两条冰路各一个,中心对称)
+  // 冰封裂谷:拖牌时在两侧边路的主裂隙上显示「冰面 · 减速」标签(中心对称)
   buildIceWarn() {
     const g = new THREE.Group();
     g.visible = false;

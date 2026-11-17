@@ -17,7 +17,6 @@ import { dist2, FIELD_W, FIELD_HALF } from './game.js';
 import { wallGap } from './map.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const LANE_BURN_OK = 1.5;   // 熔岩图:打头单位的过河代价(game.burnCost)不超过这个值就走边路硬蹚
 const value = u => u.hp + u.atk * 3 + (u.shield || 0);
 const AREA_DAMAGE = new Set(['stun_area', 'dot_area', 'strike', 'curse', 'parasite', 'chain']);
 const isRanged = c => c.range > 1.2 && c.atk > 0;
@@ -303,23 +302,15 @@ export class SimpleAI {
     }
   }
 
-  // 进攻方向:防守最薄的敌方塔(塔血量 + 附近敌军价值),x 收向中路以避开两侧裂隙
+  // 进攻方向:防守最薄的敌方塔(塔血量 + 附近敌军价值),直接走那一路。
+  //   用户规则(2026-11-17):减速 / 伤害地形(熔岩、冰面、裂隙、陨坑)一律不影响 AI 路线,所有地图同一条规则
   laneX(card) {
     const g = this.game;
     const towers = g.structures.filter(t => t.side === this.foe && !t.dead && t.kind !== 'base');
     if (!towers.length) return 0;
     const weak = towers.map(t => ({ t, v: t.hp + g.units.filter(u => u.side === this.foe && dist2(u, t) < 3).reduce((a, u) => a + value(u), 0) }))
       .sort((a, b) => a.v - b.v)[0].t;
-    // 熔岩锻炉(没有岩桥,只有祭坛安全):耐烧的打头单位直接走目标塔那一路(过河时蹚熔岩);
-    //   怕烧的(过河代价高)从祭坛正后方出兵。否则所有进攻都挤到中路,边路没人走(诊断:98% 的过河都经过祭坛)
-    const lava = g.map.lava;
-    if (lava) {
-      const cost = card ? g.burnCost({ air: !!card.air, speed: card.speed * 0.7, maxHp: card.hp * (card.count || 1) }) : Infinity;
-      const toLane = card?.air || cost <= LANE_BURN_OK;
-      const x = toLane ? clamp(weak.x * 0.85, -3.6, 3.6) : g.map.node.x;
-      return x + (Math.random() - 0.5) * 0.4;
-    }
-    return clamp(weak.x * 0.5, -1.7, 1.7) + (Math.random() - 0.5) * 0.6;
+    return clamp(weak.x * 0.85, -3.6, 3.6) + (Math.random() - 0.5) * 0.4;
   }
 
   // ── 旧版 AI(basic)──

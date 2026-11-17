@@ -957,15 +957,6 @@ export class Game {
     return u.dead;
   }
 
-  // 熔岩对某种单位的「怕烧程度」= 烧灼 dps /(速度 × 生命)× 20(丢 5% 生命 ≈ 多走 1 格),夹在 [0.3, 6]。
-  //   只给 AI 出牌决策用(决定从哪一路出兵);单位移动不看它:熔岩不参与寻路,侧路单位照自己的路线直接蹚过去,
-  //   只有视野(SIGHT)里出现敌人时才会因为追击往中间走
-  burnCost(u) {
-    const L = this.map.lava;
-    if (!L || u.air) return 0;
-    return Math.max(0.3, Math.min(6, L.dps / (Math.max(0.1, u.speed) * Math.max(1, u.maxHp ?? u.hp)) * 20));
-  }
-
   // 绕开前方的岩石:障碍在前方且比目标近时,沿切向偏转
   steer(u, dx, dz, distToTarget) {
     let sx = dx, sz = dz;

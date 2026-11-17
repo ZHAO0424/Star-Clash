@@ -238,35 +238,30 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
   return pts;
 }
 
-// ── 冰封裂谷 · 冰路:沿冰路折线的带子,逐顶点贴地;冰面着色 = 浅冰蓝 + 随视角游走的反光带 + 冰裂纹网 + 霜白边 ──
+// ── 冰封裂谷 · 冰川裂隙:每条裂隙按左右沿(和 onIce 判定同一份顶点)铺成带子,逐顶点贴地;
+//   着色 = 浅冰边缘(霜白锯齿沿 + 随视角游走的反光)→ 往里加深成深蓝裂口(不用黑:眼镜里黑 = 透明)+ 沿裂隙方向的细裂纹 ──
 const ICE_GLSL = /* glsl */`
 float iHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
 float iNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(iHash(i), iHash(i + vec2(1, 0)), u.x), mix(iHash(i + vec2(0, 1)), iHash(i + vec2(1, 1)), u.x), u.y);
-}
-// 冰裂纹:到最近格点的距离差(Voronoi 边)
-float iCrack(vec2 p) {
-  vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
-  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-    vec2 g = vec2(x, y), o = vec2(iHash(i + g), iHash(i + g + 7.3));
-    float d = length(g + o - f);
-    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
-  }
-  return 1.0 - smoothstep(0.0, 0.06, d2 - d1);
 }`;
 function iceMesh(ice, heightAt, uTime) {
-  const geos = ice.paths.map(path => {
-    const curve = new THREE.CatmullRomCurve3(path.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal', 0.2);
-    const len = curve.getLength(), N = Math.max(80, Math.round(len / 0.05)), pos = [], uv = [], idx = [], w = ice.half + 0.03;
-    for (let i = 0; i <= N; i++) {
-      const p = curve.getPointAt(i / N), d = curve.getTangentAt(i / N), hl = Math.hypot(d.x, d.z) || 1;
-      for (const sd of [-1, 1]) {
-        const x = p.x - d.z / hl * w * sd, z = p.z + d.x / hl * w * sd;
+  const geos = ice.cracks.map(({ left, right }) => {
+    const pos = [], uv = [], idx = [], n = left.length;
+    let len = 0;
+    for (let i = 0; i < n; i++) {
+      const [lx, lz] = left[i], [rx, rz] = right[i];
+      if (i) len += Math.hypot((lx + rx - left[i - 1][0] - right[i - 1][0]) / 2, (lz + rz - left[i - 1][1] - right[i - 1][1]) / 2);
+      // 每个截面 3 个顶点(左沿 / 中线 / 右沿),中线也贴地
+      for (const [x, z, v] of [[lx, lz, 0], [(lx + rx) / 2, (lz + rz) / 2, 0.5], [rx, rz, 1]]) {
         pos.push(x, heightAt(x, z) + 0.012, z);
-        uv.push(i / N * len, sd < 0 ? 0 : 1);
+        uv.push(len, v);
       }
-      if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+      if (i < n - 1) for (const k of [0, 1]) {
+        const a = i * 3 + k, b = a + 3;
+        idx.push(a, a + 1, b, a + 1, b + 1, b);
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -275,29 +270,32 @@ function iceMesh(ice, heightAt, uTime) {
     return g;
   });
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime }, transparent: true, depthWrite: false,
+    uniforms: { uTime }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; varying vec3 vV;
 void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vW = position; vV = cameraPosition - wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader: /* glsl */`uniform float uTime; varying vec2 vUv; varying vec3 vW; varying vec3 vV;
 ${ICE_GLSL}
 void main() {
-  float edge = min(vUv.y, 1.0 - vUv.y);
-  float a = smoothstep(0.0, 0.08, edge);
-  vec3 base = vec3(0.26, 0.6, 0.95);                                     // 线性:sRGB ≈ (0.55, 0.8, 0.98),比雪地更蓝
-  float n = iNoise(vW.xz * 3.0);
-  float crack = iCrack(vW.xz * 2.6) * 0.8 + iCrack(vW.xz * 6.5) * 0.35;
+  float e = 1.0 - abs(vUv.y - 0.5) * 2.0;                          // 0 = 裂隙边沿,1 = 中线
+  float n = iNoise(vW.xz * 7.0), n2 = iNoise(vW.xz * 19.0 + 3.1);
+  float deep = smoothstep(0.28 + 0.22 * n, 0.72 + 0.18 * n2, e);   // 裂口:内边界随噪声抖动 → 锯齿
+  vec3 rim = vec3(0.62, 0.84, 1.0) * (0.92 + 0.12 * n2);           // 浅冰边缘(线性色)
   vec3 v = normalize(vV);
-  float sheen = pow(max(0.0, 1.0 - abs(fract(dot(vW.xz, vec2(0.6, 0.8)) * 0.35 + v.x * 0.6 + v.z * 0.4 + uTime * 0.03) * 2.0 - 1.0)), 6.0);   // 反光带:随视角游走
-  vec3 c = base * (0.9 + 0.15 * n) + vec3(0.85, 0.95, 1.0) * (crack * 0.55 + sheen * 0.45);
-  c = mix(c, vec3(0.08, 0.3, 0.75), smoothstep(0.13, 0.04, edge) * 0.75);   // 深蓝描边:在白色雪地上读得出冰路的边界
-  gl_FragColor = vec4(c, 0.9 * a);
+  float sheen = pow(max(0.0, 1.0 - abs(fract(dot(vW.xz, vec2(0.6, 0.8)) * 0.5 + v.x * 0.6 + v.z * 0.4 + uTime * 0.03) * 2.0 - 1.0)), 8.0);
+  rim += vec3(0.35, 0.4, 0.45) * sheen * (1.0 - deep);
+  vec3 gap = mix(vec3(0.05, 0.22, 0.62), vec3(0.02, 0.09, 0.36), smoothstep(0.75, 1.0, e));   // 深蓝裂口,中线最深(不到黑)
+  vec3 c = mix(rim, gap, deep);
+  float streak = smoothstep(0.86, 1.0, iNoise(vec2(vUv.x * 9.0, vUv.y * 2.5 + 1.7)));          // 沿裂隙方向的细裂纹
+  c = mix(c, vec3(0.1, 0.32, 0.72), streak * 0.5 * (1.0 - deep));
+  c = mix(c, vec3(0.92, 0.97, 1.0), smoothstep(0.1, 0.0, e) * 0.85);                           // 霜白锯齿沿:在雪地上读出边界
+  gl_FragColor = vec4(c, smoothstep(0.0, 0.04, e) * 0.96);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`,
   });
   const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
-  mesh.name = 'icePaths';
+  mesh.name = 'iceCracks';
   mesh.renderOrder = 1;
   return mesh;
 }
