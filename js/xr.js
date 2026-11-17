@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { FACTIONS, cardTags, previewRadius } from './cards.js';
 import { cardArt, uiArt, XR_GUIDE, loadXRGuideArt, loadXRControlArt } from './assets.js';
-import { isPlaced } from './game.js';
+import { isPlaced, DISCARD_COST } from './game.js';
 import { ARENA } from './arena.js';
 import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
@@ -494,7 +494,7 @@ export class XRControls {
     const art = uiArt('ui_discard');
     if (art) ctx.drawImage(art.img, 83, 39, 90, 90);
     else { ctx.font = 'bold 56px sans-serif'; ctx.fillText('✕', 128, 125); }
-    ctx.font = '30px sans-serif'; ctx.fillText(t('trash'), 128, 180);
+    ctx.font = '30px sans-serif'; ctx.fillText(t('trash', { n: DISCARD_COST }), 128, 180);
     tex.needsUpdate = true;
   }
 

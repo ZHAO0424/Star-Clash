@@ -261,10 +261,10 @@
       </div>
     </section>
     <div class="home-battle-actions">
-      <button class="btn home-action home-action-primary" id="btn-quick" disabled data-i18n="quickBattle">快速开局</button>
-      <button class="btn home-action home-action-setup" id="btn-prepare" data-i18n="battleSetup">对战准备</button>
+      <button class="btn home-action home-action-primary" id="btn-quick" disabled data-i18n="quickBattle">快速开战</button>
+      <button class="btn home-action home-action-setup" id="btn-prepare" data-i18n="battleSetup">备战</button>
     </div>
-    <p id="first-match-home" data-i18n="firstMatchHome">首次开局会带你完成第一次部署。</p>
+    <p id="first-match-home" data-i18n="firstMatchHome">首局附带出牌教学</p>
     <nav class="home-nav">
       <button class="btn home-action" id="btn-home-deck" data-i18n="editDeck">编辑卡组</button>
       <button class="btn home-action" id="btn-codex" data-i18n="codex">图鉴</button>
@@ -286,7 +286,7 @@
     <section class="codex-library">
       <div class="codex-filters">
         <label><span data-i18n="filterFaction">势力</span><select id="codex-faction"></select></label>
-        <label><span data-i18n="filterType">卡牌类型</span><select id="codex-type"></select></label>
+        <label><span data-i18n="filterType">类型</span><select id="codex-type"></select></label>
       </div>
       <div id="codex-grid" class="codex-grid"></div>
     </section>
@@ -302,14 +302,14 @@
   <main class="settings-panel">
     <label><span data-i18n="language">语言</span><select id="settings-language"><option value="zh">中文</option><option value="en">English</option></select></label>
     <label><span data-i18n="xrSound">音效</span><select id="settings-sound"><option value="on" data-i18n="xrOn">开</option><option value="off" data-i18n="xrOff">关</option></select></label>
-    <label><span data-i18n="xrBoardSize">棋盘尺寸</span><select id="settings-size"><option value="small" data-i18n="xrBoard_small">小</option><option value="standard" data-i18n="xrBoard_standard">中</option><option value="large" data-i18n="xrBoard_large">大</option></select></label>
-    <label><span data-i18n="xrMode">XR 显示模式</span><select id="settings-xr-mode"><option value="auto" data-i18n="xrAuto">自动</option><option value="immersive-vr" data-i18n="xrImmersiveVR">沉浸式 VR</option><option value="immersive-ar" data-i18n="xrImmersiveAR">透视 AR</option></select></label>
-    <button class="btn" id="btn-xr-guide" type="button" data-i18n="xrGuide">XR 操作指南</button>
+    <label><span data-i18n="xrBoardSize">战场尺寸</span><select id="settings-size"><option value="small" data-i18n="xrBoard_small">小</option><option value="standard" data-i18n="xrBoard_standard">中</option><option value="large" data-i18n="xrBoard_large">大</option></select></label>
+    <label><span data-i18n="xrMode">XR 模式</span><select id="settings-xr-mode"><option value="auto" data-i18n="xrAuto">自动</option><option value="immersive-vr" data-i18n="xrImmersiveVR">沉浸式 VR</option><option value="immersive-ar" data-i18n="xrImmersiveAR">透视 AR</option></select></label>
+    <button class="btn" id="btn-xr-guide" type="button" data-i18n="xrGuide">XR 操作</button>
   </main>
 </div>
 
 <dialog id="xr-guide" class="guide-dialog" aria-labelledby="guide-title">
-  <header><h2 id="guide-title" data-i18n="xrGuide">XR 操作指南</h2><button class="btn" id="btn-guide-close" data-i18n="close">关闭</button></header>
+  <header><h2 id="guide-title" data-i18n="xrGuide">XR 操作</h2><button class="btn" id="btn-guide-close" data-i18n="close">关闭</button></header>
   <figure>
     <img id="guide-art" alt="">
     <figcaption><strong id="guide-step"></strong><p id="guide-description"></p></figcaption>
@@ -326,10 +326,10 @@
   <main class="arena-lobby">
   <header class="arena-heading">
     <button class="btn" id="btn-prepare-back" data-i18n="back">返回</button>
-    <h1 id="prepare-title" tabindex="-1" data-i18n="battleSetup">对战准备</h1>
+    <h1 id="prepare-title" tabindex="-1" data-i18n="battleSetup">备战</h1>
     <div class="seg" id="lang"><button data-v="zh">中文</button><button data-v="en">EN</button></div>
   </header>
-  <div class="sub" id="stats-line">选择你的势力</div>
+  <div class="sub" id="stats-line">选择势力</div>
   <section class="arena-roster">
   <div id="faction-list"><span class="muted-text" data-i18n="loading">加载中…</span></div>
   <div class="faction-detail" id="faction-detail" hidden>
@@ -350,7 +350,7 @@
   </div>
   <div id="arena-preview" class="arena-preview" aria-live="polite"><strong id="arena-name"></strong><span id="arena-description"></span></div>
   <div class="row">
-    <span class="muted-text" data-i18n="difficulty">人机难度</span>
+    <span class="muted-text" data-i18n="difficulty">难度</span>
     <div class="seg" id="difficulty">
       <button data-v="basic" data-i18n="easy">简单</button><button data-v="normal" data-i18n="normal">普通</button><button data-v="smart" data-i18n="hard">困难</button>
     </div>
@@ -374,8 +374,8 @@
   <div class="deck-actions">
     <div class="err" id="deck-err" role="status"></div>
     <div class="row">
-    <button class="btn" id="btn-deck-preset" data-i18n="preset">推荐卡组</button>
-    <button class="btn primary" id="btn-deck-save" data-i18n="saveBack">保存并返回</button>
+    <button class="btn" id="btn-deck-preset" data-i18n="preset">推荐</button>
+    <button class="btn primary" id="btn-deck-save" data-i18n="saveBack">保存</button>
     <button class="btn" id="btn-deck-cancel" data-i18n="cancel">取消</button>
     </div>
   </div>
@@ -383,18 +383,18 @@
 
 <!-- 联机大厅 -->
 <div id="online-screen" class="screen" style="display:none">
-  <h2 data-i18n="onlineTitle">联 机 对 战</h2>
+  <h2 data-i18n="onlineTitle">联机对战</h2>
   <div class="panel row">
-    <label class="muted-text" for="player-name" data-i18n="nickname">昵称</label><input class="txt" id="player-name" maxlength="16" placeholder="留空会分配游客名" data-i18n-ph="guestPlaceholder">
+    <label class="muted-text" for="player-name" data-i18n="nickname">昵称</label><input class="txt" id="player-name" maxlength="16" placeholder="留空则随机命名" data-i18n-ph="guestPlaceholder">
   </div>
   <div class="row">
     <div class="panel" style="text-align:center">
-      <div class="muted-text" style="margin-bottom:8px" data-i18n="createHint">创建房间,把房间码告诉对手</div>
+      <div class="muted-text" style="margin-bottom:8px" data-i18n="createHint">建房后把房间码发给对手</div>
       <button class="btn primary" id="btn-create" data-i18n="create">创建房间</button>
 
     </div>
     <div class="panel" style="text-align:center">
-      <label class="muted-text join-label" for="join-code" data-i18n="joinHint">输入对手的房间码</label>
+      <label class="muted-text join-label" for="join-code" data-i18n="joinHint">输入房间码</label>
       <div class="row"><input class="txt code" id="join-code" maxlength="4" placeholder="ABCD"><button class="btn" id="btn-join" data-i18n="join">加入</button></div>
     </div>
   </div>
@@ -402,7 +402,7 @@
     <div id="room-wait" hidden>
       <div id="room-identity"></div>
       <div id="room-code"></div>
-      <button class="btn primary" id="btn-copy-room" data-i18n="copyRoom">复制房间码</button>
+      <button class="btn primary" id="btn-copy-room" data-i18n="copyRoom">复制房号</button>
     </div>
     <div class="row">
       <span class="muted-text" id="online-progress" role="status"></span>
@@ -410,14 +410,14 @@
     </div>
   </section>
   <div class="err" id="online-err" role="alert"></div>
-  <div class="panel"><div class="muted-text" style="margin-bottom:6px" data-i18n="leaderboard">排行榜(Elo)</div><div id="leaderboard" data-i18n="loading">加载中…</div></div>
+  <div class="panel"><div class="muted-text" style="margin-bottom:6px" data-i18n="leaderboard">排行榜 · Elo</div><div id="leaderboard" data-i18n="loading">加载中…</div></div>
   <button class="btn" id="btn-online-back" data-i18n="back">返回</button>
 </div>
 
 <!-- 战斗 HUD -->
 <div id="hud" style="display:none">
   <div id="top-bar">
-    <div class="base-row player-base"><span class="base-label" data-i18n="myBase">己方核心</span><strong id="p-base-num">1000</strong><div class="base-bar"><div id="p-base" style="width:100%"></div></div></div>
+    <div class="base-row player-base"><span class="base-label" data-i18n="myBase">我方核心</span><strong id="p-base-num">1000</strong><div class="base-bar"><div id="p-base" style="width:100%"></div></div></div>
     <div id="match-row">
       <span id="timer">3:00</span>
       <span class="crowns" id="crowns-p" style="color:#7cc4ff">♛ 0</span>
@@ -434,7 +434,7 @@
     <div><strong id="first-match-title"></strong><p id="first-match-text" aria-live="polite"></p></div>
     <div class="first-match-actions">
       <button class="btn" id="btn-first-match-skip" type="button" data-i18n="firstMatchSkip">跳过引导</button>
-      <button class="btn primary" id="btn-first-match-go" type="button" hidden data-i18n="firstMatchGo">开始对局</button>
+      <button class="btn primary" id="btn-first-match-go" type="button" hidden data-i18n="firstMatchGo">开战</button>
     </div>
   </section>
   <div id="bottom">
@@ -462,9 +462,9 @@
 
 <!-- 强化选择 -->
 <div id="upgrade-screen" role="dialog" aria-modal="true" aria-labelledby="upgrade-title" class="overlay" style="display:none">
-  <h2 id="upgrade-title" data-i18n="upgradeTitle">⚡ 强 化 阶 段</h2>
-  <div class="sub" style="opacity:.6" data-i18n="upgradeSub">选择一项强化(对手也会同时获得强化)</div>
-  <div class="upgrade-countdown"><span id="upgrade-time"></span><progress id="upgrade-timer"></progress><small data-i18n="upgradeTimeout">超时将自动选择</small></div>
+  <h2 id="upgrade-title" data-i18n="upgradeTitle">强化阶段</h2>
+  <div class="sub" style="opacity:.6" data-i18n="upgradeSub">三选一 · 对手同步强化</div>
+  <div class="upgrade-countdown"><span id="upgrade-time"></span><progress id="upgrade-timer"></progress><small data-i18n="upgradeTimeout">超时自动选择</small></div>
   <div id="upgrade-list"></div>
   <div class="muted-text" id="upgrade-wait" role="status" tabindex="-1"></div>
 </div>
@@ -475,12 +475,12 @@
   <h2 id="end-title"></h2>
   <div id="end-reason"></div>
   <dl id="match-summary">
-    <div><dt data-i18n="matchScore">本局比分</dt><dd id="end-score"></dd></div>
-    <div><dt data-i18n="matchCores">己方 / 敌方核心</dt><dd id="end-cores"></dd></div>
-    <div><dt data-i18n="matchTime">对局用时</dt><dd id="end-duration"></dd></div>
+    <div><dt data-i18n="matchScore">比分</dt><dd id="end-score"></dd></div>
+    <div><dt data-i18n="matchCores">核心（我/敌）</dt><dd id="end-cores"></dd></div>
+    <div><dt data-i18n="matchTime">用时</dt><dd id="end-duration"></dd></div>
   </dl>
   <div class="muted-text" id="end-stats"></div>
-  <div class="row"><button class="btn primary" id="btn-again">再来一局</button><button class="btn" id="btn-restart" data-i18n="backMenu">返回菜单</button></div>
+  <div class="row"><button class="btn primary" id="btn-again">再来一局</button><button class="btn" id="btn-restart" data-i18n="backMenu">返回主页</button></div>
 </div>
 
 <script>window.BG_STATIC = location.hostname.endsWith('.github.io'); window.BG_ONLINE_URL = "https://star-clash.onrender.com";</script>

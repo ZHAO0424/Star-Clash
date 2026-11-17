@@ -4,6 +4,7 @@
 //   --scale=0.6                        输出缩放(控制 png 大小)
 //   --units=0                          不放单位(看地形 / 墙体)
 //   --js="..."                         截图前在页面里执行的额外 JS
+//   --lang=zh|en                       界面语言(默认跟随浏览器)
 //   PORT=8790(默认)
 // 进人机局 → 冻结模拟 → 双方各放 5 个单位 → 等模型下载 → 读 renderer.info(含关掉主光阴影的 XR 口径)→ 截图
 // 输出一行 JSON:{ calls, triangles, geometries, textures, noShadow: {...} }
@@ -53,7 +54,7 @@ try {
   await cmd('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
   // 固定随机种子 + 预置偏好,保证改前改后同一画面
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `(()=>{let a=12345;window.__seed=n=>{a=n};Math.random=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
-    try{localStorage.setItem('sg.scene',JSON.stringify('${sceneId}'));localStorage.setItem('sg.faction',JSON.stringify('steel'));localStorage.setItem('sg.entered','true');localStorage.setItem('sg.firstMatchSeen','true');}catch{}})();` });
+    try{localStorage.setItem('sg.scene',JSON.stringify('${sceneId}'));localStorage.setItem('sg.faction',JSON.stringify('steel'));localStorage.setItem('sg.entered','true');localStorage.setItem('sg.firstMatchSeen','true');${opt.lang ? `localStorage.setItem('sg.lang','${opt.lang}');` : ''}}catch{}})();` });
   await cmd('Page.navigate', { url: `http://localhost:${process.env.PORT || 8790}/?debug` });
   await sleep(4000);
   await ev(`window.__seed(777); document.querySelector('#btn-solo').click(); true`);
