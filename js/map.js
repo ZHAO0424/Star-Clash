@@ -100,13 +100,65 @@ const GLACIER = stretchLayout({
   obstacles: [...glacierRocks, ...glacierRocks.map(mirrorPoint)],
   rifts: [],   // 原来两侧各一个圆形冰缝(半径 1.0,地面 ×0.5);2026-11-16 换成下面斜插的冰路
 });
-// 冰封裂谷 · 冰路(2026-11-16,替换两个圆形冰缝):两条不规则折线带状冰面斜插过三条进攻路线,
-//   互为绕星核旋转 180° 的镜像(p / e 公平),在两侧边路中段交叉。地面单位在冰面上移速 ×0.5(和原冰缝同一强度;
-//   覆盖面积从约 6.3 增加到约 13,整体减速更多、更显眼),飞行单位不受影响。
-//   冰面不进部署区(带宽边缘 |z| ≤ 2.05 < 部署线 2.4 − 单位半径)、不压祭坛占领圈(冰面边缘离圈 ≥ 0.15)。
-//   冰面只是代价、不参与寻路(和熔岩一样):nav 不读它
-const icePathA = [[-4.8, 1.7], [-3.3, 1.0], [-2.2, 0.0], [-1.3, -1.45], [0.3, -1.75], [1.6, -1.45], [2.5, -0.4], [3.6, 0.3], [4.8, 0.2]];
-GLACIER.ice = { half: 0.3, slow: 0.5, paths: [icePathA, icePathA.map(([x, z]) => [-x, -z])] };
+// 冰封裂谷 · 冰川裂隙(2026-11-17,替换第五轮两条等宽平滑冰路):像真实冰川裂隙那样的裂缝网——
+//   锯齿边、宽窄不一、两头收尖、主缝断成三截(边路 / 中路 / 边路)、主缝上岔出细支缝。整体仍斜插过三条进攻路线,
+//   一方 6 条(3 主 + 3 支),和另一方的 6 条互为绕星核旋转 180° 的镜像(p / e 公平),在两侧边路交错成网。
+//   · 「露出的部分」= 裂隙在地面上露出的冰面:每条裂隙是一个多边形(左沿 + 右沿),判定(onIce)和渲染用同一份顶点
+//   · 地面单位在冰面上移速 ×0.5,飞行不受影响;总面积约 13(第五轮冰路 13.3,±20% 内)
+//   · 冰面不进部署区(|z| + 单位半径 < 部署线)、不压祭坛占领圈(冰面顶点离圈 ≥ 0.15)
+//   · 冰面只是代价、不参与寻路(和熔岩一样):nav 不读它,单位转向 / AI 出兵也不看它——单位照常走,不会刻意找冰少的路
+// 脊线控制点 [x, z, 左半宽, 右半宽](左 = 沿脊线前进方向的左手边);半宽 0 = 尖头
+const CREVASSE_STEP = 0.16;   // 沿脊线每 0.16 格一个截面,每个截面左右沿各自抖动 → 锯齿边
+const CREVASSE_WIDEN = 1.4;   // 控制点半宽的统一放大(调总面积用)
+const crevasseSpines = [
+  // 西路主缝:从左边线斜下到左侧岩脊末端
+  [[-4.78, 1.9, 0, 0], [-4.35, 1.6, 0.24, 0.3], [-3.85, 1.3, 0.4, 0.32], [-3.3, 0.95, 0.32, 0.46], [-2.85, 0.55, 0.36, 0.28], [-2.5, 0.15, 0.22, 0.26], [-2.2, -0.2, 0, 0]],
+  // 西路支缝:从主缝向南岔出
+  [[-3.78, 1.22, 0.08, 0.08], [-3.95, 0.75, 0.17, 0.14], [-4.1, 0.35, 0.1, 0.12], [-4.22, 0.0, 0, 0]],
+  // 中路主缝:绕过祭坛南侧
+  [[-1.85, -0.98, 0, 0], [-1.5, -1.32, 0.15, 0.18], [-1.05, -1.6, 0.26, 0.24], [-0.45, -1.74, 0.2, 0.2], [0.15, -1.76, 0.2, 0.2], [0.75, -1.7, 0.22, 0.2], [1.3, -1.5, 0.22, 0.2], [1.75, -1.12, 0.13, 0.15], [2.0, -0.82, 0, 0]],
+  // 中路支缝:朝祭坛方向的一小截
+  [[0.45, -1.62, 0.08, 0.08], [0.72, -1.4, 0.11, 0.1], [0.95, -1.15, 0, 0]],
+  // 东路主缝
+  [[2.3, -0.65, 0, 0], [2.7, -0.3, 0.18, 0.16], [3.2, 0.05, 0.36, 0.32], [3.75, 0.25, 0.32, 0.44], [4.25, 0.2, 0.38, 0.28], [4.78, 0.32, 0, 0]],
+  // 东路支缝:向南岔出
+  [[3.22, 0.0, 0.1, 0.1], [3.1, -0.45, 0.15, 0.13], [2.96, -0.95, 0, 0]],
+];
+// 确定性哈希(整数运算,浏览器 / Node 结果一致)→ [0, 1)
+function hash01(a, b) {
+  let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
+  h = Math.imul(h ^ h >>> 15, 0x2c1b3c6d); h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
+// 一条裂隙:脊线按 CREVASSE_STEP 细分,每个截面沿法线向左右各推出(插值半宽 × 抖动 0.6–1.3)。
+//   返回 { left, right }(同长的两条边),多边形 = left + 反向 right
+function crevasse(ctrl, seed) {
+  const S = [];
+  for (let i = 1; i < ctrl.length; i++) {
+    const a = ctrl[i - 1], b = ctrl[i], n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / CREVASSE_STEP));
+    for (let k = i === 1 ? 0 : 1; k <= n; k++) S.push(a.map((v, j) => v + (b[j] - v) * k / n));
+  }
+  const left = [], right = [];
+  S.forEach(([x, z, hl, hr], i) => {
+    const p = S[Math.max(0, i - 1)], q = S[Math.min(S.length - 1, i + 1)];
+    const tl = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, nx = -(q[1] - p[1]) / tl, nz = (q[0] - p[0]) / tl;
+    const jl = CREVASSE_WIDEN * (0.6 + 0.7 * hash01(seed, i * 2)), jr = CREVASSE_WIDEN * (0.6 + 0.7 * hash01(seed, i * 2 + 1));
+    left.push([x + nx * hl * jl, z + nz * hl * jl]);
+    right.push([x - nx * hr * jr, z - nz * hr * jr]);
+  });
+  return { left, right };
+}
+const crevassesA = crevasseSpines.map((c, i) => crevasse(c, i + 1));
+const rot180 = pts => pts.map(([x, z]) => [-x, -z]);
+GLACIER.ice = {
+  slow: 0.5,
+  cracks: [...crevassesA, ...crevassesA.map(c => ({ left: rot180(c.left), right: rot180(c.right) }))].map(c => {
+    const poly = [...c.left, ...[...c.right].reverse()].filter((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 1e-6);   // 尖头左右沿重合,去掉重复点
+    if (Math.hypot(poly[0][0] - poly.at(-1)[0], poly[0][1] - poly.at(-1)[1]) <= 1e-6) poly.pop();
+    const xs = poly.map(p => p[0]), zs = poly.map(p => p[1]);
+    return { ...c, poly, box: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)] };
+  }),
+};
 // 熔岩锻炉(第三轮):两侧的圆形熔岩池(裂隙,地面减速 50%)换成一条横贯战场的熔岩河。
 //   · 河道中心线 z = amp · sin(π x / W):左右两端在边线中点落进来,绕星核旋转 180° 对称(奇函数)
 //   · 地面单位(非建筑)站在河里 → 烧灼:每 0.5 秒结算一次 dps × 0.5;离开后余烬再烧 ember 秒。飞行单位不受影响
@@ -137,24 +189,22 @@ export const mapForScene = id => id === 'glacier' ? GLACIER : id === 'volcano' ?
 
 // 熔岩河中心线的 z
 export const lavaCenterZ = (lava, W, x) => lava.amp * Math.sin(Math.PI * x / W);
-// 点到折线的距离
-function distToPolyline(pts, x, z) {
-  let best = Infinity;
-  for (let i = 1; i < pts.length; i++) {
-    const [ax, az] = pts[i - 1], [bx, bz] = pts[i], vx = bx - ax, vz = bz - az;
-    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1)));
-    best = Math.min(best, Math.hypot(x - ax - vx * t, z - az - vz * t));
+// 点在不在多边形里(射线法)
+export function inPolygon(poly, x, z) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
   }
-  return best;
+  return inside;
 }
-// 冰封裂谷:这一点在不在冰面上(地面单位的中心)
+// 冰封裂谷:这一点在不在露出的冰面上(地面单位的中心)
 export function onIce(map, x, z) {
   const I = map.ice;
   if (!I || Math.abs(x) > map.W) return false;
   if (Math.hypot(x - map.node.x, z - map.node.z) < map.node.r) return false;
-  return I.paths.some(p => distToPolyline(p, x, z) < I.half);
+  return I.cracks.some(c => x >= c.box[0] && z >= c.box[1] && x <= c.box[2] && z <= c.box[3] && inPolygon(c.poly, x, z));
 }
-export const iceDistance = (map, x, z) => Math.min(...(map.ice?.paths ?? []).map(p => distToPolyline(p, x, z)));
 
 // 这一点会不会被烧灼(地面单位的中心落在河道里、又不在祭坛 / 岩桥上)
 export function inLava(map, x, z) {

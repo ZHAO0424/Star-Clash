@@ -756,7 +756,7 @@ export class BattleScene {
     this.lavaWarn = mesh;
   }
 
-  // 冰封裂谷:拖牌时在冰路上显示两个「冰面 · 减速」标签(两条冰路各一个,中心对称)
+  // 冰封裂谷:拖牌时在两侧边路的主裂隙上显示「冰面 · 减速」标签(中心对称)
   buildIceWarn() {
     const g = new THREE.Group();
     g.visible = false;

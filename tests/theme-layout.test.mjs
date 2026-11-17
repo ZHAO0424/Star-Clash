@@ -57,7 +57,7 @@ for (const [id, layout] of CASES) {
     }
     assert.equal(L.rivers.length + L.fieldRivers.length, 0);
     assert.equal(L.forge, null);
-    if (id === 'glacier') assert.ok(L.ice && L.ice.paths.length === 2);
+    if (id === 'glacier') assert.ok(L.ice && L.ice.cracks.length === 12);
     if (id === 'starcore') assert.equal(M.rifts.length, 2, '星核保留两个裂隙');
   });
 
