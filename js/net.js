@@ -33,6 +33,7 @@ export function validXRPose(pose) {
 }
 const UP = Object.fromEntries(ALL_UPGRADES.map(u => [u.id, u]));
 const r2 = v => Math.round(v * 100) / 100;
+const r3 = v => Math.round(v * 1000) / 1000;
 
 // 视角映射工具
 export function view(forWho) {
@@ -65,7 +66,9 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
       const st = u.status;
       const flags = (st.stun > 0 ? 1 : 0) | (st.hack > 0 ? 2 : 0) | (st.curse > 0 ? 4 : 0) | (st.parasite > 0 ? 8 : 0) | (u.mimic ? 16 : 0) | (st.burn > 0 ? 32 : 0);   // 16 = 基因拟态复制体;32 = 熔岩烧灼中(含余烬)
       const t = u.target;
-      return [u.id, V.side(u.side), u.card.id, r2(V.x(u.x)), r2(V.z(u.z)), Math.round(u.hp), Math.round(u.maxHp),
+      // 单位坐标保留 3 位小数:慢速单位(坦克 0.35 格/秒)每次快照只走 0.0175 格,取 2 位会被量化成 0.01 / 0.02 交替 →
+      //   客户端插值出来忽快忽慢、斜着走时方向来回摆(朝向跟着抖)
+      return [u.id, V.side(u.side), u.card.id, r3(V.x(u.x)), r3(V.z(u.z)), Math.round(u.hp), Math.round(u.maxHp),
         Math.round(u.shield), Math.round(u.maxShield), flags, t ? r2(V.x(t.x)) : null, t ? r2(V.z(t.z)) : null, u.rank || 0, u.card.cocoon ? r2(u.hatchProgress ?? 0) : null, u.links?.length ? u.links.map(m => m.id) : null];
     }),
     up: U ? { o: U.options[forWho].map(u => u.id), pk: !!U.picked[forWho], po: !!U.picked[other], tm: r2(U.timer) } : null,
