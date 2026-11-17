@@ -174,7 +174,7 @@ const PASSIVE_EN = {
   steel: ['Veteran Ranks', 'Units rank up every 10s alive (up to 3 ranks), +20% HP and attack per rank'],
   mecha: ['Tactical Network', 'Nearby units link up: linked allies absorb 40% of the damage taken, +35% attack speed'],
   swarm: ['Assimilation', 'Ground enemies killed by swarm units become cocoons that hatch a larva after 3s (cocoons can be destroyed)'],
-  chaos: ['Blood Price', 'Short on mana? Pay with your core: 150 HP per missing mana (core keeps at least 300, 18s cooldown)'],
+  chaos: ['Blood Price', 'Short on mana? Pay with your core: 110 HP per missing mana (core keeps at least 300, 13s cooldown)'],
 };
 export const passiveText = (id, p) => (en() && PASSIVE_EN[id] ? { name: PASSIVE_EN[id][0], desc: PASSIVE_EN[id][1] } : p);
 
@@ -224,9 +224,9 @@ const CARD_EN = {
   chaos_warrior: ['Twisted Warrior', 'A warrior warped by chaos'],
   chaos_wraith: ['Wraith', 'Ethereal: 30% chance to dodge attacks'],
   chaos_construct: ['Demon Construct', 'Devastating heavy unit, immune to stun and hacking'],
-  chaos_zealot: ['Bomb Zealot', 'Charges buildings and explodes for 115 area damage'],
+  chaos_zealot: ['Bomb Zealot', 'Charges buildings and explodes for 135 area damage'],
   chaos_berserker: ['Berserker', 'Below half HP: attack speed doubles'],
-  chaos_soulreaver: ['Soul Reaver', 'Ranged soul drain, heals 25% of damage dealt'],
+  chaos_soulreaver: ['Soul Reaver', 'Ranged soul drain, heals 32% of damage dealt'],
   chaos_bats: ['Void Bats', '2 flying life-stealing bats'],
   chaos_obelisk: ['Blight Obelisk', 'Deals 26 corrosion per second to enemies within 2.2 (incl. air)'],
   chaos_rain: ['Blight Rain', 'Enemies in area take 22 corrosion per second for 4s'],
@@ -248,8 +248,8 @@ const UPGRADE_EN = {
   up_swarm_shell: ['Hardened Shell', 'Assimilation cocoons gain 35% health'],
   up_mecha_share: ['Defense Network', 'Networked units share 50% of incoming damage'],
   up_mecha_haste: ['Assault Network', 'Networked units gain 50% attack speed'],
-  up_chaos_price: ['Blood Pact', 'Blood Price costs 120 core health per missing mana'],
-  up_chaos_cooldown: ['Second Offering', 'Blood Price cooldown drops to 13 seconds'],
+  up_chaos_price: ['Blood Pact', 'Blood Price costs 90 core health per missing mana'],
+  up_chaos_cooldown: ['Second Offering', 'Blood Price cooldown drops to 10 seconds'],
   up_atk: ['Attack Boost', 'All units +15% attack'], up_hp: ['Armor Boost', 'All units +20% HP'],
   up_mana: ['Energy Flow', 'Mana regen +25%'], up_speed: ['Rapid Deploy', 'Unit move speed +15%'],
   up_maxmana: ['Energy Capacity', 'Max mana +2'], up_frenzy: ['War Frenzy', 'Attack interval -15%'],

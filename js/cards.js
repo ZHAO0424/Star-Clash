@@ -36,7 +36,7 @@ export const FACTIONS = {
   swarm: { id: 'swarm', name: '虫群同化', desc: '孵化扩张 · 进化转化 · 寄生同化', color: 0x7a30c9, accent: 0x3fae4a, shape: 'blob',
     passive: { name: '同化', desc: '被虫群单位击杀的地面敌人化为虫茧,3 秒后孵出一只幼虫(虫茧可以被打掉)' } },
   chaos: { id: 'chaos', name: '混沌腐化', desc: '献祭自爆 · 吸魂狂暴 · 诅咒扭曲', color: 0x30d060, accent: 0x8020a0, shape: 'spike',
-    passive: { name: '血祭', desc: '法力不够时可以用核心生命补:每缺 1 点法力扣 150 生命(核心至少保留 300,冷却 18 秒)' } },
+    passive: { name: '血祭', desc: '法力不够时可以用核心生命补:每缺 1 点法力扣 110 生命(核心至少保留 300,冷却 13 秒)' } },
 };
 
 const unit = (id, faction, name, cost, hp, atk, speed, range, interval, desc, extra = {}) =>
@@ -50,7 +50,7 @@ const LIST = [
   // ── 钢铁联盟:强化 · 护盾 · 据点 ──
   unit('steel_infantry', 'steel', '联盟步兵', 2, 115, 21, 0.9, 0.7, 1.0, '持枪步兵,能对空射击', { hitsAir: true }),
   unit('steel_tank', 'steel', '重装坦克', 5, 390, 34, 0.5, 0.7, 1.2, '厚重装甲,缓慢推进'),
-  unit('steel_artillery', 'steel', '火炮哨站', 4, 160, 28, 0.35, 2.8, 1.5, '远程炮击,溅射伤害', { splash: 0.2 }),
+  unit('steel_artillery', 'steel', '火炮哨站', 4, 160, 28, 0.35, 2.8, 1.5, '远程炮击,溅射伤害', { splash: 0.15 }),
   unit('steel_shield', 'steel', '护盾兵', 3, 170, 15, 0.8, 0.7, 1.0, '展开能量盾,替队友吃伤害', { shield: 200 }),
   unit('steel_banner', 'steel', '军旗手', 3, 180, 11, 0.8, 0.7, 1.0, '附近友军攻击 +40%、移速 +20%', { aura: { atk: 0.4, speed: 0.2, radius: 1.8 } }),
   unit('steel_siege', 'steel', '攻城战车', 5, 463, 62, 0.55, 0.8, 1.6, '只攻击建筑,拆塔利器', { siege: true }),
@@ -64,10 +64,10 @@ const LIST = [
     { value: 150, radius: 2.0, needTarget: true }),
 
   // ── 玛雅智械:空中 · 控制 · 自动化 ──
-  unit('mecha_drone', 'mecha', '侦察无人机', 2, 82, 15, 1.4, 1.5, 0.8, '飞行,快速骚扰', { air: true, hitsAir: true }),
-  unit('mecha_sentry', 'mecha', '哨戒炮', 3, 120, 25, 0.6, 2.5, 1.2, '移动缓慢的远程平台'),
-  unit('mecha_walker', 'mecha', '战术机甲', 5, 315, 39, 0.7, 0.8, 1.1, '均衡的主战单位'),
-  unit('mecha_swarmdrone', 'mecha', '蜂群无人机', 3, 39, 9, 1.3, 1.3, 0.7, '一次部署3架飞行无人机',
+  unit('mecha_drone', 'mecha', '侦察无人机', 2, 74, 15, 1.4, 1.5, 0.8, '飞行,快速骚扰', { air: true, hitsAir: true }),
+  unit('mecha_sentry', 'mecha', '哨戒炮', 3, 130, 25, 0.6, 2.5, 1.2, '移动缓慢的远程平台'),
+  unit('mecha_walker', 'mecha', '战术机甲', 5, 340, 36, 0.7, 0.8, 1.1, '均衡的主战单位'),
+  unit('mecha_swarmdrone', 'mecha', '蜂群无人机', 3, 33, 9, 1.3, 1.3, 0.7, '一次部署3架飞行无人机',
     { air: true, hitsAir: true, count: 3 }),
   unit('mecha_arc', 'mecha', '电弧兵', 4, 210, 28, 0.7, 1.8, 1.2, '攻击连锁弹射3个敌人', { chain: 3 }),
   unit('mecha_sniper', 'mecha', '狙击单元', 4, 113, 60, 0.5, 3.0, 2.4, '超远射程,高单发伤害'),
@@ -85,9 +85,9 @@ const LIST = [
   // ── 虫群同化:孵化 · 进化 · 寄生 ──
   unit('swarm_worker', 'swarm', '工兵虫', 1, 80, 16, 1.1, 0.6, 0.9, '存活15秒后进化为战斗虫',
     { evolveInto: 'swarm_warrior', evolveTime: 15 }),
-  unit('swarm_warrior', 'swarm', '战斗虫', 3, 235, 31, 1.0, 0.6, 1.0, '虫群的主力战士'),
+  unit('swarm_warrior', 'swarm', '战斗虫', 3, 245, 31, 1.0, 0.6, 1.0, '虫群的主力战士'),
   unit('swarm_devourer', 'swarm', '吞噬者', 5, 311, 40, 0.8, 0.7, 1.1, '击杀敌人后吞噬恢复生命', { devour: true }),
-  unit('swarm_brood', 'swarm', '幼虫群', 2, 44, 9, 1.3, 0.5, 0.8, '一次孵化4只幼虫', { count: 4 }),
+  unit('swarm_brood', 'swarm', '幼虫群', 2, 50, 9, 1.3, 0.5, 0.8, '一次孵化4只幼虫', { count: 4 }),
   unit('swarm_mother', 'swarm', '孵化母虫', 4, 264, 18, 0.6, 0.7, 1.2, '死亡时孵化4只幼虫',
     { deathSpawn: { card: 'swarm_larva', count: 4 } }),
   unit('swarm_spitter', 'swarm', '酸液喷吐者', 3, 121, 21, 0.8, 2.2, 1.3, '远程酸液,溅射', { splash: 0.6 }),
@@ -99,20 +99,20 @@ const LIST = [
   spell('swarm_evolve', 'swarm', '基因拟态', 3, 'mimic', '复制落点附近费用最高的敌方单位(费用≤5)为你作战,复制体生命70%',
     { radius: 1.6, maxCost: 5, hpFactor: 0.7, needTarget: true }),
   spell('swarm_parasite', 'swarm', '寄生', 3, 'parasite', '范围敌军中毒8秒;寄生期间死亡会变成2只你的幼虫',
-    { radius: 1.5, duration: 8, dps: 7, spawnCard: 'swarm_larva', spawnCount: 2, needTarget: true }),
+    { radius: 1.5, duration: 8, dps: 6, spawnCard: 'swarm_larva', spawnCount: 2, needTarget: true }),
   { ...unit('swarm_larva', 'swarm', '幼虫', 1, 38, 9, 1.3, 0.5, 0.8, '孵化出的幼虫'), token: true },
   // 同化(虫群招牌机制)留下的虫茧:不会自己衰减,到时间孵出幼虫;被敌人打掉就没了
   { ...building('swarm_cocoon', 'swarm', '虫茧', 0, 70, 0, 0, 1, 999, '3 秒后孵出幼虫', { cocoon: { card: 'swarm_larva', time: 3 } }), token: true },
 
   // ── 混沌腐化:献祭 · 吸魂 · 诅咒 ──
-  unit('chaos_warrior', 'chaos', '扭曲战士', 2, 123, 27, 1.0, 0.7, 1.0, '被混沌扭曲的战士'),
-  unit('chaos_wraith', 'chaos', '灵魂体', 3, 101, 38, 1.2, 0.7, 0.9, '虚体:30%概率闪避攻击', { ethereal: true }),
-  unit('chaos_construct', 'chaos', '恶魔构造体', 6, 360, 46, 0.55, 0.8, 1.3, '毁灭性的重型单位,免疫瘫痪和黑客入侵', { unstoppable: true }),
-  unit('chaos_zealot', 'chaos', '自爆邪徒', 2, 96, 0, 1.4, 0.4, 1.0, '冲向建筑自爆,范围115伤害',
-    { siege: true, kamikaze: true, deathBurst: { damage: 115, radius: 1.2 } }),
+  unit('chaos_warrior', 'chaos', '扭曲战士', 2, 123, 30, 1.0, 0.7, 1.0, '被混沌扭曲的战士'),
+  unit('chaos_wraith', 'chaos', '灵魂体', 3, 101, 41, 1.2, 0.7, 0.9, '虚体:30%概率闪避攻击', { ethereal: true }),
+  unit('chaos_construct', 'chaos', '恶魔构造体', 6, 400, 52, 0.55, 0.8, 1.3, '毁灭性的重型单位,免疫瘫痪和黑客入侵', { unstoppable: true }),
+  unit('chaos_zealot', 'chaos', '自爆邪徒', 2, 96, 0, 1.4, 0.4, 1.0, '冲向建筑自爆,范围135伤害',
+    { siege: true, kamikaze: true, deathBurst: { damage: 135, radius: 1.2 } }),
   unit('chaos_berserker', 'chaos', '狂战士', 3, 190, 31, 1.0, 0.7, 1.0, '生命低于一半时狂暴:攻速翻倍', { berserk: true }),
-  unit('chaos_soulreaver', 'chaos', '吸魂者', 4, 210, 33, 0.8, 1.4, 1.1, '远程吸魂,伤害的25%回复自身',
-    { lifesteal: 0.25, hitsAir: true }),
+  unit('chaos_soulreaver', 'chaos', '吸魂者', 4, 225, 33, 0.8, 1.4, 1.1, '远程吸魂,伤害的32%回复自身',
+    { lifesteal: 0.32, hitsAir: true }),
   unit('chaos_bats', 'chaos', '虚空蝠', 3, 68, 17, 1.4, 0.7, 0.8, '2只飞行吸血蝙蝠',
     { air: true, hitsAir: true, count: 2, lifesteal: 0.2 }),
   building('chaos_obelisk', 'chaos', '腐化方尖碑', 4, 328, 0, 0, 1, 30, '每秒对周围2.2格敌人造成26腐蚀(含空中)',
@@ -247,8 +247,8 @@ const FACTION_UPGRADES = [
   { id: 'up_swarm_shell', icon: 'up_hp', faction: 'swarm', name: '硬壳虫茧', desc: '同化虫茧生命 +35%', apply: s => { s.cocoonHp = 1.35; } },
   { id: 'up_mecha_share', icon: 'up_hp', faction: 'mecha', name: '防御网络', desc: '战术网络分摊伤害提高至 50%', apply: s => { s.linkShare = 0.50; } },
   { id: 'up_mecha_haste', icon: 'up_frenzy', faction: 'mecha', name: '突击网络', desc: '战术网络攻速加成提高至 50%', apply: s => { s.linkHaste = 0.5; } },
-  { id: 'up_chaos_price', icon: 'up_maxmana', faction: 'chaos', name: '血契', desc: '血祭补费时，每点只消耗 120 核心生命', apply: s => { s.bloodPrice = 120; } },
-  { id: 'up_chaos_cooldown', icon: 'up_speed', faction: 'chaos', name: '再祭', desc: '血祭冷却缩短至 13 秒', apply: s => { s.bloodCooldown = 13; } },
+  { id: 'up_chaos_price', icon: 'up_maxmana', faction: 'chaos', name: '血契', desc: '血祭补费时，每点只消耗 90 核心生命', apply: s => { s.bloodPrice = 90; } },
+  { id: 'up_chaos_cooldown', icon: 'up_speed', faction: 'chaos', name: '再祭', desc: '血祭冷却缩短至 10 秒', apply: s => { s.bloodCooldown = 10; } },
 ];
 
 export const ALL_UPGRADES = [...UPGRADES, ...FACTION_UPGRADES];
