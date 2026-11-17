@@ -1653,6 +1653,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       const want = moving && !m.hover ? (m.actions.walk || m.actions.idle) : (m.actions.idle || m.actions.walk);
       if (want && want !== m.cur) {
         want.reset().setLoop(THREE.LoopRepeat).fadeIn(0.2).play();
+        if (want === m.actions.fly) want.time = Math.random() * want.getClip().duration;   // 随机起拍:同一张牌的两只蝙蝠不同步扇翅
         m.cur?.fadeOut(0.2);
         m.cur = want;
       }
