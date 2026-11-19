@@ -53,6 +53,7 @@ export function makeSnapshot(game, forWho, events, ack = 0) {
   const me = game.side(forWho), op = game.side(other);
   const U = game.upgrade;
   return {
+    sc: Math.round(performance.now()),   // 服务器单调时钟(ms):客户端据此排快照时间轴,抵消网络抖动
     time: r2(game.time), ph: game.phase, pl: r2(game.prepLeft ?? 0), w: V.side(game.winner), er: game.endReason || null,
     su: !!game.surge, ot: !!game.overtime, uc: game.upgradeCount, ack,
     me: { f: me.faction, m: r2(me.mana), mm: me.manaMax, hp: Math.round(me.baseHP), hpm: me.baseHPMax,
@@ -125,20 +126,29 @@ export function applySnapshot(mirror, snap, { keepHand = false, pendingCost = 0 
     s.dead = !!dead;
   }
 
-  // 单位:按 id 增量更新,记录插值起止点
+  // 时钟映射:off = 服务器时钟 - 本地时钟。取最早到达的那条(迟到最少),晚到的只缓慢回收(时钟漂移);
+  // jit = 迟到量的滑动平均,决定渲染要延后多少(见 interpolate)
   const now = performance.now();
+  const sc = Number.isFinite(snap.sc) ? snap.sc : now;   // 旧服务器没有 sc:退化为按到达时间
+  const sample = sc - now;
+  const clk = g._clk ??= { off: sample, jit: 20 };   // 开局先按中等抖动缓冲,之后自适应
+  if (sample > clk.off) clk.off += (sample - clk.off) * 0.2;   // 来了一条更早的:平滑追上,避免渲染时刻突跳
+  else {
+    clk.jit += (clk.off - sample - clk.jit) * 0.1;
+    clk.off += (sample - clk.off) * 0.002;
+  }
+
+  // 单位:按 id 增量更新,记下带服务器时间的位置样本
   const byId = new Map(g.units.map(u => [u.id, u]));
   const next = [];
   for (const [id, side, cid, x, z, hp, maxHp, sh, msh, flags, tx, tz, rank, hatchProgress, linkIds] of snap.u) {
     let u = byId.get(id);
     const card = CARDS[cid];
     if (!u) {
-      u = { id, card, x, z, status: {}, radius: card.type === 'building' ? 0.42 : card.air ? 0.18 : 0.22 };
-      u._ax = x; u._az = z;
-    } else {
-      u._ax = u.x; u._az = u.z;              // 从当前渲染位置插值到新位置
+      u = { id, card, x, z, status: {}, radius: card.type === 'building' ? 0.42 : card.air ? 0.18 : 0.22, _s: [] };
     }
-    u._bx = x; u._bz = z; u._t0 = now;
+    u._s.push([sc, x, z]);
+    if (u._s.length > 6) u._s.shift();
     u.side = side; u.card = card; u.hp = hp; u.maxHp = maxHp; u.shield = sh; u.maxShield = msh;
     u.air = !!card.air; u.building = card.type === 'building'; u.range = card.range; u.atk = card.atk;
     u.status.stun = flags & 1 ? 1 : 0; u.status.hack = flags & 2 ? 1 : 0;
@@ -191,12 +201,35 @@ function deserializeEvent(e, g, live) {
   return out;
 }
 
-// 客户端每帧:单位位置在两次快照之间线性插值
+// 客户端每帧:抖动缓冲插值。渲染时刻比「估计的服务器当前时刻」晚 delay,
+// 落在两条样本之间就线性插值;网络抖、样本吃完时按最后速度外推最多 MAX_EXTRAP(ms),再停住等下一条
+const MAX_EXTRAP = 50;
+export const playoutDelay = clk => Math.min(300, Math.max(100, 60 + 3 * clk.jit));
 export function interpolate(mirror, now = performance.now()) {
+  const clk = mirror._clk;
+  if (!clk) return;
+  // 缓冲时长平滑变化:变长时最多按 25% 速率(画面短暂放慢而不是倒退),变短时按 10%(轻微加速追上)
+  const target = playoutDelay(clk), dt = Math.max(0, now - (clk.last ?? now));
+  clk.last = now;
+  clk.d = clk.d === undefined ? target : clk.d + Math.max(-0.1 * dt, Math.min(0.25 * dt, target - clk.d));
+  const rt = now + clk.off - clk.d;
   for (const u of mirror.units) {
-    if (u._t0 === undefined) continue;
-    const k = Math.min(1, (now - u._t0) / SNAPSHOT_MS);
-    u.x = u._ax + (u._bx - u._ax) * k;
-    u.z = u._az + (u._bz - u._az) * k;
+    const s = u._s;
+    if (!s?.length) continue;
+    let i = 0;
+    while (i < s.length && s[i][0] <= rt) i++;
+    if (i === 0) { u.x = s[0][1]; u.z = s[0][2]; continue; }
+    if (i < s.length) {
+      const [ta, ax, az] = s[i - 1], [tb, bx, bz] = s[i];
+      const k = tb > ta ? (rt - ta) / (tb - ta) : 1;
+      u.x = ax + (bx - ax) * k; u.z = az + (bz - az) * k;
+      continue;
+    }
+    const [tb, bx, bz] = s[s.length - 1];
+    if (s.length < 2) { u.x = bx; u.z = bz; continue; }
+    const [ta, ax, az] = s[s.length - 2];
+    const dt = Math.min(rt - tb, MAX_EXTRAP);
+    const v = tb > ta ? 1 / (tb - ta) : 0;
+    u.x = bx + (bx - ax) * v * dt; u.z = bz + (bz - az) * v * dt;
   }
 }
