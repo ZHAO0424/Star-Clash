@@ -33,7 +33,7 @@ import { recordResult, leaderboard, claimName } from './ranking.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp',
+  '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.wasm': 'application/wasm',
   '.glb': 'model/gltf-binary', '.css': 'text/css; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
 
 // ── 限额 ──

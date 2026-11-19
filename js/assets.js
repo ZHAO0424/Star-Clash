@@ -2,6 +2,7 @@
 // 缺失的资源返回 null,调用方回退到程序化几何体 / 纯文字卡面
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mapForScene, stretchFieldZ, unstretchFieldZ, FIELD_STRETCH } from './map.js';
 import { shapeTerrain } from './obstacle-kit.js';
 import { groundUniforms, GROUND_GLSL } from './ground-look.js';
@@ -71,14 +72,24 @@ const loadTex = url => new Promise(res => texLoader.load(url, t => { t.colorSpac
 
 export function sceneArt(id) {
   const have = new Set(manifest.scenes?.[id] ?? []);
-  const url = k => (have.has(k) ? `assets/scenes/${id}/${k}.${k.startsWith('prop') ? 'png' : 'jpg'}` : null);
+  const url = k => (have.has(k) ? `assets/scenes/${id}/${k}.webp` : null);
   return { concept: url('concept'), sky: url('sky'), ground: url('ground'), cliff: url('cliff'), hazard: url('hazard'),
     props: ['prop1', 'prop2', 'prop3'].map(url).filter(Boolean) };
 }
 
+// 战场地形 GLB 用 Draco 压缩(tools 见 docs/load-speed-plan.md,约 2MB → 200KB),解码器放在本站 vendor
+const terrainLoader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('vendor/three/addons/libs/draco/gltf/'));
+
+// 战场加载最多等 SCENE_TIMEOUT_MS:网络太慢 / 请求卡住时先用平面战场开局,不让玩家卡在「加载战场」
+const SCENE_TIMEOUT_MS = 25000;
 export function loadScene(id) {
-  if (!sceneCache.has(id)) sceneCache.set(id, buildScene(id));
-  return sceneCache.get(id);
+  if (!sceneCache.has(id)) {
+    const p = buildScene(id);
+    sceneCache.set(id, p);
+    p.then(r => { if (!r) sceneCache.delete(id); });   // 失败的不缓存,下一局再试
+  }
+  const timeout = new Promise(res => setTimeout(() => res(null), SCENE_TIMEOUT_MS));
+  return Promise.race([sceneCache.get(id), timeout]);
 }
 
 // 场地拉长(map.js FIELD_STRETCH):地形是按原 6.8 半长烘焙的。所有网格顶点在世界坐标里按 stretchFieldZ 拉伸
@@ -129,7 +140,7 @@ async function buildScene(id) {
     const spots = await fetch(base + 'props.json').then(r => (r.ok ? r.json() : { spots: [] })).then(j => j.spots).catch(() => []);
     const art = sceneArt(id);
     const [gltf, ground, cliff, hazard, ...propTextures] = await Promise.all([
-      new GLTFLoader().loadAsync(base + 'battlefield.glb'),
+      terrainLoader.loadAsync(base + 'battlefield.glb'),
       art.ground && loadTex(art.ground), art.cliff && loadTex(art.cliff), art.hazard && loadTex(art.hazard),
       ...art.props.map(loadTex),
     ]);

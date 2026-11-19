@@ -24,7 +24,7 @@ export const SCENES = [
     id: 'glacier', name: '冰封裂谷', en: 'Frozen Rift', propKit: true,
     desc: '两侧转线口错开；两条冰路斜穿三路，地面单位踏冰减速。',
     descEn: 'Staggered lane crossings. Two ice paths cut across all lanes and slow ground units.',
-    menuPreview: 'assets/terrain/glacier/preview.png',
+    menuPreview: 'assets/terrain/glacier/preview.webp',
     relief: 'spires', rock: 'ice', rimHeight: 1.25,
     palette: { near: [0.78, 0.86, 0.94], far: [0.86, 0.84, 0.90], rim: [0.86, 0.92, 0.98], cliff: [0.60, 0.74, 0.88],
       hazard: [0.40, 0.72, 0.98], hazardCore: [0.75, 0.95, 1.0], crystal: [0.45, 0.85, 1.0], rock: [0.72, 0.84, 0.95] },

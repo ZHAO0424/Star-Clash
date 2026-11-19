@@ -49,3 +49,13 @@
 - 方案 2 里「主页显示加载进度小字」改为直接写在主按钮上，没有新增文案键。
 - `npm test` 101 项全过；本地 304 实测通过；对战截图 `docs/graphics/load-speed-hud.png` 卡面、费用图标正常。
 - 没改：XR 控制图标（`assets/ui/xr/*.png`，进 XR 才加载）、每张地图进场时的地形与场景贴图（每张约 5–6MB，「正在加载战场」阶段）、单位 GLB 模型。若进对局也慢，下一步压这三块。
+
+## 第二轮：开局「加载战场」卡住（2026-11-19）
+
+- 现象：GitHub Pages 版开局一直停在「战场加载中」。`main.js beginBattle` 等 `loadScene()`，每张图要下地形 GLB 约 2–3MB + 贴图约 1.4MB，Pages 本机实测约 17KB/s ≈ 4 分钟，且没有超时。
+- 地形 GLB 用 gltf-transform Draco 压缩：8 张图 17MB → 1.6MB（单张 ~200KB）；解码器 `vendor/three/addons/libs/draco/gltf/`（wasm 192KB，首次一次）。
+  Draco 解码出来是普通 Float32 顶点，`stretchTerrain` 直接改顶点不受影响。
+- 战场贴图（地面 / 岩壁 / 裂隙 / 天空 / 概念图 / 装饰立绘）与冰川菜单预览图转 WebP：20.4MB → 9.1MB；`sceneArt()` 统一 `.webp`。
+- `loadScene` 加 25s 超时：超时先用平面战场开局，后台继续下载，下一局用上；失败的结果不缓存。
+- 服务器 MIME 加 `.wasm`。验证：`npm test` 104 过；星核 / 熔岩 / 冰川 / 蜂巢截图 `docs/graphics/draco-*.png` 与改前一致；浏览器确认 Draco 解码器加载、沙漠场景 textured=true、无报错。
+- 单张图开局下载量：约 4MB → 约 0.65MB（另有一次性解码器 0.25MB）。单位 GLB 模型（共 16MB）仍是开局后按需懒加载，没有压。
