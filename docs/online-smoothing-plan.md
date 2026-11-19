@@ -38,3 +38,9 @@
 
 - `tests/interp.test.mjs` 3 项（12 个随机种子 + 真实快照链路），`npm test` 104 项全过。
 - 本地浏览器 + 机器人对手实测：缓冲稳定在 100ms，单位每 30ms 匀速前进。
+
+## C 结论：不用做
+
+Render 后台确认现有 `star-clash` 服务**本来就在 Singapore**。之前判断「美西」是看 DNS 别名 `gcp-us-west1-1.origin.onrender.com` 和响应头 `CF-RAY …-LAX` 得出的，错了：
+LAX 是 Render 前面那层 Cloudflare 的洛杉矶节点。国内访问的实际路径是 国内 → Cloudflare 美国节点 → 新加坡源站，绕了太平洋一圈，这才是慢和不稳的原因。
+所以换 Render 区域没有意义；要根本改善，需要国内能直连的服务器（香港 VPS，免备案），或不经 Cloudflare 海外节点的接入。新服务未创建。
