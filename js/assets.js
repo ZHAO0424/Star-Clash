@@ -20,11 +20,14 @@ const images = new Map();     // key → HTMLImageElement(卡面 canvas 绘制�
 // 召唤物没有单独立绘时借用同系卡牌的图
 const FALLBACK = { swarm_larva: 'swarm_brood' };
 
+// 单张图最多等 15s:网络卡住时按缺失处理(调用方回退到几何体 / 纯文字),不让一张图卡住整个首屏
+const IMAGE_TIMEOUT_MS = 15000;
 function loadImage(url) {
   return new Promise(resolve => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    const timer = setTimeout(() => { img.onload = img.onerror = null; resolve(null); }, IMAGE_TIMEOUT_MS);
+    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = () => { clearTimeout(timer); resolve(null); };
     img.src = url;
   });
 }
@@ -44,7 +47,7 @@ const XR_CONTROLS = {
   size: 'xr/xr-board-size.png',
   sound: 'xr/xr-sound.png',
   leave: 'xr/xr-exit.png',
-  back: 'card-back.png',
+  back: 'card-back.webp',
 };
 let xrControlArtRequest;
 
@@ -218,18 +221,23 @@ diffuseColor.rgb *= tCol * (0.5 + 0.5 * vTAO);`)
   mat.customProgramCacheKey = () => 'terrainTex2' + (isRock ? 'R' : 'G');
   mat.needsUpdate = true;
 }
+// 预加载分两段:menuJobs(界面图 + 徽章,菜单要用,几百 KB)到位就能进菜单;
+// 立绘(单位 / 建筑 / 法术)在后台继续,全部完成才 resolve ready(开局、卡组、图鉴等它)
+let resolveMenu;
+export const menuReady = new Promise(r => { resolveMenu = r; });
 export const ready = (async () => {
   try {
     const res = await fetch('assets/manifest.json', { cache: 'no-cache' });
     if (res.ok) Object.assign(manifest, await res.json());
   } catch { /* 没有清单 = 没有美术资源 */ }
-  const jobs = [
+  const menuJobs = [
     loadImage('assets/ui/materials/mana-crystal.webp').then(img => {
       if (img) images.set('ui:mana-crystal', img);
     }),
   ];
+  const jobs = [];
   for (const id of manifest.units) {
-    jobs.push(loadImage(`assets/units/${id}.png`).then(img => {
+    jobs.push(loadImage(`assets/units/${id}.webp`).then(img => {
       if (!img) return;
       images.set('unit:' + id, img);
       const tex = new THREE.Texture(img);
@@ -239,7 +247,7 @@ export const ready = (async () => {
     }));
   }
   for (const id of manifest.structures) {
-    jobs.push(loadImage(`assets/structures/${id}.png`).then(img => {
+    jobs.push(loadImage(`assets/structures/${id}.webp`).then(img => {
       if (!img) return;
       const tex = new THREE.Texture(img);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -248,21 +256,22 @@ export const ready = (async () => {
     }));
   }
   for (const id of manifest.ui) {
-    const url = id === 'bg_menu' ? 'assets/ui/bg_menu.jpg' : `assets/ui/${id}.png`;
-    jobs.push(loadImage(url).then(img => img && images.set('ui:' + id, img)));
+    menuJobs.push(loadImage(`assets/ui/${id}.webp`).then(img => img && images.set('ui:' + id, img)));
   }
   for (const id of manifest.spells) {
-    jobs.push(loadImage(`assets/spells/${id}.png`).then(img => img && images.set('spell:' + id, img)));
+    jobs.push(loadImage(`assets/spells/${id}.webp`).then(img => img && images.set('spell:' + id, img)));
   }
   for (const id of manifest.emblems) {
-    jobs.push(loadImage(`assets/emblems/${id}.png`).then(img => img && images.set('emblem:' + id.replace('emblem_', ''), img)));
+    menuJobs.push(loadImage(`assets/emblems/${id}.webp`).then(img => img && images.set('emblem:' + id.replace('emblem_', ''), img)));
   }
   // 首屏进度:网络慢时(如国内访问 github.io)让玩家看到在加载、加载到哪了
+  const all = [...menuJobs, ...jobs];
   let done = 0;
-  const report = () => globalThis.dispatchEvent?.(new CustomEvent('bg-assets-progress', { detail: { done, total: jobs.length } }));
-  jobs.forEach(j => j.finally(() => { done++; report(); }));
+  const report = () => globalThis.dispatchEvent?.(new CustomEvent('bg-assets-progress', { detail: { done, total: all.length } }));
+  all.forEach(j => j.finally(() => { done++; report(); }));
   report();
-  await Promise.all(jobs);
+  Promise.all(menuJobs).then(resolveMenu);
+  await Promise.all(all);
   return { units: textures.size, spells: manifest.spells.length, emblems: manifest.emblems.length };
 })();
 

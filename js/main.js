@@ -5,7 +5,7 @@ import { DISCARD_COST, Game, isPlaced } from './game.js';
 import { autoTargets, healSnap } from './heal-snap.js';
 import { BattleScene } from './scene.js';
 import { XRControls } from './xr.js';
-import { ready as assetsReady, cardArt, emblem, uiArt, loadScene, sceneArt, XR_GUIDE } from './assets.js';
+import { ready as assetsReady, menuReady, cardArt, emblem, uiArt, loadScene, sceneArt, XR_GUIDE } from './assets.js';
 import { SCENES as ALL_SCENES, PLAYABLE_IDS as SCENE_IDS, sceneById, randomScene } from './scenes.js';
 const SCENES = ALL_SCENES.filter(s => SCENE_IDS.includes(s.id));   // 大厅显示已开放的场景
 
@@ -1350,18 +1350,28 @@ async function openXR() {
 $('#btn-xr').onclick = openXR;
 $('#btn-home-xr').onclick = openXR;
 
+let artLoaded = false;
 addEventListener('bg-assets-progress', e => {
   const { done, total } = e.detail;
-  if (activeScreen === '#front-loading' && total) $('#front-loading').textContent = `${t('loading')} ${Math.round(done / total * 100)}%`;
+  if (!total) return;
+  const text = `${t('loading')} ${Math.round(done / total * 100)}%`;
+  if (activeScreen === '#front-loading') $('#front-loading').textContent = text;
+  else if (!artLoaded) $('#btn-quick').textContent = text;   // 菜单已进、立绘还在后台下载:主按钮上显示进度
 });
+// 立绘全部到位(或超时放弃)后才开放要用卡面的入口
 assetsReady.then(() => {
+  artLoaded = true;
+  $('#btn-quick').textContent = t('quickBattle');
+  for (const selector of ['#btn-deck', '#btn-quick', '#btn-solo', '#btn-online', '#btn-codex']) $(selector).disabled = false;
+});
+// 界面图 + 徽章到位就进菜单
+menuReady.then(() => {
   // 主菜单背景图(只用在浏览器菜单里,不进眼镜)
   const bg = uiArt('bg_menu');
   if (bg) document.documentElement.style.setProperty('--menu-bg', `url("${bg.url}")`);
   const mana = uiArt('ui_mana');
   if (mana) $('#mana-icon').innerHTML = ico('ui_mana', '');
-  for (const selector of ['#btn-deck', '#btn-quick', '#btn-solo', '#btn-online']) $(selector).disabled = false;
-  if (location.hash === '#compare') { runCompare(); return; }
+  if (location.hash === '#compare') { assetsReady.then(runCompare); return; }
   if (prefs.entered) openHome();
   else {
     applyStaticText();

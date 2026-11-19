@@ -351,7 +351,7 @@ function housekeeping() {
 
 // ── HTTP:静态文件(白名单)+ 排行榜 + WebSocket 升级 ──
 // 只公开游戏页面需要的文件;server/(含 TLS 私钥和排行榜数据)、tools/、README 等一律不对外
-const PUBLIC_DIRS = new Set(['js', 'assets']);
+const PUBLIC_DIRS = new Set(['js', 'assets', 'vendor']);
 const PUBLIC_ROOT_FILES = new Set(['index.html', 'viewer.html', 'game.css']);   // 根目录只公开页面本身(新增根目录文件要加进这里)
 function publicFile(pathname) {
   let rel;
@@ -382,10 +382,17 @@ export function startServer(port = 8788, { cert, key } = {}) {
         // 跟随符号链接后仍须在根目录内
         const r = real && path.relative(ROOT, real);
         if (err || !r || r.startsWith('..') || path.isAbsolute(r)) { res.writeHead(404); return res.end('not found'); }
-        fs.readFile(real, (err2, data) => {
-          if (err2) { res.writeHead(404); return res.end('not found'); }
-          res.writeHead(200, { 'content-type': MIME[path.extname(real).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache' });
-          res.end(data);
+        fs.stat(real, (errS, st) => {
+          if (errS || !st.isFile()) { res.writeHead(404); return res.end('not found'); }
+          // 协商缓存:no-cache 让浏览器每次来问,文件没变就回 304 不重传(部署后改动立即生效)
+          const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+          const headers = { 'content-type': MIME[path.extname(real).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache', etag };
+          if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
+          fs.readFile(real, (err2, data) => {
+            if (err2) { res.writeHead(404); return res.end('not found'); }
+            res.writeHead(200, headers);
+            res.end(data);
+          });
         });
       });
     } catch (e) {

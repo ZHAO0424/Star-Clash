@@ -267,7 +267,7 @@
     <p id="first-match-home" data-i18n="firstMatchHome">首局附带出牌教学</p>
     <nav class="home-nav">
       <button class="btn home-action" id="btn-home-deck" data-i18n="editDeck">编辑卡组</button>
-      <button class="btn home-action" id="btn-codex" data-i18n="codex">图鉴</button>
+      <button class="btn home-action" id="btn-codex" disabled data-i18n="codex">图鉴</button>
       <button class="btn home-action" id="btn-settings" data-i18n="settings">设置</button>
     </nav>
     <div class="home-space">
@@ -486,8 +486,8 @@
 <script>window.BG_STATIC = location.hostname.endsWith('.github.io'); window.BG_ONLINE_URL = "https://star-clash.onrender.com";</script>
 <script type="importmap">
 { "imports": {
-  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  "three": "./vendor/three/build/three.module.min.js",
+  "three/addons/": "./vendor/three/addons/"
 } }
 </script>
 <script type="module" src="js/main.js"></script>
