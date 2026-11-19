@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mapForScene, stretchFieldZ, unstretchFieldZ, FIELD_STRETCH } from './map.js';
 import { shapeTerrain } from './obstacle-kit.js';
 import { groundUniforms, GROUND_GLSL } from './ground-look.js';
@@ -333,7 +334,7 @@ const modelIndex = (async () => {
 let modelMeta = {};
 modelIndex.then(m => { modelMeta = m || {}; });
 const modelCache = new Map();   // id → { ready, failed, gltf, meta }
-const gltfLoader = new GLTFLoader();
+const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);   // 单位 / 塔模型用 meshopt 压缩(动画关键帧也压),配合 gzip 传输
 
 // 返回 null(这张卡没有模型)或 { ready, gltf, meta };ready=false 表示还在下载
 export function unitModel(id) {

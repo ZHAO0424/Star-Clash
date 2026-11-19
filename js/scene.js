@@ -211,6 +211,34 @@ const ICE_CHIP = new THREE.Color(0.75, 0.92, 1.0);   // 冰屑
 const EMBER_HOT = new THREE.Color(1.0, 0.55, 0.12), EMBER_RED = new THREE.Color(1.0, 0.25, 0.04);
 const DEFAULT_VIEW = Object.freeze({ yaw: 0, pitch: 0, zoom: 1, panX: 0, panZ: 0 });
 
+// 塔被摧毁后保留的底座高度(占原高度比例)
+const RUIN_KEEP = 0.22;
+const RUIN_UP = new THREE.Vector3(0, -1, 0);
+// 废墟碎石:slab=true 时在切口上盖一块小石板(模型版,挡住切开的空心),再撒几块碎块(固定伪随机种子,每座塔一样)
+function ruinRubble(radius, y, { slab = true } = {}) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7a746c, roughness: 0.95, flatShading: true });
+  if (slab) {
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.5, radius * 0.6, 0.05, 8), mat);
+    top.position.y = y;
+    group.add(top);
+  }
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 6; i++) {
+    const a = rand() * Math.PI * 2, size = radius * (0.06 + rand() * 0.07);
+    const onTop = slab && i < 3;   // 模型版:前 3 块堆在切口上,其余散在塔脚
+    const r = onTop ? radius * rand() * 0.35 : radius * (0.75 + rand() * 0.35);
+    const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), mat);
+    chunk.position.set(Math.cos(a) * r, onTop ? y + size * 0.5 : size * 0.3, Math.sin(a) * r);
+    chunk.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+    chunk.scale.y = 0.6;
+    group.add(chunk);
+  }
+  castShadows(group);
+  return group;
+}
+
 export class BattleScene {
   constructor(canvas) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -1130,15 +1158,32 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
         }
       }
       if (s.dead) {
-        if (!ud.ruined && ud.model) {   // 模型版:塌成矮废墟、变暗
+        if (!ud.ruined && ud.model) {   // 模型版:上半截切掉只剩底座(不压扁),切口盖一层碎石,变暗
           ud.ruined = true;
-          ud.model.scale.y *= 0.32;
-          for (const m of ud.mats) { m.color?.multiplyScalar(0.35); if (m.emissive) m.emissive.setScalar(0); }
+          ud.cut = new THREE.Plane();   // 保留切面以下;平面在世界坐标里,下面每帧跟着战场根节点(XR 缩放 / 平移)刷新
+          ud.cutY = g.position.y + ud.h * RUIN_KEEP;
+          for (const m of ud.mats) {
+            m.clippingPlanes = [...(m.clippingPlanes || []), ud.cut];
+            m.side = THREE.DoubleSide;   // 切开后看到的是内壁,不是空洞
+            m.color?.multiplyScalar(0.45);
+            if (m.emissive) m.emissive.setScalar(0);
+            m.needsUpdate = true;
+          }
+          g.add(ruinRubble(s.radius, ud.h * RUIN_KEEP));
           ud.pad.visible = ud.range.visible = ud.bar.root.visible = false;
-        } else if (!ud.ruined && ud.sprite) {   // 立绘版:压扁变暗当废墟
+        } else if (!ud.ruined && ud.sprite) {   // 立绘版:只留立绘底部一截(按原比例裁切,不压扁)
           ud.ruined = true;
-          ud.sprite.scale.y = ud.h * 0.35;
-          ud.sprite.material.color.setHex(0x3a3f4c);
+          const keep = RUIN_KEEP + 0.05;   // 立绘底边有 5% 留白(center.y = 0.05)
+          const tex = ud.sprite.material.map.clone();
+          tex.repeat.set(1, keep);
+          tex.offset.set(0, 0);
+          tex.needsUpdate = true;
+          ud.sprite.material = ud.sprite.material.clone();
+          ud.sprite.material.map = tex;
+          ud.sprite.material.color.setHex(0x5a5f6c);
+          ud.sprite.center.set(0.5, 0.05 / keep);
+          ud.sprite.scale.y = ud.h * keep;
+          g.add(ruinRubble(s.radius, 0, { slab: false }));
           ud.pad.visible = ud.range.visible = ud.bar.root.visible = false;
         } else if (!ud.ruined) {   // 摧毁 → 变成矮小的废墟
           ud.ruined = true;
@@ -1148,6 +1193,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
           ud.body.material.emissiveIntensity = 0;
           ud.top.visible = ud.range.visible = ud.bar.root.visible = false;
         }
+        if (ud.cut) ud.cut.set(RUIN_UP, ud.cutY).applyMatrix4(this.world.matrixWorld);
         continue;
       }
       setBar(ud.bar, s.hp, s.maxHp, viewRotation, now);

@@ -24,6 +24,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { Game } from '../js/game.js';
 import { FACTIONS, validateDeck, PRESET_DECKS } from '../js/cards.js';
@@ -352,6 +353,8 @@ function housekeeping() {
 // ── HTTP:静态文件(白名单)+ 排行榜 + WebSocket 升级 ──
 // 只公开游戏页面需要的文件;server/(含 TLS 私钥和排行榜数据)、tools/、README 等一律不对外
 const PUBLIC_DIRS = new Set(['js', 'assets', 'vendor']);
+const GZIP_EXT = new Set(['.html', '.js', '.mjs', '.css', '.json', '.md', '.glb', '.wasm']);
+const gzipCache = new Map();   // 路径+etag → gzip 后的内容
 const PUBLIC_ROOT_FILES = new Set(['index.html', 'viewer.html', 'game.css']);   // 根目录只公开页面本身(新增根目录文件要加进这里)
 function publicFile(pathname) {
   let rel;
@@ -390,6 +393,14 @@ export function startServer(port = 8788, { cert, key } = {}) {
           if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
           fs.readFile(real, (err2, data) => {
             if (err2) { res.writeHead(404); return res.end('not found'); }
+            // 文本 / 模型按 gzip 传(meshopt 压过的模型再 gzip 还能小一半);压缩结果按 etag 缓存,每个文件只压一次
+            if (GZIP_EXT.has(path.extname(real).toLowerCase()) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+              const key = real + etag;
+              let gz = gzipCache.get(key);
+              if (!gz) { gz = zlib.gzipSync(data, { level: 6 }); gzipCache.set(key, gz); }
+              res.writeHead(200, { ...headers, 'content-encoding': 'gzip', vary: 'Accept-Encoding' });
+              return res.end(gz);
+            }
             res.writeHead(200, headers);
             res.end(data);
           });

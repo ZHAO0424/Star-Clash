@@ -21,8 +21,8 @@ export const LANE_X = 2.0;
 const laneOf = x => (x < -LANE_X ? -1 : x > LANE_X ? 1 : 0);
 const inLane = (lane, s) => s.kind === 'base' || (s.kind === 'pylon' ? Math.sign(s.x) === lane : s.kind === 'outpost' ? lane === 0 : true);
 export const DISCARD_COST = 1;
-export const SURGE_TIME = 120;          // 开局 2 分钟后进入能量涌潮:法力恢复 ×2(打破僵局)
-export const REGULATION = 180;          // 常规时间 3 分钟:结束时摧毁副塔多的一方获胜
+export const SURGE_TIME = 180;          // 最后 1 分钟(开局 3 分钟后)进入能量涌潮:法力恢复 ×2(打破僵局)
+export const REGULATION = 240;          // 常规时间 4 分钟(2026-11-19 由 3 分钟加长):结束时摧毁副塔多的一方获胜
 export const OVERTIME = 60;             // 打平进入 1 分钟加时赛:先摧毁任意建筑者胜;仍打平比剩余建筑血量
 const UNIT_RADIUS = 0.22;
 const AIR_RADIUS = 0.18;
@@ -732,7 +732,7 @@ export class Game {
 
   // ── 每帧 ──
   tick(dt) {
-    if (this.phase === 'prep') {   // 准备阶段:只走倒计时,其它一概不动(time 不加,3:00 计时器不走)
+    if (this.phase === 'prep') {   // 准备阶段:只走倒计时,其它一概不动(time 不加,比赛计时器不走)
       this.prepLeft -= dt;
       if (this.prepLeft <= 0) {
         this.prepLeft = 0;

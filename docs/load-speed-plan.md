@@ -59,3 +59,11 @@
 - `loadScene` 加 25s 超时：超时先用平面战场开局，后台继续下载，下一局用上；失败的结果不缓存。
 - 服务器 MIME 加 `.wasm`。验证：`npm test` 104 过；星核 / 熔岩 / 冰川 / 蜂巢截图 `docs/graphics/draco-*.png` 与改前一致；浏览器确认 Draco 解码器加载、沙漠场景 textured=true、无报错。
 - 单张图开局下载量：约 4MB → 约 0.65MB（另有一次性解码器 0.25MB）。单位 GLB 模型（共 16MB）仍是开局后按需懒加载，没有压。
+
+## 第三轮：进对局后单位全是立绘（2026-11-19）
+
+- 原因：单位 / 塔 GLB 共 20.6MB（单个 0.4–1.2MB，主要是网格和骨骼动画数据），开局后懒加载；GitHub Pages 国内约 17KB/s，一局 10+ 种单位要好几分钟才换成模型。
+- `gltf-transform resample`（去冗余关键帧）+ `meshopt`：20.6MB → 8.9MB；GLTFLoader 挂 `MeshoptDecoder`（`vendor/three/addons/libs/meshopt_decoder.module.js`）。
+  meshopt 输出配合 gzip 效果最好：Pages 本来就 gzip；Node 服务器新增 gzip（html/js/css/json/md/glb/wasm，按 etag 缓存）。传输量合计约 6.6MB（原 ~11MB+）。例：swarm_warrior 1.19MB → 233KB。
+- 验证：32 个单位 + 12 个塔模型全部加载成功、动画片段与原文件逐个同名同数；对战截图 `docs/graphics/meshopt-units.png`。武器 GLB 未动。
+- 坑：用 Python 改服务器时 `\b` 被写成退格符，正则永远不匹配、gzip 静默失效，已修。
