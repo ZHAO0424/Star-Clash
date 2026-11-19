@@ -378,7 +378,7 @@ let pendingConnection = null;
 function openOnline() {
   $('#player-name').value = prefs.name;
   $('#online-err').textContent = '';
-  $('#room-wait').style.display = 'none';
+  $('#room-wait').hidden = true;   // 只用 hidden 控制(showConnectionProgress 也用它);内联 display 会压住 hidden,导致房间号永远不显示
   showScreen('#online-screen');
   $('#player-name').focus({ preventScroll: true });
   // 静态网页版(GitHub Pages,由 tools/build-pages.mjs 打包)没有联机服务器:只说明原因,不去连
