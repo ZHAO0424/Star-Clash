@@ -179,21 +179,23 @@ export class NetSession {
 // onRoom(code, name):建房成功、等待对手时回调;onSocket(ws):拿到连接,调用 ws.cancel() 可放弃等待
 export function connectOnline(url, msg, { onRoom, onSocket } = {}) {
   return new Promise((resolve, reject) => {
-    let ws, settled = false;
+    let ws, settled = false, opened = false;
     try { ws = new WebSocket(url); } catch (e) { reject(e); return; }
     const fail = (text, code) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      const e = new Error(text); e.code = code; reject(e);
+      // retryable:连接还没建立就失败(跨境网络偶发握手超时),调用方可以安全重试,不会重复建房
+      const e = new Error(text); e.code = code; e.retryable = code === 'noconn' && !opened; reject(e);
       ws.onclose = ws.onmessage = ws.onerror = null;
       try { ws.close(); } catch { /* */ }
     };
     ws.cancel = () => fail('cancel', 'cancel');
-    const timer = setTimeout(() => fail(t('tTimeout'), 'noconn'), 5000);
+    // 国内连海外服务器握手有时要 3~10s,5s 太紧;15s 内没建好房才算超时
+    const timer = setTimeout(() => fail(t('tTimeout'), 'noconn'), 15000);
     onSocket?.(ws);
     // 带上这个昵称在本机保存的认领凭证
     const hello = { ...msg, token: msg.name ? nameToken(msg.name) : undefined };
-    ws.onopen = () => ws.send(JSON.stringify(hello));
+    ws.onopen = () => { opened = true; ws.send(JSON.stringify(hello)); };
     ws.onerror = () => fail(t('tCantConnect'), 'noconn');
     ws.onclose = () => fail(t('tConnLost'), 'noconn');   // 服务器在开局前关闭连接(等待超时等)
     ws.onmessage = e => {

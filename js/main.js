@@ -424,7 +424,7 @@ async function goOnline(msg) {
   showConnectionProgress('connecting');
   $('#btn-cancel-connection').focus();
   try {
-    const { ws, start } = await connectOnline(wsUrl(), msg, {
+    const connect = () => connectOnline(wsUrl(), msg, {
       onSocket: socket => { request.socket = socket; },
       onRoom: (code, name) => {
         if (pendingConnection !== request) return;
@@ -436,12 +436,21 @@ async function goOnline(msg) {
         $('#btn-copy-room').focus();
       },
     });
+    // 还没连上就失败的自动重试 2 次(跨境网络握手偶发超时),玩家不用自己反复点
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      try { result = await connect(); break; } catch (e) {
+        if (!e.retryable || attempt >= 3 || pendingConnection !== request) throw e;
+      }
+    }
+    const { ws, start } = result;
     if (pendingConnection !== request) { ws.close(); return; }
     showConnectionProgress('');
     startOnline(ws, start);
   } catch (e) {
     if (pendingConnection === request && e.code !== 'cancel') {
-      $('#online-err').textContent = e.message + (e.code === 'noconn' ? t('needServer') : '');
+      const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);   // 本地开发才提示启动服务器,线上提示网络重试
+      $('#online-err').textContent = e.message + (e.code !== 'noconn' ? '' : local ? t('needServer') : t('netRetry'));
     }
   } finally {
     if (pendingConnection === request) {
