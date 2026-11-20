@@ -12,50 +12,14 @@
     user-select: none; -webkit-user-select: none; }
   canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
-  /* ── 阵营选择 ── */
-  #select-screen { position: fixed; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 28px; background: radial-gradient(ellipse at center, #121a30 0%, #0a0e1a 70%); z-index: 20; }
-  #select-screen h1 { font-size: 30px; letter-spacing: .3em; font-weight: 500; }
-  #select-screen .sub { opacity: .5; font-size: 13px; }
-  #faction-list { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 0 20px; }
-  .faction-card { width: 180px; padding: 22px 18px; border: 1px solid color-mix(in srgb, var(--fc) 50%, transparent);
-    border-radius: 10px; cursor: pointer; background: color-mix(in srgb, var(--fc) 8%, #101624);
-    transition: transform .15s, box-shadow .15s; }
-  .faction-card:hover { transform: translateY(-4px); box-shadow: 0 8px 28px color-mix(in srgb, var(--fc) 35%, transparent); }
-  .faction-card h3 { color: var(--fc); margin-bottom: 8px; font-size: 18px; }
-  .faction-card p { font-size: 12px; opacity: .65; }
-
-  .faction-card.selected { box-shadow: 0 0 0 2px var(--fc), 0 8px 28px color-mix(in srgb, var(--fc) 35%, transparent); transform: translateY(-4px); }
-  .faction-card .fstat { font-size: 11px; opacity: .5; margin-top: 8px; }
-
-  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 20px; background: radial-gradient(ellipse at center, #121a30 0%, #0a0e1a 70%);
-    z-index: 20; padding: 24px 16px; overflow-y: auto; }
-  .screen h2 { font-size: 22px; letter-spacing: .2em; font-weight: 500; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
   .btn { font: inherit; font-size: 14px; padding: 9px 22px; border-radius: 6px; cursor: pointer;
     border: 1px solid rgba(90,200,255,.45); background: rgba(90,200,255,.1); color: #cfe9ff; }
   .btn:hover { background: rgba(90,200,255,.22); }
   .btn.primary { background: rgba(90,200,255,.25); border-color: rgba(90,200,255,.8); font-weight: 600; }
   .btn:disabled { opacity: .35; cursor: default; }
-  .seg { display: inline-flex; border: 1px solid rgba(90,200,255,.35); border-radius: 6px; overflow: hidden; }
-  .seg button { font: inherit; font-size: 13px; padding: 6px 14px; border: 0; cursor: pointer; background: transparent; color: #9fc8e8; }
-  .seg button.on { background: rgba(90,200,255,.25); color: #fff; }
   .muted-text { font-size: 12px; opacity: .55; }
   .err { color: #ff8a7a; font-size: 13px; min-height: 18px; }
-  input.txt { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 6px; width: 150px;
-    border: 1px solid rgba(90,200,255,.35); background: rgba(10,14,26,.8); color: #dde4f0; }
-  input.code { width: 96px; text-transform: uppercase; letter-spacing: .3em; text-align: center; }
-
-  #deck-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 760px; }
-  #deck-grid .card { cursor: pointer; }
-  #deck-grid .card:not(.picked) { opacity: .45; }
-  #deck-grid .card.picked { box-shadow: 0 0 0 2px #5ac8ff; opacity: 1; }
-  #deck-grid .card .discard { display: none; }
-  .panel { background: rgba(16,22,36,.7); border: 1px solid rgba(90,200,255,.2); border-radius: 10px; padding: 16px 20px; }
-  #room-code { font-size: 34px; letter-spacing: .4em; font-weight: 600; color: #ffd24a; }
-  #leaderboard { font-size: 13px; min-width: 260px; }
-  #leaderboard div { display: flex; justify-content: space-between; gap: 20px; padding: 2px 0; }
 
   /* ── HUD ── */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
@@ -106,7 +70,6 @@
   .card .spell-tag { background: color-mix(in srgb, var(--fc) 30%, transparent); }
   .card .art { display: block; width: 100%; height: 58px; object-fit: contain; margin: 2px 0 2px; pointer-events: none; }
   .card .art.glow { mix-blend-mode: screen; }   /* 黑底发光图标:滤色混合去掉黑底 */
-  .faction-card .emblem { width: 72px; height: 72px; display: block; margin: 0 auto 8px; mix-blend-mode: screen; }
   .card .tags { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; }
   .card .tag { font-size: 9px; padding: 0 4px; border-radius: 3px; line-height: 15px;
     background: rgba(255,210,74,.14); color: #ffd24a; border: 1px solid rgba(255,210,74,.25); }
@@ -141,14 +104,6 @@
   .compare-row img, .compare-row .ph { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #141a2a; }
   .compare-row .ph { display: flex; align-items: center; justify-content: center; text-align: center; opacity: .5; font-size: 13px; }
   @media (max-width: 700px) { .compare-row .pair { grid-template-columns: 1fr; } }
-  #scene-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 720px; }
-  .scene-chip { width: 76px; padding: 3px; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,.12);
-    background: rgba(255,255,255,.04); font-size: 11px; text-align: center; color: #dde4f0; }
-  .scene-chip .thumb { height: 42px; border-radius: 5px; margin-bottom: 3px; background-size: cover; background-position: center; }
-  .scene-chip.on { border-color: #9a7aff; box-shadow: 0 0 8px rgba(154,122,255,.5); }
-  .faction-card .passive { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.1); font-size: 11px; line-height: 1.45; text-align: left; }
-  .faction-card .passive b { display: block; color: var(--fc); margin-bottom: 2px; }
-  .faction-card .passive span { opacity: .7; }
   /* 混沌血祭:法力不够但可以用核心生命补的牌 */
   .card.blood { border-color: #ff4a5a; box-shadow: 0 0 10px rgba(255,60,80,.45); }
   .card.blood .cost { background: #c0283c; }
@@ -160,10 +115,6 @@
   #mana-icon .ico { height: 20px; vertical-align: middle; }
   .card .discard .ico { height: 12px; vertical-align: 0; }
   #end-badge { width: 160px; height: 160px; margin-bottom: -10px; }
-  /* 主菜单背景图(有图时生效),叠一层暗色保证文字可读 */
-  #select-screen, #deck-screen, #online-screen {
-    background-image: linear-gradient(rgba(10,14,26,.72), rgba(10,14,26,.88)), var(--menu-bg, none);
-    background-size: cover; background-position: center; }
   .upgrade-card p { font-size: 12px; opacity: .7; }
   .overlay button { font: inherit; padding: 10px 28px; border-radius: 6px; cursor: pointer;
     border: 1px solid rgba(90,200,255,.5); background: rgba(90,200,255,.12); color: #cfe9ff; }
@@ -238,76 +189,138 @@
 
 </style>
 <link rel="stylesheet" href="game.css">
+<link rel="stylesheet" href="assets/fonts/noto-sans-sc-900.css">
+<link rel="stylesheet" href="menu.css">
 </head>
 <body>
 <canvas id="gl"></canvas>
-<div id="front-loading" class="screen front-screen" role="status" data-i18n="loading">加载中…</div>
+<div id="front-loading" class="menu-screen sub" role="status"><span class="front-loading-text" data-i18n="loading">加载中…</span></div>
 
-<div id="title-screen" class="screen front-screen" style="display:none">
-  <main class="title-content">
-    <h1 class="brand-heading"><img class="brand-wordmark" alt="" hidden><span data-i18n="title">星轨对决</span></h1>
-    <button class="btn primary" id="btn-enter-game" data-i18n="enterGame">进入游戏</button>
-  </main>
-</div>
-
-<div id="home-screen" class="screen front-screen" style="display:none">
-  <main class="home-content">
-    <h1 class="brand-heading" id="home-title" tabindex="-1"><img class="brand-wordmark" alt="" hidden><span data-i18n="title">星轨对决</span></h1>
-    <section class="home-quick" aria-labelledby="home-faction">
-      <img id="home-faction-art" alt="" width="900" height="600" decoding="async">
-      <div class="home-quick-copy">
-        <h2 id="home-faction"></h2>
-        <p id="home-config"></p>
+<!-- 主页:居中对称,字标在上、菜单在下 -->
+<div id="home-screen" class="menu-screen" style="display:none">
+  <main class="home">
+    <h1 class="home-logo" id="home-title" tabindex="-1"><img class="brand-wordmark" alt="" hidden><span data-i18n="title">星轨对决</span></h1>
+    <nav class="home-menu">
+      <button class="g-btn g-gold" id="btn-start" type="button" data-i18n="startGame">开始游戏</button>
+      <button class="g-btn g-teal" id="btn-home-online" type="button" data-i18n="onlineGame">联机游戏</button>
+      <div class="minor-row">
+        <button class="g-btn g-ink" id="btn-codex" type="button" disabled data-i18n="codex">图鉴</button>
+        <button class="g-btn g-ink" id="btn-settings" type="button" data-i18n="settings">设置</button>
+        <button class="g-btn g-ink" id="btn-home-xr" type="button" aria-describedby="xr-availability">XR</button>
       </div>
-    </section>
-    <div class="home-battle-actions">
-      <button class="btn home-action home-action-primary" id="btn-quick" disabled data-i18n="quickBattle">快速开战</button>
-      <button class="btn home-action home-action-setup" id="btn-prepare" data-i18n="battleSetup">备战</button>
-    </div>
-    <p id="first-match-home" data-i18n="firstMatchHome">首局附带出牌教学</p>
-    <nav class="home-nav">
-      <button class="btn home-action" id="btn-home-deck" data-i18n="editDeck">编辑卡组</button>
-      <button class="btn home-action" id="btn-codex" disabled data-i18n="codex">图鉴</button>
-      <button class="btn home-action" id="btn-settings" data-i18n="settings">设置</button>
     </nav>
-    <div class="home-space">
-      <button class="btn home-action home-action-xr" id="btn-home-xr" aria-describedby="xr-availability" data-i18n="xrHome">空间大厅</button>
-      <span id="xr-availability" class="xr-availability" role="status"></span>
-    </div>
+    <span id="xr-availability" class="sr-only" role="status"></span>
   </main>
+  <div class="home-tools"><button class="g-btn g-ink round-btn sound-toggle" type="button"></button></div>
 </div>
 
-<div id="codex-screen" class="screen archive-screen" style="display:none">
-  <header class="archive-top">
-    <button class="btn" id="btn-codex-back" type="button" data-i18n="backMenu">返回主页</button>
-    <h1 id="codex-title" tabindex="-1" data-i18n="codexTitle">卡牌图鉴</h1>
-  </header>
-  <main class="codex-layout">
-    <section class="codex-library">
-      <div class="codex-filters">
-        <label><span data-i18n="filterFaction">势力</span><select id="codex-faction"></select></label>
-        <label><span data-i18n="filterType">类型</span><select id="codex-type"></select></label>
+<!-- 对局设置(人机 / 联机共用一屏,模式由主页入口决定) -->
+<div id="setup-screen" class="menu-screen sub" style="display:none">
+  <div class="page">
+    <header class="topbar">
+      <div><button class="g-btn g-ink g-back" id="btn-setup-back" type="button">‹ <span data-i18n="back">返回</span></button></div>
+      <h1 id="setup-title" tabindex="-1"></h1>
+      <div class="right"><button class="g-btn g-ink round-btn sound-toggle" type="button"></button></div>
+    </header>
+    <div class="setup">
+      <div class="setup-col">
+        <section class="frame slot" aria-labelledby="side-title">
+          <h2 class="over" id="side-title" data-i18n="yourSide">我方</h2>
+          <div class="factions" id="faction-list"></div>
+          <div class="passive" id="faction-passive"><b id="faction-passive-name"></b><p id="faction-passive-desc"></p></div>
+          <div class="deckline"><span id="deck-summary"></span><button class="g-btn g-ink g-sm" id="btn-edit-deck" type="button" disabled data-i18n="editDeck">编辑卡组</button></div>
+        </section>
+        <section class="frame slot" aria-labelledby="opp-title">
+          <h2 class="over" id="opp-title"></h2>
+          <div class="diffs" id="difficulty">
+            <button class="choice diff" type="button" data-v="basic"><span class="name" data-i18n="easy">简单</span></button>
+            <button class="choice diff" type="button" data-v="normal"><span class="name" data-i18n="normal">普通</span></button>
+            <button class="choice diff" type="button" data-v="smart"><span class="name" data-i18n="hard">困难</span></button>
+          </div>
+          <div class="online-form" id="online-form" hidden>
+            <label class="field"><span data-i18n="nickname">昵称</span><input class="input" id="player-name" maxlength="16" placeholder="留空则随机命名" data-i18n-ph="guestPlaceholder"></label>
+            <div class="field"><label for="join-code" data-i18n="roomCode">房号</label>
+              <div class="join"><input class="input code" id="join-code" maxlength="4" placeholder="ABCD" autocomplete="off"><button class="g-btn g-teal g-sm" id="btn-join" type="button" disabled data-i18n="join">加入</button></div>
+            </div>
+            <section id="online-state" class="room-state" hidden>
+              <div id="room-wait" hidden>
+                <div id="room-identity"></div>
+                <div id="room-code"></div>
+                <button class="g-btn g-ink g-sm" id="btn-copy-room" type="button" data-i18n="copyRoom">复制房号</button>
+              </div>
+              <div class="room-progress"><span id="online-progress" role="status"></span><button class="g-btn g-ink g-sm" id="btn-cancel-connection" type="button" hidden data-i18n="cancelConnection">取消连接</button></div>
+            </section>
+            <div class="err" id="online-err" role="alert"></div>
+          </div>
+        </section>
       </div>
-      <div id="codex-grid" class="codex-grid"></div>
-    </section>
-    <section id="codex-detail" class="codex-detail" aria-labelledby="codex-card-title"></section>
-  </main>
+      <div class="setup-col">
+        <section class="frame map" aria-labelledby="map-title">
+          <h2 class="over" id="map-title" data-i18n="battlefield">战场</h2>
+          <div class="preview" aria-live="polite"><img id="arena-img" alt=""><div class="cap"><h3 id="arena-name"></h3><p id="arena-description"></p></div></div>
+          <div class="maps" id="scene-list"></div>
+        </section>
+        <section class="frame board" id="leaderboard-panel" hidden aria-labelledby="board-title">
+          <h2 class="over" id="board-title" data-i18n="leaderboard">排行榜</h2>
+          <div id="leaderboard"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar"><button class="g-btn g-gold g-go" id="btn-fight" type="button" disabled></button></div>
 </div>
 
-<div id="settings-screen" class="screen archive-screen" style="display:none">
-  <header class="archive-top">
-    <button class="btn" id="btn-settings-back" type="button" data-i18n="backMenu">返回主页</button>
-    <h1 id="settings-title" tabindex="-1" data-i18n="settings">设置</h1>
-  </header>
-  <main class="settings-panel">
-    <label><span data-i18n="language">语言</span><select id="settings-language"><option value="zh">中文</option><option value="en">English</option></select></label>
-    <label><span data-i18n="xrSound">音效</span><select id="settings-sound"><option value="on" data-i18n="xrOn">开</option><option value="off" data-i18n="xrOff">关</option></select></label>
-    <label><span data-i18n="xrBoardSize">战场尺寸</span><select id="settings-size"><option value="small" data-i18n="xrBoard_small">小</option><option value="standard" data-i18n="xrBoard_standard">中</option><option value="large" data-i18n="xrBoard_large">大</option></select></label>
-    <label><span data-i18n="xrMode">XR 模式</span><select id="settings-xr-mode"><option value="auto" data-i18n="xrAuto">自动</option><option value="immersive-vr" data-i18n="xrImmersiveVR">沉浸式 VR</option><option value="immersive-ar" data-i18n="xrImmersiveAR">透视 AR</option></select></label>
-    <button class="btn" id="btn-xr-guide" type="button" data-i18n="xrGuide">XR 操作</button>
-  </main>
+<!-- 图鉴(含组卡):左卡牌网格,右详情 + 出战卡组 -->
+<div id="codex-screen" class="menu-screen sub" style="display:none">
+  <div class="page">
+    <header class="topbar">
+      <div><button class="g-btn g-ink g-back" id="btn-codex-back" type="button">‹ <span data-i18n="back">返回</span></button></div>
+      <h1 id="codex-title" tabindex="-1" data-i18n="codex">图鉴</h1>
+      <div class="right"><button class="g-btn g-ink round-btn sound-toggle" type="button"></button></div>
+    </header>
+    <div class="tabs" id="codex-tabs"></div>
+    <div class="codex">
+      <section class="frame pool-wrap"><div class="pool" id="codex-grid"></div></section>
+      <aside class="side">
+        <section class="frame detail" id="codex-detail" aria-live="polite"></section>
+        <section class="frame roster" aria-labelledby="roster-title">
+          <h2 class="over" id="roster-title" data-i18n="deckRoster">出战卡组</h2>
+          <div class="slots" id="deck-slots"></div>
+          <div class="deckstat"><span><span data-i18n="deckCards">卡牌</span><b id="deck-count"></b></span><span><span data-i18n="deckAvg">均费</span><b id="deck-avg"></b></span></div>
+          <div class="err" id="deck-err" role="status"></div>
+        </section>
+      </aside>
+    </div>
+  </div>
+  <div class="actionbar">
+    <button class="g-btn g-ink g-sm" id="btn-deck-preset" type="button" data-i18n="presetDeck">推荐卡组</button>
+    <button class="g-btn g-gold g-go" id="btn-deck-save" type="button" data-i18n="saveBack">保存</button>
+  </div>
 </div>
 
+<!-- 设置:分组,每项一行 -->
+<div id="settings-screen" class="menu-screen sub" style="display:none">
+  <div class="page">
+    <header class="topbar">
+      <div><button class="g-btn g-ink g-back" id="btn-settings-back" type="button">‹ <span data-i18n="back">返回</span></button></div>
+      <h1 id="settings-title" tabindex="-1" data-i18n="settings">设置</h1>
+      <div class="right"></div>
+    </header>
+    <div class="settings frame">
+      <div class="group"><h2 class="over" data-i18n="groupDisplay">显示</h2>
+        <div class="row-set"><b id="lbl-language" data-i18n="language">语言</b><div class="seg" id="settings-language" role="group" aria-labelledby="lbl-language"><button type="button" data-v="zh">中文</button><button type="button" data-v="en">English</button></div></div>
+      </div>
+      <div class="group"><h2 class="over" data-i18n="groupSound">声音</h2>
+        <div class="row-set"><b id="lbl-sound" data-i18n="xrSound">音效</b><div class="seg" id="settings-sound" role="group" aria-labelledby="lbl-sound"><button type="button" data-v="on" data-i18n="xrOn">开</button><button type="button" data-v="off" data-i18n="xrOff">关</button></div></div>
+      </div>
+      <div class="group"><h2 class="over">XR</h2>
+        <div class="row-set"><b id="lbl-size" data-i18n="xrBoardSize">战场尺寸</b><div class="seg" id="settings-size" role="group" aria-labelledby="lbl-size"><button type="button" data-v="small" data-i18n="xrBoard_small">小</button><button type="button" data-v="standard" data-i18n="xrBoard_standard">中</button><button type="button" data-v="large" data-i18n="xrBoard_large">大</button></div></div>
+        <div class="row-set"><b id="lbl-xr-mode" data-i18n="xrMode">XR 模式</b><div class="seg" id="settings-xr-mode" role="group" aria-labelledby="lbl-xr-mode"><button type="button" data-v="auto" data-i18n="xrAuto">自动</button><button type="button" data-v="immersive-vr" data-i18n="xrImmersiveVR">沉浸 VR</button><button type="button" data-v="immersive-ar" data-i18n="xrImmersiveAR">透视 AR</button></div></div>
+        <div class="row-set"><b data-i18n="xrGuideRow">XR 操作教学</b><button class="g-btn g-ink g-sm" id="btn-xr-guide" type="button" data-i18n="view">查看</button></div>
+      </div>
+    </div>
+  </div>
+</div>
 <dialog id="xr-guide" class="guide-dialog" aria-labelledby="guide-title">
   <header><h2 id="guide-title" data-i18n="xrGuide">XR 操作</h2><button class="btn" id="btn-guide-close" data-i18n="close">关闭</button></header>
   <figure>
@@ -320,99 +333,6 @@
     <button class="btn primary" id="btn-guide-next" data-i18n="guideNext">下一步</button>
   </footer>
 </dialog>
-
-<!-- 主菜单:势力 / 卡组 / 难度 / 模式 -->
-<div id="select-screen" style="display:none">
-  <main class="arena-lobby">
-  <header class="arena-heading">
-    <button class="btn" id="btn-prepare-back" data-i18n="back">返回</button>
-    <h1 id="prepare-title" tabindex="-1" data-i18n="battleSetup">备战</h1>
-    <div class="seg" id="lang"><button data-v="zh">中文</button><button data-v="en">EN</button></div>
-  </header>
-  <div class="sub" id="stats-line">选择势力</div>
-  <section class="arena-roster">
-  <div id="faction-list"><span class="muted-text" data-i18n="loading">加载中…</span></div>
-  <div class="faction-detail" id="faction-detail" hidden>
-    <div class="faction-detail-copy">
-      <strong id="faction-passive-name"></strong>
-      <p id="faction-passive-desc"></p>
-    </div>
-    <div class="faction-deck">
-      <span class="muted-text" id="deck-summary"></span>
-      <button class="btn" id="btn-deck" disabled data-i18n="editDeck">编辑卡组</button>
-    </div>
-  </div>
-  </section>
-  <section class="arena-settings">
-  <div class="row scene-row">
-    <span class="muted-text" data-i18n="battlefield">战场</span>
-    <div id="scene-list"></div>
-  </div>
-  <div id="arena-preview" class="arena-preview" aria-live="polite"><strong id="arena-name"></strong><span id="arena-description"></span></div>
-  <div class="row">
-    <span class="muted-text" data-i18n="difficulty">难度</span>
-    <div class="seg" id="difficulty">
-      <button data-v="basic" data-i18n="easy">简单</button><button data-v="normal" data-i18n="normal">普通</button><button data-v="smart" data-i18n="hard">困难</button>
-    </div>
-  </div>
-  <div class="row arena-play">
-    <button class="btn primary" id="btn-solo" disabled data-i18n="solo">人机对战</button>
-    <button class="btn" id="btn-online" disabled data-i18n="online">联机对战</button>
-  </div>
-  </section>
-  </main>
-</div>
-
-<!-- 卡组构筑 -->
-<div id="deck-screen" class="screen" style="display:none">
-  <h2 id="deck-title">卡组构筑</h2>
-  <div class="deck-overview">
-    <div class="muted-text" id="deck-count" role="status"></div>
-    <div id="deck-slots" aria-hidden="true"></div>
-  </div>
-  <div id="deck-grid"></div>
-  <div class="deck-actions">
-    <div class="err" id="deck-err" role="status"></div>
-    <div class="row">
-    <button class="btn" id="btn-deck-preset" data-i18n="preset">推荐</button>
-    <button class="btn primary" id="btn-deck-save" data-i18n="saveBack">保存</button>
-    <button class="btn" id="btn-deck-cancel" data-i18n="cancel">取消</button>
-    </div>
-  </div>
-</div>
-
-<!-- 联机大厅 -->
-<div id="online-screen" class="screen" style="display:none">
-  <h2 data-i18n="onlineTitle">联机对战</h2>
-  <div class="panel row">
-    <label class="muted-text" for="player-name" data-i18n="nickname">昵称</label><input class="txt" id="player-name" maxlength="16" placeholder="留空则随机命名" data-i18n-ph="guestPlaceholder">
-  </div>
-  <div class="row">
-    <div class="panel" style="text-align:center">
-      <div class="muted-text" style="margin-bottom:8px" data-i18n="createHint">建房后把房间码发给对手</div>
-      <button class="btn primary" id="btn-create" data-i18n="create">创建房间</button>
-
-    </div>
-    <div class="panel" style="text-align:center">
-      <label class="muted-text join-label" for="join-code" data-i18n="joinHint">输入房间码</label>
-      <div class="row"><input class="txt code" id="join-code" maxlength="4" placeholder="ABCD"><button class="btn" id="btn-join" data-i18n="join">加入</button></div>
-    </div>
-  </div>
-  <section id="online-state" class="panel connection-controls" hidden>
-    <div id="room-wait" hidden>
-      <div id="room-identity"></div>
-      <div id="room-code"></div>
-      <button class="btn primary" id="btn-copy-room" data-i18n="copyRoom">复制房号</button>
-    </div>
-    <div class="row">
-      <span class="muted-text" id="online-progress" role="status"></span>
-      <button class="btn" id="btn-cancel-connection" hidden data-i18n="cancelConnection">取消连接</button>
-    </div>
-  </section>
-  <div class="err" id="online-err" role="alert"></div>
-  <div class="panel"><div class="muted-text" style="margin-bottom:6px" data-i18n="leaderboard">排行榜 · Elo</div><div id="leaderboard" data-i18n="loading">加载中…</div></div>
-  <button class="btn" id="btn-online-back" data-i18n="back">返回</button>
-</div>
 
 <!-- 战斗 HUD -->
 <div id="hud" style="display:none">

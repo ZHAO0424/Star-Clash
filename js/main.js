@@ -1,4 +1,4 @@
-// 入口 — UI 粘合层:主菜单 / 卡组构筑 / 联机大厅 / 战斗 HUD / 手牌拖拽 / 强化 / 结算 / 游戏循环
+// 入口 — UI 粘合层:菜单(主页 / 对局设置 / 图鉴组卡 / 设置)/ 战斗 HUD / 手牌拖拽 / 强化 / 结算 / 游戏循环
 // 对局逻辑都在 session(本地人机或联机)里;这里只读 session.game、调用 session 的操作方法
 import { FACTIONS, CARDS, cardTags, previewRadius, factionPool, PRESET_DECKS, deckProblem, DECK_SIZE, MIN_DEPLOYABLES } from './cards.js';
 import { DISCARD_COST, Game, isPlaced } from './game.js';
@@ -16,7 +16,7 @@ function ico(name, fallback) {
 }
 import { LocalSession, NetSession, connectOnline } from './session.js';
 import { sfx, sfxForEvent, setMuted, isMuted } from './sfx.js';
-import { loadDeck, saveDeck, isPresetDeck, prefs, loadStats, recordGame, winRate } from './storage.js';
+import { loadDeck, saveDeck, prefs, loadStats, recordGame, winRate } from './storage.js';
 import { coreStatus, t, getLang, setLang, applyStaticText, cardName, cardDesc, factionName, factionDesc, tagName, upgradeText, passiveText } from './i18n.js';
 
 const $ = sel => document.querySelector(sel);
@@ -34,18 +34,18 @@ let paused = false;   // 本地人机对局暂停:loop 里跳过 session.tick(�
 const game = () => session?.game;
 // 调试:地址带 ?debug 时把场景 / 对局挂到 window 上,方便在控制台里看特效、模型
 if (new URLSearchParams(location.search).has('debug')) window.__bg = { get scene() { return scene; }, get game() { return game(); }, get session() { return session; } };
-const SCREENS = ['#title-screen', '#home-screen', '#select-screen', '#deck-screen', '#online-screen', '#codex-screen', '#settings-screen'];
+const SCREENS = ['#front-loading', '#home-screen', '#setup-screen', '#codex-screen', '#settings-screen'];
 let activeScreen = '#front-loading';
+// sel = 菜单屏选择器;null = 进入对局(显示 HUD)
 function showScreen(sel) {
   activeScreen = sel;
-  $('#front-loading').style.display = 'none';
-  for (const s of SCREENS) $(s).style.display = s === sel ? 'flex' : 'none';
+  for (const s of SCREENS) $(s).style.display = s === sel ? '' : 'none';
   $('#hud').style.display = sel ? 'none' : '';
   document.body.classList.toggle('in-battle', !sel);
   $('#hud').inert = false;
 }
 
-// ── 卡牌 DOM(手牌与卡组构筑共用)──
+// ── 卡牌 DOM(对局手牌用;非 compact 分支原供旧卡组构筑页,现无调用方)──
 function cardElement(card, { discard = false, compact = false } = {}) {
   const div = document.createElement('div');
   div.className = `card ${card.type}${compact ? ' compact-card' : ''}`;
@@ -67,81 +67,25 @@ function cardElement(card, { discard = false, compact = false } = {}) {
   return div;
 }
 
-// ── 主菜单 ──
-function buildMenu() {
-  const stats = loadStats();
-  const tot = stats.total;
-  applyStaticText();
-  refreshWordmarks();
-  refreshMuteButton();
-  $('#stats-line').textContent = tot.w + tot.l + tot.d
-    ? t('stats', { w: tot.w, l: tot.l, d: tot.d ? t('draws', { d: tot.d }) : '', r: winRate(tot), b: stats.best })
-    : t('pickFaction');
-  const selected = FACTIONS[selFaction];
-  const passive = passiveText(selFaction, selected.passive);
-  const detail = $('#faction-detail');
-  detail.hidden = false;
-  detail.style.setProperty('--fc', hex(selected.color));
-  $('#faction-passive-name').textContent = `${t('passive')} · ${passive.name}`;
-  $('#faction-passive-desc').textContent = passive.desc;
-  const wrap = $('#faction-list');
-  wrap.innerHTML = '';
-  for (const fac of Object.values(FACTIONS)) {
-    const div = document.createElement('button');
-    div.type = 'button';
-    div.dataset.faction = fac.id;
-    div.setAttribute('aria-pressed', String(fac.id === selFaction));
-    div.className = 'faction-card' + (fac.id === selFaction ? ' selected' : '');
-    div.style.setProperty('--fc', hex(fac.color));
-    const em = emblem(fac.id);
-    const fs = stats.byFaction[fac.id];
-    div.innerHTML = `<span class="faction-portrait">
-      <img class="faction-key-art" src="assets/ui/factions/${fac.id}.webp" width="900" height="600" alt="" decoding="async" draggable="false">
-      ${em ? `<img class="emblem" src="${em.url}" alt="">` : ''}
-    </span>
-    <span class="faction-name">${factionName(fac.id, fac.name)}</span>
-    <span class="faction-desc">${factionDesc(fac.id, fac.desc)}</span>
-    ${fs.w + fs.l + fs.d ? `<span class="fstat">${t('fstat', { w: fs.w, l: fs.l, r: winRate(fs) })}</span>` : ''}`;
-    div.onclick = () => {
-      sfx('click');
-      selFaction = fac.id;
-      prefs.faction = fac.id;
-      buildMenu();
-      $(`[data-faction=${fac.id}]`).focus({ preventScroll: true });
-    };
-    wrap.appendChild(div);
-  }
-  const deck = loadDeck(selFaction);
-  $('#deck-summary').textContent = t('deckSummary', { f: fname(selFaction), kind: t(isPresetDeck(selFaction, deck) ? 'presetDeck' : 'customDeck'), n: deck.length });
-  for (const [group, value] of [['#difficulty', prefs.difficulty], ['#lang', getLang()]]) {
-    for (const button of $(group).querySelectorAll('button')) {
-      const active = button.dataset.v === value;
-      button.classList.toggle('on', active);
-      button.setAttribute('aria-pressed', String(active));
-    }
-  }
-  buildSceneList();
-  const field = SCENE_IDS.includes(prefs.scene) ? sceneById(prefs.scene) : null;
-  const difficulty = { basic: 'easy', normal: 'normal', smart: 'hard' }[prefs.difficulty];
-  $('#home-faction').textContent = fname(selFaction);
-  $('#home-config').textContent = t('quickConfig', {
-    scene: field ? (getLang() === 'en' ? field.en : field.name) : t('randomScene'),
-    difficulty: t(difficulty),
-    n: deck.length,
-  });
-  $('#home-faction-art').src = `assets/ui/factions/${selFaction}.webp`;
-  $('.home-quick').style.setProperty('--fc', hex(selected.color));
-}
-
-for (const b of document.querySelectorAll('#difficulty button')) {
-  b.onclick = () => { sfx('click'); prefs.difficulty = b.dataset.v; buildMenu(); };
-}
-for (const b of document.querySelectorAll('#lang button')) {
-  b.onclick = () => { sfx('click'); setLang(b.dataset.v); buildMenu(); updateXREntry(); };
-}
+// ── 菜单通用 ──
 const fname = id => factionName(id, FACTIONS[id].name);
+const isEn = () => getLang() === 'en';
+const sceneName = s => (isEn() ? s.en : s.name);
+const deckAverage = ids => (ids.length ? (ids.reduce((a, id) => a + CARDS[id].cost, 0) / ids.length).toFixed(1) : '–');
+const deckProblemText = prob => t('deckErr_' + prob.code, {
+  n: prob.code === 'deploy' ? MIN_DEPLOYABLES : DECK_SIZE,
+  c: prob.card ? cardName(CARDS[prob.card] ?? { id: prob.card, name: prob.card }) : '',
+});
+// 分段控件 / 选项组:按 data-v 标出选中项
+function markGroup(group, value) {
+  for (const b of group.querySelectorAll('[data-v]')) {
+    const on = b.dataset.v === value;
+    b.classList.toggle('sel', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+}
 function refreshWordmarks() {
-  const src = `assets/ui/brand/logo-${getLang() === 'en' ? 'en' : 'zh'}.webp`;
+  const src = `assets/ui/brand/logo-${isEn() ? 'en' : 'zh'}.webp`;
   for (const image of document.querySelectorAll('.brand-wordmark')) {
     if (image.getAttribute('src') === src) continue;
     image.hidden = true;
@@ -181,221 +125,303 @@ function shouldGuideFirstMatch() {
   return !prefs.firstMatchSeen && w + l + d === 0;
 }
 
+// ── 主页 ──
 function openHome() {
-  buildMenu();
-  $('#first-match-home').hidden = !shouldGuideFirstMatch();
+  applyStaticText();
+  refreshWordmarks();
+  refreshMuteButton();
   updateXREntry();
   showScreen('#home-screen');
   $('#home-title').focus({ preventScroll: true });
 }
-$('#btn-enter-game').onclick = () => {
-  prefs.entered = true;
-  sfx('click');
-  openHome();
-};
-$('#btn-prepare').onclick = () => {
-  sfx('click');
-  buildMenu();
-  showScreen('#select-screen');
-  $('#prepare-title').focus({ preventScroll: true });
-};
-$('#btn-prepare-back').onclick = () => { openHome(); $('#btn-prepare').focus(); };
-$('#btn-quick').onclick = () => { sfx('click'); startLocal({ guided: shouldGuideFirstMatch() }); };
-$('#btn-home-deck').onclick = () => { sfx('click'); openDeckBuilder(); };
-$('#btn-solo').onclick = () => { sfx('click'); startLocal(); };
-$('#btn-online').onclick = () => { sfx('click'); openOnline(); };
-$('#btn-deck').onclick = () => { sfx('click'); openDeckBuilder(); };
+$('#btn-start').onclick = () => { sfx('click'); openSetup('ai'); };
+$('#btn-home-online').onclick = () => { sfx('click'); openSetup('online'); };
+$('#btn-codex').onclick = () => { sfx('click'); openCodex(); };
+$('#btn-settings').onclick = () => { sfx('click'); openSettings(); };
 
-let codexFaction = null, codexType = '', codexCard = null;
-function openCodex() {
-  codexFaction ??= selFaction;
-  $('#codex-faction').replaceChildren(...Object.values(FACTIONS).map(faction => new Option(fname(faction.id), faction.id)));
-  $('#codex-type').replaceChildren(...['', 'unit', 'building', 'spell'].map(type => new Option(t(type || 'allTypes'), type)));
-  $('#codex-faction').value = codexFaction;
-  $('#codex-type').value = codexType;
-  renderCodex();
-  showScreen('#codex-screen');
-  $('#codex-title').focus();
+// ── 对局设置(人机 / 联机共用,模式由主页入口决定)──
+let setupMode = 'ai';   // 'ai' | 'online'
+function openSetup(mode = setupMode) {
+  setupMode = mode;
+  renderSetup();
+  showScreen('#setup-screen');
+  $('#setup-title').focus({ preventScroll: true });
+  if (mode === 'online') openOnline();
+}
+function renderSetup() {
+  applyStaticText();
+  refreshMuteButton();
+  const online = setupMode === 'online';
+  $('#setup-title').textContent = t(online ? 'setupOnline' : 'setupAI');
+  $('#opp-title').textContent = t(online ? 'oppFriend' : 'oppAI');
+  $('#difficulty').hidden = online;
+  $('#online-form').hidden = !online;
+  $('#leaderboard-panel').hidden = !online;
+  markGroup($('#difficulty'), prefs.difficulty);
+  renderFactions();
+  buildSceneList();
+  refreshFightButton();
+}
+// 右下主按钮:立绘没下载完时显示进度;联机模式下是「创建房间」
+let artLoaded = false, loadingText = '';
+function refreshFightButton() {
+  const online = setupMode === 'online';
+  const button = $('#btn-fight');
+  button.textContent = artLoaded ? t(online ? 'create' : 'fight') : loadingText || t('loading');
+  button.disabled = !artLoaded || Boolean(pendingBattle) || (online && (window.BG_STATIC || Boolean(pendingConnection)));
+  $('#btn-join').disabled = !artLoaded || window.BG_STATIC || Boolean(pendingConnection);
+  $('#btn-edit-deck').disabled = !artLoaded || Boolean(pendingConnection);
 }
 
-function renderCodex() {
-  const cards = factionPool(codexFaction).filter(card => !codexType || card.type === codexType);
-  if (!cards.some(card => card.id === codexCard)) codexCard = cards[0]?.id ?? null;
-  const grid = $('#codex-grid');
-  grid.replaceChildren();
-  for (const card of cards) {
+function renderFactions() {
+  $('#faction-list').replaceChildren(...Object.values(FACTIONS).map(fac => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'codex-pick';
+    button.className = 'choice' + (fac.id === selFaction ? ' sel' : '');
+    button.dataset.faction = fac.id;
+    button.setAttribute('aria-pressed', String(fac.id === selFaction));
+    button.style.setProperty('--fc', hex(fac.color));
+    const em = emblem(fac.id);
+    button.innerHTML = `<img class="art" src="assets/ui/factions/${fac.id}.webp" width="900" height="600" alt="" decoding="async" draggable="false">
+      <span class="name">${em ? `<img src="${em.url}" alt="" draggable="false">` : ''}<span class="label">${fname(fac.id)}</span></span>`;
+    button.onclick = () => {
+      sfx('click');
+      selFaction = prefs.faction = fac.id;
+      renderFactions();
+      $(`[data-faction=${fac.id}]`).focus({ preventScroll: true });
+    };
+    return button;
+  }));
+  const selected = FACTIONS[selFaction];
+  const passive = passiveText(selFaction, selected.passive);
+  $('#faction-passive').style.setProperty('--fc', hex(selected.color));
+  $('#faction-passive-name').textContent = `${t('passive')} · ${passive.name}`;
+  $('#faction-passive-desc').textContent = passive.desc;
+  $('#deck-summary').textContent = t('deckLine', { avg: deckAverage(loadDeck(selFaction)) });
+}
+
+for (const b of $('#difficulty').querySelectorAll('[data-v]')) {
+  b.onclick = () => { sfx('click'); prefs.difficulty = b.dataset.v; markGroup($('#difficulty'), prefs.difficulty); };
+}
+$('#btn-edit-deck').onclick = () => { sfx('click'); openCodex({ faction: selFaction, from: '#setup-screen' }); };
+$('#btn-setup-back').onclick = () => {
+  cancelPending();
+  openHome();
+  $(setupMode === 'online' ? '#btn-home-online' : '#btn-start').focus();
+};
+$('#btn-fight').onclick = () => {
+  sfx('click');
+  if (setupMode === 'online') goOnline(onlineHello('create'));
+  else startLocal({ guided: shouldGuideFirstMatch() });
+};
+
+// 战场选择:随机或已开放场景;大预览显示选中战场的名字和说明
+const sceneImage = field => {
+  if (!field) return uiArt('bg_menu')?.url || 'assets/ui/bg_menu.webp';
+  const art = sceneArt(field.id);
+  return field.menuPreview || art.concept || art.sky || '';
+};
+function buildSceneList() {
+  const cur = SCENE_IDS.includes(prefs.scene) ? prefs.scene : 'random';
+  const field = cur === 'random' ? null : sceneById(cur);
+  $('#arena-img').src = sceneImage(field);
+  $('#arena-name').textContent = field ? sceneName(field) : t('randomScene');
+  $('#arena-description').textContent = field ? (isEn() ? field.descEn : field.desc) : t('randomFieldHelp');
+  $('#scene-list').replaceChildren(...[null, ...SCENES].map(s => {
+    const id = s?.id ?? 'random';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'choice' + (cur === id ? ' sel' : '');
+    button.dataset.scene = id;
+    button.setAttribute('aria-pressed', String(cur === id));
+    button.innerHTML = `<img class="art" src="${sceneImage(s)}" alt="" draggable="false"><span class="name">${escapeHtml(s ? sceneName(s) : t('randomScene'))}</span>`;
+    button.onclick = () => { sfx('click'); prefs.scene = id; buildSceneList(); $(`[data-scene=${id}]`).focus({ preventScroll: true }); };
+    return button;
+  }));
+}
+const pickScene = () => (SCENE_IDS.includes(prefs.scene) ? prefs.scene : randomScene());
+
+// ── 图鉴(含组卡):按势力浏览全部卡牌,右侧详情 + 出战卡组;保存后回到打开它的那一页 ──
+let codexFaction = null, codexCard = null, codexReturn = '#home-screen';
+let deckDrafts = {};   // 各势力未保存的卡组草稿(切换页签不丢)
+function openCodex({ faction = codexFaction ?? selFaction, from = '#home-screen' } = {}) {
+  codexReturn = from;
+  codexFaction = faction;
+  codexCard = null;
+  deckDrafts = Object.fromEntries(Object.keys(FACTIONS).map(f => [f, [...loadDeck(f)]]));
+  applyStaticText();
+  refreshMuteButton();
+  renderCodex();
+  showScreen('#codex-screen');
+  $('#codex-title').focus({ preventScroll: true });
+}
+function closeCodex() {
+  if (codexReturn === '#setup-screen') { openSetup(); $('#btn-edit-deck').focus(); }
+  else { openHome(); $('#btn-codex').focus(); }
+}
+function renderCodex() {
+  const deck = deckDrafts[codexFaction];
+  const cards = factionPool(codexFaction);
+  if (!cards.some(card => card.id === codexCard)) codexCard = cards[0]?.id ?? null;
+  $('#codex-tabs').replaceChildren(...Object.values(FACTIONS).map(fac => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'g-btn g-ink g-sm' + (fac.id === codexFaction ? ' sel' : '');
+    button.dataset.tab = fac.id;
+    button.setAttribute('aria-pressed', String(fac.id === codexFaction));
+    const em = emblem(fac.id);
+    button.innerHTML = `${em ? `<img src="${em.url}" alt="" draggable="false">` : ''}${fname(fac.id)}`;
+    button.onclick = () => {
+      sfx('click');
+      codexFaction = fac.id;
+      codexCard = null;
+      renderCodex();
+      $(`[data-tab=${fac.id}]`).focus({ preventScroll: true });
+    };
+    return button;
+  }));
+  $('#codex-grid').replaceChildren(...cards.map(card => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cx-card' + (deck.includes(card.id) ? ' in' : '') + (card.id === codexCard ? ' view' : '');
     button.dataset.card = card.id;
     button.setAttribute('aria-pressed', String(card.id === codexCard));
-    button.append(cardElement(card, { compact: true }));
-    button.onclick = () => {
-      codexCard = card.id;
-      for (const item of grid.children) item.setAttribute('aria-pressed', String(item === button));
-      renderCodexDetail(card);
-      if (matchMedia('(max-width: 740px)').matches) {
-        $('#codex-card-title').focus({ preventScroll: true });
-        $('#codex-detail').scrollIntoView({ block: 'nearest' });
-      }
-    };
-    grid.append(button);
-  }
-  renderCodexDetail(CARDS[codexCard]);
-}
-
-function renderCodexDetail(card) {
-  const panel = $('#codex-detail');
-  if (!card) { panel.replaceChildren(); return; }
-  const art = cardArt(card), mark = emblem(card.faction), faction = fname(card.faction);
-  const stats = [];
-  if (card.hp != null) stats.push([t('cardHealth'), card.hp]);
-  if (card.atk > 0) stats.push([t('cardAttack'), card.atk]);
-  if (card.range > 0) stats.push([t('cardRange'), t('gridUnits', { n: card.range })]);
-  if (card.radius > 0) stats.push([t('cardRadius'), t('gridUnits', { n: card.radius })]);
-  if (card.lifetime > 0) stats.push([t('cardLifetime'), t('seconds', { n: card.lifetime })]);
-  const tags = cardTags(card).map(tagName);
-  panel.style.setProperty('--fc', hex(FACTIONS[card.faction].color));
-  panel.innerHTML = `<div class="codex-hero">
-    <span class="codex-identity">${mark ? `<img src="${mark.url}" alt="">` : ''}${faction} · ${t(card.type)}</span>
-    ${art ? `<img class="codex-art${art.glow ? ' glow' : ''}" src="${art.url}" alt="">` : ''}
-  </div>
-  <div class="codex-body">
-    <div class="codex-card-heading"><b class="codex-cost">${card.cost}</b><h2 id="codex-card-title" tabindex="-1">${cardName(card)}</h2></div>
-    ${tags.length ? `<p class="codex-tags">${tags.join(' · ')}</p>` : ''}
-    ${stats.length ? `<div class="codex-stats">${stats.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>` : ''}
-    <p class="codex-description">${cardDesc(card)}</p>
-    <div class="codex-actions">
-      ${card.type !== 'spell' ? `<a class="btn" href="viewer.html?id=${encodeURIComponent(card.id)}" target="_blank" rel="noopener">${t('viewModel')}</a>` : ''}
-      <button class="btn primary" type="button" id="btn-codex-deck">${t('codexEdit', { f: faction })}</button>
-    </div>
-  </div>`;
-  $('#btn-codex-deck').onclick = () => openDeckBuilder(card.faction);
-}
-
-$('#btn-codex').onclick = openCodex;
-$('#btn-codex-back').onclick = () => { openHome(); $('#btn-codex').focus(); };
-$('#codex-faction').onchange = event => { codexFaction = event.target.value; renderCodex(); };
-$('#codex-type').onchange = event => { codexType = event.target.value; renderCodex(); };
-
-function openSettings() {
-  applyStaticText();
-  $('#settings-language').value = getLang();
-  $('#settings-sound').value = isMuted() ? 'off' : 'on';
-  $('#settings-size').value = prefs.boardSize;
-  updateXREntry();
-  showScreen('#settings-screen');
-  $('#settings-title').focus();
-}
-$('#btn-settings').onclick = openSettings;
-$('#btn-settings-back').onclick = () => { openHome(); $('#btn-settings').focus(); };
-$('#settings-language').onchange = event => { setLang(event.target.value); refreshMuteButton(); updateXREntry(); };
-$('#settings-sound').onchange = event => { setMuted(event.target.value === 'off'); refreshMuteButton(); };
-$('#settings-size').onchange = event => { prefs.boardSize = event.target.value; xr?.applyBoardSize(); };
-$('#settings-xr-mode').onchange = event => { prefs.xrMode = event.target.value; updateXREntry(); };
-
-// ── 卡组构筑 ──
-let deckDraft = [];
-let deckReturn = '#home-screen';
-let deckFaction = selFaction;
-function openDeckBuilder(faction = selFaction) {
-  deckReturn = ['#select-screen', '#codex-screen'].includes(activeScreen) ? activeScreen : '#home-screen';
-  deckFaction = faction;
-  deckDraft = [...loadDeck(deckFaction)];
-  $('#deck-title').textContent = t('deckTitle', { f: fname(deckFaction) });
-  renderDeck();
-  showScreen('#deck-screen');
-  $('#deck-grid .card')?.focus({ preventScroll: true });
-}
-function renderDeck() {
-  const grid = $('#deck-grid');
-  grid.innerHTML = '';
-  for (const card of factionPool(deckFaction)) {
-    const el = cardElement(card);
-    const picked = deckDraft.includes(card.id);
-    el.classList.toggle('picked', picked);
-    el.dataset.deckCard = card.id;
-    el.tabIndex = 0;
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-pressed', String(picked));
-    el.onkeydown = event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      el.click();
-    };
-    el.onclick = () => {
-      sfx('click');
-      if (deckDraft.includes(card.id)) deckDraft = deckDraft.filter(id => id !== card.id);
-      else if (deckDraft.length < DECK_SIZE) deckDraft.push(card.id);
-      else {
-        $('#deck-err').textContent = t('deckFull');
-        return;
-      }
-      renderDeck();
-      $(`[data-deck-card=${card.id}]`).focus({ preventScroll: true });
-    };
-    grid.appendChild(el);
-  }
-  $('#deck-slots').replaceChildren(...Array.from({ length: DECK_SIZE }, (_, i) => {
-    const slot = document.createElement('span');
-    slot.className = 'deck-slot';
-    const card = CARDS[deckDraft[i]];
-    if (!card) return slot;
-    slot.classList.add('filled');
     const art = cardArt(card);
-    if (art) {
-      const img = document.createElement('img');
-      img.src = art.url;
-      img.alt = '';
-      if (art.glow) img.className = 'glow';
-      slot.append(img);
+    button.innerHTML = `${art ? `<img class="${art.glow ? 'glow' : ''}" src="${art.url}" alt="" draggable="false">` : ''}
+      <span class="cost-badge">${card.cost}</span><span class="tick" aria-hidden="true">✓</span><span class="cname">${cardName(card)}</span>`;
+    button.onclick = () => viewCodexCard(card.id, button);
+    return button;
+  }));
+  renderCodexDetail();
+  renderRoster();
+}
+// 点卡 / 点卡组格:查看这张卡;窄屏上详情在网格上方,滚过去
+function viewCodexCard(id, source) {
+  sfx('click');
+  codexCard = id;
+  const fromSlot = source?.classList.contains('dslot');
+  renderCodex();
+  if (!fromSlot) $(`#codex-grid [data-card=${id}]`)?.focus({ preventScroll: true });
+  if (matchMedia('(max-width: 720px)').matches) $('#codex-detail').scrollIntoView({ block: 'nearest' });
+}
+function renderCodexDetail() {
+  const panel = $('#codex-detail');
+  const card = CARDS[codexCard];
+  if (!card) { panel.replaceChildren(); return; }
+  const deck = deckDrafts[codexFaction];
+  const inDeck = deck.includes(card.id), full = deck.length >= DECK_SIZE;
+  const art = cardArt(card);
+  const chips = card.type === 'spell' ? [] : [
+    [t('cardHealth'), Math.round(card.hp)],
+    card.atk > 0 && [t('cardAttack'), Math.round(card.atk)],
+    card.range > 0 && [t('cardRange'), card.range],
+  ].filter(Boolean);
+  panel.innerHTML = `<div class="art-wrap">${art ? `<img class="art${art.glow ? ' glow' : ''}" src="${art.url}" alt="" draggable="false">` : '<div class="art"></div>'}<span class="cost-badge">${card.cost}</span></div>
+    <span class="type">${[t(card.type), ...cardTags(card).map(tagName)].join(' · ')}</span>
+    <h3 id="codex-card-title">${cardName(card)}</h3>
+    ${chips.length ? `<div class="chips">${chips.map(([label, value]) => `<span class="chip">${label}<b>${value}</b></span>`).join('')}</div>` : ''}
+    <p class="desc">${cardDesc(card)}</p>
+    <div class="acts">
+      <button class="g-btn ${inDeck ? 'g-ink' : 'g-gold'} g-sm" type="button" id="btn-deck-toggle"${!inDeck && full ? ' disabled' : ''}>${t(inDeck ? 'removeFromDeck' : full ? 'deckFullBtn' : 'addToDeck')}</button>
+    </div>`;
+  $('#btn-deck-toggle').onclick = () => {
+    sfx('click');
+    const draft = deckDrafts[codexFaction];
+    deckDrafts[codexFaction] = draft.includes(card.id) ? draft.filter(id => id !== card.id) : [...draft, card.id];
+    renderCodex();
+    $('#btn-deck-toggle').focus({ preventScroll: true });
+  };
+}
+function renderRoster() {
+  const deck = deckDrafts[codexFaction];
+  const sorted = deck.map(id => CARDS[id]).sort((a, b) => a.cost - b.cost);
+  $('#deck-slots').replaceChildren(...Array.from({ length: DECK_SIZE }, (_, i) => {
+    const card = sorted[i];
+    if (!card) {
+      const slot = document.createElement('span');
+      slot.className = 'dslot empty';
+      return slot;
     }
-    const cost = document.createElement('b');
-    cost.textContent = card.cost;
-    slot.append(cost);
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = 'dslot';
+    slot.title = cardName(card);
+    slot.setAttribute("aria-label", cardName(card));
+    const art = cardArt(card);
+    slot.innerHTML = `${art ? `<img class="${art.glow ? 'glow' : ''}" src="${art.url}" alt="" draggable="false">` : ''}<span class="cost-badge">${card.cost}</span>`;
+    slot.onclick = () => viewCodexCard(card.id, slot);
     return slot;
   }));
-  const prob = deckProblem(deckFaction, deckDraft);
-  const err = prob && t('deckErr_' + prob.code, { n: prob.code === 'deploy' ? MIN_DEPLOYABLES : DECK_SIZE, c: prob.card ? cardName(CARDS[prob.card] ?? { id: prob.card, name: prob.card }) : '' });
-  const avg = deckDraft.length ? (deckDraft.reduce((a, id) => a + CARDS[id].cost, 0) / deckDraft.length).toFixed(1) : '0';
-  $('#deck-count').textContent = t('deckCount', { n: deckDraft.length, max: DECK_SIZE, avg });
-  $('#deck-err').textContent = err || '';
-  $('#btn-deck-save').disabled = !!err;
+  $('#deck-count').textContent = `${deck.length}/${DECK_SIZE}`;
+  $('#deck-avg').textContent = deckAverage(deck);
+  const problem = deckProblem(codexFaction, deck);
+  $('#deck-err').textContent = problem ? deckProblemText(problem) : '';
 }
-$('#btn-deck-preset').onclick = () => { deckDraft = [...PRESET_DECKS[deckFaction]]; renderDeck(); };
-function closeDeckBuilder() {
-  if (deckReturn === '#codex-screen') { openCodex(); $('#btn-codex-deck')?.focus(); return; }
-  buildMenu();
-  showScreen(deckReturn);
-  $(deckReturn === '#select-screen' ? '#btn-deck' : '#btn-home-deck').focus();
-}
-$('#btn-deck-save').onclick = () => { if (saveDeck(deckFaction, deckDraft)) { sfx('click'); closeDeckBuilder(); } };
-$('#btn-deck-cancel').onclick = closeDeckBuilder;
+$('#btn-deck-preset').onclick = () => {
+  sfx('click');
+  deckDrafts[codexFaction] = [...PRESET_DECKS[codexFaction]];
+  renderCodex();
+};
+// 保存:任何势力的草稿不合法就切过去显示原因,一张都不存;只写改动过的卡组
+$('#btn-deck-save').onclick = () => {
+  const bad = Object.keys(deckDrafts).find(f => deckProblem(f, deckDrafts[f]));
+  if (bad) {
+    codexFaction = bad;
+    renderCodex();
+    return;
+  }
+  for (const [faction, ids] of Object.entries(deckDrafts)) {
+    if (ids.join() !== loadDeck(faction).join()) saveDeck(faction, ids);
+  }
+  sfx('click');
+  closeCodex();
+};
+$('#btn-codex-back').onclick = () => { sfx('click'); closeCodex(); };
 
-// ── 联机大厅 ──
+// ── 设置 ──
+function openSettings() {
+  renderSettings();
+  showScreen('#settings-screen');
+  $('#settings-title').focus({ preventScroll: true });
+}
+function renderSettings() {
+  applyStaticText();
+  markGroup($('#settings-language'), getLang());
+  markGroup($('#settings-sound'), isMuted() ? 'off' : 'on');
+  markGroup($('#settings-size'), prefs.boardSize);
+  updateXREntry();
+}
+const onSegment = (selector, apply) => {
+  for (const b of $(selector).querySelectorAll('[data-v]')) b.onclick = () => { apply(b.dataset.v); sfx('click'); renderSettings(); };
+};
+onSegment('#settings-language', value => { setLang(value); refreshWordmarks(); refreshMuteButton(); });
+onSegment('#settings-sound', value => { setMuted(value === 'off'); refreshMuteButton(); });
+onSegment('#settings-size', value => { prefs.boardSize = value; xr?.applyBoardSize(); });
+onSegment('#settings-xr-mode', value => { prefs.xrMode = value; });
+$('#btn-settings-back').onclick = () => { sfx('click'); openHome(); $('#btn-settings').focus(); };
+
+// ── 联机(对局设置页的联机模式)──
 const wsUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 let pendingConnection = null;
 function openOnline() {
+  if (pendingConnection) return;   // 建房等待中:保持现状
   $('#player-name').value = prefs.name;
   $('#online-err').textContent = '';
-  $('#room-wait').hidden = true;   // 只用 hidden 控制(showConnectionProgress 也用它);内联 display 会压住 hidden,导致房间号永远不显示
-  showScreen('#online-screen');
-  $('#player-name').focus({ preventScroll: true });
-  // 静态网页版(GitHub Pages,由 tools/build-pages.mjs 打包)没有联机服务器:只说明原因,不去连
+  showConnectionProgress('');
+  // 静态网页版(GitHub Pages)没有联机服务器:只说明原因,不去连
   if (window.BG_STATIC) {
     $('#online-err').textContent = t('staticNoOnline');
-    $('#btn-create').disabled = $('#btn-join').disabled = true;
-    const online = window.BG_ONLINE_URL;   // 打包时可写入联机版地址(同一份代码跑在 Node 服务器上)
+    const online = window.BG_ONLINE_URL;   // 联机版地址(同一份代码跑在 Node 服务器上)
     $('#leaderboard').innerHTML = online && /^https:\/\//.test(online)
-      ? `<a class="btn primary" href="${escapeHtml(online)}">${t('goOnline')}</a>`
-      : `<span class="muted-text">${t('staticNoOnline')}</span>`;
+      ? `<a class="g-btn g-teal g-sm" href="${escapeHtml(online)}">${t('goOnline')}</a>`
+      : `<span class="lb-note">${t('staticNoOnline')}</span>`;
     return;
   }
   $('#leaderboard').textContent = t('loading');
   fetch('api/leaderboard').then(r => (r.ok ? r.json() : Promise.reject())).then(rows => {
     $('#leaderboard').innerHTML = rows.length
-      ? rows.map((r, i) => `<div><span>${i + 1}. ${escapeHtml(r.name)}</span><span>${r.rating} · ${t('fstat', { w: r.wins, l: r.losses, r: winRate({ w: r.wins, l: r.losses, d: r.draws || 0 }) })}</span></div>`).join('')
-      : `<span class="muted-text">${t('noRecords')}</span>`;
+      ? rows.map((r, i) => `<div class="lb-row"><b>${i + 1}. ${escapeHtml(r.name)}</b><span>${r.rating} · ${t('fstat', { w: r.wins, l: r.losses, r: winRate({ w: r.wins, l: r.losses, d: r.draws || 0 }) })}</span></div>`).join('')
+      : `<span class="lb-note">${t('noRecords')}</span>`;
   }).catch(() => {
     $('#leaderboard').innerHTML = `<span class="err">${t('noServer')}</span>`;
   });
@@ -406,14 +432,16 @@ function onlineHello(t, extra = {}) {
   prefs.name = $('#player-name').value.trim();
   return { t, faction: selFaction, deck: loadDeck(selFaction), name: prefs.name, scene: prefs.scene, ...extra };
 }
+// 连接中 / 等房:锁住会改变这一局的输入(势力、战场、卡组、昵称、房号)
 function showConnectionProgress(key) {
   const busy = Boolean(key);
-  for (const id of ['#btn-create', '#btn-join', '#player-name', '#join-code']) $(id).disabled = busy;
+  for (const id of ['#player-name', '#join-code']) $(id).disabled = busy;
+  $('#faction-list').inert = $('#scene-list').inert = busy;
   $('#online-state').hidden = !busy;
-  $('#online-screen').classList.toggle('room-active', key === 'waiting');
   $('#room-wait').hidden = key !== 'waiting';
   $('#online-progress').textContent = key ? t(key) : '';
   $('#btn-cancel-connection').hidden = !busy;
+  refreshFightButton();
 }
 
 async function goOnline(msg) {
@@ -429,9 +457,7 @@ async function goOnline(msg) {
       onRoom: (code, name) => {
         if (pendingConnection !== request) return;
         $('#room-code').textContent = code;
-        const identity = $('#room-identity');
-        identity.hidden = !(name || msg.name);
-        identity.textContent = name || msg.name ? t('roomIdentity', { name: name || msg.name }) : '';
+        $('#room-identity').textContent = name || msg.name ? t('roomIdentity', { name: name || msg.name }) : '';
         showConnectionProgress('waiting');
         $('#btn-copy-room').focus();
       },
@@ -456,7 +482,7 @@ async function goOnline(msg) {
     if (pendingConnection === request) {
       pendingConnection = null;
       showConnectionProgress('');
-      if ($('#online-screen').style.display === 'flex' && !pendingBattle) $('#btn-create').focus();
+      if (activeScreen === '#setup-screen' && !pendingBattle) $('#btn-fight').focus();
     }
   }
 }
@@ -470,7 +496,7 @@ $('#btn-cancel-connection').onclick = () => {
   cancelPending();
   $('#online-state').hidden = false;
   $('#online-progress').textContent = t('connectionCancelled');
-  $('#btn-create').focus();
+  $('#btn-fight').focus();
 };
 $('#btn-copy-room').onclick = async () => {
   const code = $('#room-code');
@@ -486,7 +512,6 @@ $('#btn-copy-room').onclick = async () => {
     toast(t('roomCopyManually'));
   }
 };
-$('#btn-create').onclick = () => { sfx('click'); goOnline(onlineHello('create')); };
 $('#btn-join').onclick = () => {
   sfx('click');
   const code = $('#join-code').value.trim().toUpperCase();
@@ -496,7 +521,6 @@ $('#btn-join').onclick = () => {
 $('#join-code').onkeydown = event => {
   if (event.key === 'Enter') $('#btn-join').click();
 };
-$('#btn-online-back').onclick = () => { backToMenu('#select-screen'); $('#btn-online').focus(); };
 
 // ── 开局 ──
 function ensureScene() {
@@ -553,8 +577,8 @@ function ensureScene() {
 async function beginBattle(s, { guided = false } = {}) {
   pendingBattle?.leave();
   pendingBattle = s;
-  const controls = ['#btn-quick', '#btn-solo', '#btn-online', '#btn-again'].map($);
-  controls.forEach(button => { button.disabled = true; });
+  $('#btn-again').disabled = true;
+  refreshFightButton();   // 场景加载期间主按钮不可再点
   const loading = setTimeout(() => toast(t('tLoadingField')), 250);
   let field;
   try {
@@ -565,16 +589,18 @@ async function beginBattle(s, { guided = false } = {}) {
     s.leave();
     if (pendingBattle === s) {
       pendingBattle = null;
-      controls.forEach(button => { button.disabled = false; });
+      $('#btn-again').disabled = false;
+      refreshFightButton();
       toast(t('battleUnavailable'));
     }
     return;
   } finally {
     clearTimeout(loading);
-    if (pendingBattle === s) controls.forEach(button => { button.disabled = false; });
+    if (pendingBattle === s) $('#btn-again').disabled = false;
   }
   if (pendingBattle !== s) return;
   pendingBattle = null;
+  refreshFightButton();
   session?.leave();
   session = s;
   setPaused(false, { silent: true });
@@ -607,39 +633,6 @@ async function beginBattle(s, { guided = false } = {}) {
   };
 }
 
-// 主菜单的战场选择：随机或已开放场景。
-function buildSceneList() {
-  const wrap = $('#scene-list');
-  wrap.innerHTML = '';
-  const cur = prefs.scene;
-  const field = SCENE_IDS.includes(cur) ? sceneById(cur) : null;
-  const art = field && sceneArt(field.id);
-  const image = field?.menuPreview || art?.concept || art?.sky;
-  $('#arena-preview').style.setProperty('--arena-art', image ? `url("${image}")` : 'none');
-  $('#arena-name').textContent = field ? (getLang() === 'en' ? field.en : field.name) : t('randomScene');
-  $('#arena-description').textContent = field ? (getLang() === 'en' ? field.descEn : field.desc) : t('randomFieldHelp');
-  const chip = (id, label, bg) => {
-    const el = document.createElement('button');
-    el.type = 'button';
-    el.dataset.scene = id;
-    el.setAttribute('aria-pressed', String(cur === id));
-    el.className = 'scene-chip' + (cur === id ? ' on' : '');
-    el.innerHTML = `<span class="thumb" style="${bg}"></span>${escapeHtml(label)}`;
-    el.title = id === 'random' ? '' : (getLang() === 'en' ? sceneById(id).descEn : sceneById(id).desc);
-    el.onclick = () => { sfx('click'); prefs.scene = id; buildSceneList(); $(`[data-scene=${id}]`).focus({ preventScroll: true }); };
-    wrap.appendChild(el);
-  };
-  chip('random', t('randomScene'), 'background: linear-gradient(135deg, #3a2a6a, #1a4a5a, #5a3a2a)');
-  const rgb = c => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
-  for (const s of SCENES) {
-    const art = sceneArt(s.id);
-    const img = s.menuPreview || art.concept || art.sky;
-    const bg = img ? `background-image: url('${img}')` : `background: linear-gradient(160deg, ${rgb(s.palette.rim)}, ${rgb(s.palette.near)} 60%, ${rgb(s.palette.hazard)})`;
-    chip(s.id, getLang() === 'en' ? s.en : s.name, bg);
-  }
-}
-const pickScene = () => (SCENE_IDS.includes(prefs.scene) ? prefs.scene : randomScene());
-
 function startLocal({ guided = false } = {}) {
   const others = Object.keys(FACTIONS).filter(f => f !== selFaction);
   const enemyFaction = others[Math.floor(Math.random() * others.length)];
@@ -669,13 +662,14 @@ function playAgain() {
   if (session.online) {
     // 大厅是 DOM 界面,XR 里看不到:先退出 XR,否则眼镜里会停在旧画面
     scene?.renderer.xr.getSession?.()?.end().catch(() => {});
-    backToMenu(); openOnline(); return;
+    backToMenu(() => openSetup('online')); return;
   }
   const c = session.config;
   beginBattle(new LocalSession({ ...c, deck: loadDeck(c.faction), sceneId: SCENE_IDS.includes(prefs.scene) ? prefs.scene : randomScene() }));
 }
 
-function backToMenu(destination = '#home-screen') {
+// open:回到哪个菜单屏(默认主页)
+function backToMenu(open = openHome) {
   closeFirstMatch(false);
   countdownShown = '';
   showCountdown('');
@@ -686,14 +680,13 @@ function backToMenu(destination = '#home-screen') {
   cancelPending();
   pendingBattle?.leave();
   pendingBattle = null;
-  for (const selector of ['#btn-quick', '#btn-solo', '#btn-online', '#btn-again']) $(selector).disabled = false;
+  $('#btn-again').disabled = false;
   session?.leave();
   session = null;
   setPaused(false, { silent: true });
   $('#end-screen').style.display = 'none';
   $('#upgrade-screen').style.display = 'none';
-  if (destination === '#home-screen') openHome();
-  else { buildMenu(); showScreen(destination); }
+  open();
 }
 
 function leaveBattle(confirmed = false) {
@@ -713,14 +706,18 @@ function confirmLeave() {
 }
 $('#btn-again').onclick = () => playAgain();
 $('#btn-restart').onclick = () => backToMenu();
-const muteButton = $('#btn-mute');
+// 音效开关:对局里的 #btn-mute + 各菜单页右上角的圆形音效键
+const muteButtons = [$('#btn-mute'), ...document.querySelectorAll('.sound-toggle')];
 function refreshMuteButton() {
   const muted = isMuted();
-  muteButton.textContent = muted ? '🔇' : '🔊';
-  muteButton.setAttribute('aria-pressed', String(muted));
-  muteButton.setAttribute('aria-label', t('muteTip'));
+  for (const button of muteButtons) {
+    button.textContent = muted ? '🔇' : '🔊';
+    button.setAttribute('aria-pressed', String(muted));
+    button.setAttribute('aria-label', t('muteTip'));
+    button.title = t('muteTip');
+  }
 }
-muteButton.onclick = () => { setMuted(!isMuted()); refreshMuteButton(); };
+for (const button of muteButtons) button.onclick = () => { setMuted(!isMuted()); refreshMuteButton(); sfx('click'); };
 refreshMuteButton();
 
 // ── 暂停(XR 手心菜单发起;桌面上显示「已暂停」按钮,点一下继续)──
@@ -1310,11 +1307,13 @@ function updateXREntry() {
   xrMode = supportedXRModes.includes(prefs.xrMode) ? prefs.xrMode : supportedXRModes[0] ?? null;
   xrEntryButtons.forEach(button => { button.disabled = !xrMode; });
   $('#btn-xr').hidden = !xrMode;
-  $('#xr-availability').textContent = t(checkingXR ? 'xrChecking' : xrMode ? 'xrCompatible' : 'xrUnavailable');
-  const selector = $('#settings-xr-mode');
-  for (const option of selector.options) option.disabled = option.value !== 'auto' && !supportedXRModes.includes(option.value);
-  selector.value = supportedXRModes.includes(prefs.xrMode) ? prefs.xrMode : 'auto';
-  selector.disabled = !supportedXRModes.length;
+  const availability = t(checkingXR ? 'xrChecking' : xrMode ? 'xrCompatible' : 'xrUnavailable');
+  $('#xr-availability').textContent = availability;
+  $('#btn-home-xr').title = availability;
+  $('#btn-home-xr').setAttribute('aria-label', t('xrHome'));
+  const modes = $('#settings-xr-mode');
+  for (const b of modes.querySelectorAll('[data-v]')) b.disabled = !supportedXRModes.length || (b.dataset.v !== 'auto' && !supportedXRModes.includes(b.dataset.v));
+  markGroup(modes, supportedXRModes.includes(prefs.xrMode) ? prefs.xrMode : 'auto');
 }
 async function checkXRAvailability() {
   const checkId = ++xrCheckId;
@@ -1363,36 +1362,25 @@ async function openXR() {
 $('#btn-xr').onclick = openXR;
 $('#btn-home-xr').onclick = openXR;
 
-let artLoaded = false;
 addEventListener('bg-assets-progress', e => {
   const { done, total } = e.detail;
   if (!total) return;
-  const text = `${t('loading')} ${Math.round(done / total * 100)}%`;
-  if (activeScreen === '#front-loading') $('#front-loading').textContent = text;
-  else if (!artLoaded) $('#btn-quick').textContent = text;   // 菜单已进、立绘还在后台下载:主按钮上显示进度
+  loadingText = `${t('loading')} ${Math.round(done / total * 100)}%`;
+  if (activeScreen === '#front-loading') $('#front-loading .front-loading-text').textContent = loadingText;
+  else if (!artLoaded) refreshFightButton();   // 菜单已进、立绘还在后台下载:主按钮上显示进度
 });
-// 立绘全部到位(或超时放弃)后才开放要用卡面的入口
+// 立绘全部到位(或超时放弃)后才开放要用卡面的入口(开战、建房、图鉴、编辑卡组)
 assetsReady.then(() => {
   artLoaded = true;
-  $('#btn-quick').textContent = t('quickBattle');
-  for (const selector of ['#btn-deck', '#btn-quick', '#btn-solo', '#btn-online', '#btn-codex']) $(selector).disabled = false;
+  $('#btn-codex').disabled = false;
+  refreshFightButton();
 });
-// 界面图 + 徽章到位就进菜单
+// 界面图 + 徽章到位就直接进主页(不再有标题页;主页上任何一次点击都算解锁音频的用户手势)
 menuReady.then(() => {
-  // 主菜单背景图(只用在浏览器菜单里,不进眼镜)
-  const bg = uiArt('bg_menu');
-  if (bg) document.documentElement.style.setProperty('--menu-bg', `url("${bg.url}")`);
   const mana = uiArt('ui_mana');
   if (mana) $('#mana-icon').innerHTML = ico('ui_mana', '');
   if (location.hash === '#compare') { assetsReady.then(runCompare); return; }
-  if (prefs.entered) openHome();
-  else {
-    applyStaticText();
-    refreshWordmarks();
-    refreshMuteButton();
-    showScreen('#title-screen');
-    $('#btn-enter-game').focus({ preventScroll: true });
-  }
+  openHome();
 });
 
 // ── 场景对比页(#compare):左边是图像 AI 画的概念图,右边是引擎按同一视角实时渲染的 Blender 场景 ──

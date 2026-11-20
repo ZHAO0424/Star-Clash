@@ -25,10 +25,6 @@ export function saveDeck(faction, ids) {
   set(`sg.deck.${faction}`, ids);
   return true;
 }
-export function isPresetDeck(faction, ids) {
-  const p = PRESET_DECKS[faction];
-  return ids.length === p.length && ids.every(id => p.includes(id));
-}
 
 // ── 偏好 ──
 export const prefs = {
@@ -53,8 +49,6 @@ export const prefs = {
   set xrBoardRig(value) { set('sg.xrBoardRig', value); },
   get firstMatchSeen() { return get('sg.firstMatchSeen', false) === true; },
   set firstMatchSeen(value) { set('sg.firstMatchSeen', Boolean(value)); },
-  get entered() { return get('sg.entered', false) === true; },
-  set entered(value) { set('sg.entered', Boolean(value)); },
   get faction() { const f = get('sg.faction', 'steel'); return typeof f === 'string' && Object.hasOwn(FACTIONS, f) ? f : 'steel'; },
   set faction(v) { set('sg.faction', v); },
   get scene() { const v = get('sg.scene', 'random'); return typeof v === 'string' ? v : 'random'; },

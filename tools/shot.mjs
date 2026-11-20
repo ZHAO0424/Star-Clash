@@ -54,12 +54,12 @@ try {
   await cmd('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
   // 固定随机种子 + 预置偏好,保证改前改后同一画面
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `(()=>{let a=12345;window.__seed=n=>{a=n};Math.random=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
-    try{localStorage.setItem('sg.scene',JSON.stringify('${sceneId}'));localStorage.setItem('sg.faction',JSON.stringify('steel'));localStorage.setItem('sg.entered','true');localStorage.setItem('sg.firstMatchSeen','true');${opt.lang ? `localStorage.setItem('sg.lang','${opt.lang}');` : ''}}catch{}})();` });
+    try{localStorage.setItem('sg.scene',JSON.stringify('${sceneId}'));localStorage.setItem('sg.faction',JSON.stringify('steel'));localStorage.setItem('sg.firstMatchSeen','true');${opt.lang ? `localStorage.setItem('sg.lang','${opt.lang}');` : ''}}catch{}})();` });
   await cmd('Page.navigate', { url: `http://localhost:${process.env.PORT || 8790}/?debug` });
   await sleep(4000);
-  await ev(`window.__seed(777); document.querySelector('#btn-solo').click(); true`);
+  await ev(`window.__seed(777); document.querySelector('#btn-fight').click(); true`);
   for (let i = 0; i < 60 && !(await ev(`!!window.__bg?.session`)); i++) {
-    if (i % 10 === 9) await ev(`document.querySelector('#btn-solo').click(); true`);
+    if (i % 10 === 9) await ev(`document.querySelector('#btn-fight').click(); true`);
     await sleep(500);
   }
   await sleep(1500);
