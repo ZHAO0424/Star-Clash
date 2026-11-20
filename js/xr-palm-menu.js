@@ -12,8 +12,9 @@ import { uiArt } from './assets.js';
 import { getLang } from './i18n.js';
 import { PALM, palmNormal, handOpenness, hysteresis } from './xr-math.js';
 
-const W = 1024, H = 300;
-const PANEL_W = 0.17, PANEL_H = PANEL_W * H / W;   // 每个按钮约 4cm 宽、图标约 3cm
+const CELL_PX = 256, H = 300;   // 每格画布像素
+const CELL_M = 0.0425;          // 每个按钮约 4cm 宽、图标约 3cm;按钮多了面板变宽,单个按钮不缩
+const PANEL_H = CELL_M * H / CELL_PX;
 const OFFSET_PALM = 0.05, OFFSET_UP = 0.07, OFFSET_PINKY = 0.03;
 const FOLLOW = 18;            // 跟手平滑(1/s)
 const POKE_DEPTH = 0.02;      // 指尖离面板 2cm 内算戳中
@@ -24,15 +25,17 @@ const UP = new THREE.Vector3(0, 1, 0);
 export class PalmMenu {
   constructor(scene, items) {
     this.items = items;
+    this.W = CELL_PX * items.length;
+    this.panelW = CELL_M * items.length;
     this.canvas = document.createElement('canvas');
-    this.canvas.width = W; this.canvas.height = H;
+    this.canvas.width = this.W; this.canvas.height = H;
     this.ctx = this.canvas.getContext('2d');
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
     this.material = new THREE.MeshBasicMaterial({
       map: this.tex, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W, PANEL_H), this.material);
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(this.panelW, PANEL_H), this.material);
     this.mesh.renderOrder = 999;
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
@@ -108,8 +111,8 @@ export class PalmMenu {
 
   // 面板本地坐标 → 按钮;不在面板上返回 null,在面板上但不在按钮上返回 undefined
   buttonAtLocal(local) {
-    if (Math.abs(local.x) > PANEL_W / 2 || Math.abs(local.y) > PANEL_H / 2) return null;
-    const index = Math.floor((local.x / PANEL_W + 0.5) * this.items.length);
+    if (Math.abs(local.x) > this.panelW / 2 || Math.abs(local.y) > PANEL_H / 2) return null;
+    const index = Math.floor((local.x / this.panelW + 0.5) * this.items.length);
     return this.items[THREE.MathUtils.clamp(index, 0, this.items.length - 1)];
   }
 
@@ -146,7 +149,7 @@ export class PalmMenu {
     const signature = JSON.stringify([getLang(), this.hover?.id, states]);
     if (signature === this.signature) return;
     this.signature = signature;
-    const { ctx } = this;
+    const { ctx, W } = this;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(38, 28, 48, 0.92)';
     ctx.beginPath(); ctx.roundRect(6, 6, W - 12, H - 12, 40); ctx.fill();

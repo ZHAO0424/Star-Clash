@@ -1,4 +1,4 @@
-// XR 控件的矢量图标(暂停 / 继续 / 设置):canvas 现画,风格对齐 assets/ui/xr/ 里的位图图标
+// XR 控件的矢量图标(暂停 / 继续 / 设置 / 退出 XR):canvas 现画,风格对齐 assets/ui/xr/ 里的位图图标
 // (透明底、奶油色填充、金色粗描边 + 内侧细描边)。之后有了美术出图,换成 png 放进 assets.js 的 XR_CONTROLS 即可。
 
 const FILL = '#fbeccb';
@@ -42,9 +42,20 @@ function gearPath(s) {
   return p;
 }
 
-const PATHS = { pause: pausePath, resume: resumePath, settings: gearPath };
+// 头显轮廓 + 两个镜片孔(evenodd 挖空):退出 XR、回到电脑画面
+function headsetPath(s) {
+  const p = new Path2D();
+  const x = s * 0.16, y = s * 0.30, w = s * 0.68, h = s * 0.36, r = s * 0.12;
+  p.roundRect(x, y, w, h, r);
+  const lw = s * 0.21, lh = s * 0.17, ly = y + (h - lh) / 2 - s * 0.01;
+  p.roundRect(s * 0.25, ly, lw, lh, s * 0.07);
+  p.roundRect(s * 0.54, ly, lw, lh, s * 0.07);
+  return p;
+}
 
-// name:'pause' | 'resume' | 'settings' → 正方形 canvas(可直接 drawImage)
+const PATHS = { pause: pausePath, resume: resumePath, settings: gearPath, exitxr: headsetPath };
+
+// name:'pause' | 'resume' | 'settings' | 'exitxr' → 正方形 canvas(可直接 drawImage)
 export function drawXRIcon(name, size = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;

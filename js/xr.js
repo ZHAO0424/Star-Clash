@@ -361,6 +361,8 @@ export class XRControls {
       { id: 'pause', icon: () => (this.cb.isPaused?.() ? 'resume' : 'pause'),
         label: () => t(this.cb.isPaused?.() ? 'xrResume' : 'xrPause'), disabled: () => !this.cb.canPause?.() },
       { id: 'settings', icon: () => 'settings', label: () => t('settings') },
+      // 退出 XR:只结束 XR 会话,对局不停,回到电脑画面接着打(随时可以再点「进入 XR」回来)
+      { id: 'exitxr', icon: () => 'exitxr', label: () => t('xrExit') },
       // 退出对局:原地两段确认,第一次点变成红色「确认离开？」,3 秒内再点才离开;联机加「判负」小字
       { id: 'leave', icon: () => 'leave', label: () => t(this.leaveArmed() ? 'xrConfirmLeaveShort' : 'quit'),
         detail: () => (this.leaveArmed() && this.cb.getBattleControls().online ? t('xrLeavePenaltyShort') : ''),
@@ -647,6 +649,7 @@ export class XRControls {
     else if (id === 'settings') {
       this.settingsOpen = !this.settingsOpen;
       this.settingsSignature = '';
+    } else if (id === 'exitxr') this.cb.onBattleAction('exitxr');
     } else if (id === 'leave' && game) this.requestLeave(game);
   }
 

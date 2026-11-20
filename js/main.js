@@ -1296,6 +1296,10 @@ function handleXRBattleAction(action) {
   } else if (action === 'leave' && leaveBattle(true)) {
     toast(t('xrLeftField'));
   }
+  else if (action === 'exitxr') {   // 对局中退出 XR:对局继续,结束会话后 xs 的 end 事件负责还原电脑画面
+    scene.renderer.xr.getSession()?.end().then(() => { if (session) toast(t('tXRBackToPC')); })
+      .catch(error => toast(t('tXRFail', { e: error.message })));
+  }
 }
 
 let openingXR = false;
