@@ -162,18 +162,18 @@ test('cardRowPose:上沿在近边视线下方 2°–6°,正对眼睛,在眼睛�
     assert.ok(gap >= 2 - 1e-9 && gap <= 6, `上沿角缝 ${gap.toFixed(2)}° @${tag}`);
     // 法线正对眼睛:行中心 → 眼睛的方向角 = −tilt
     near(-p.tilt, sightAngle(eye, p), 1e-9);
-    // 在眼睛和近边之间:离眼 ≤ DIST,且水平上比近边更靠近眼睛
+    // 贴着近边:离眼 = 眼到近边距离 − EDGE_PAD,且水平上仍在近边前面
     near(Math.hypot(eye.y - p.y, eye.z - p.z), p.dist, 1e-9);
-    assert.ok(p.dist <= 0.38 + 1e-9 && p.dist >= 0.3, `离眼 ${p.dist} @${tag}`);
+    near(p.dist, Math.max(0.3, Math.hypot(eye.y - edge.y, eye.z - edge.z) - 0.03), 1e-9);
     assert.ok(p.z > edge.z && topPt.z > edge.z, `在近边前面 @${tag}`);
   }
 });
 
-test('cardRowPose:近边在脚下时上沿封顶 80°(约束让位),离眼不超过近边距离的 0.8', async () => {
+test('cardRowPose:近边在脚下时上沿封顶 80°(约束让位),离眼不少于 0.3m', async () => {
   const { cardRowPose, CARD_ROW } = await import('../js/xr-math.js');
   const p = cardRowPose({ y: 0, z: 0 }, { y: -0.4, z: 0.05 }, ROW);   // 近边在眼睛后下方
   near(p.topAngle, CARD_ROW.MAX_TOP);
-  assert.ok(p.dist <= 0.8 * Math.hypot(0.4, 0.05) + 1e-9);
+  near(p.dist, Math.max(0.3, Math.hypot(0.4, 0.05) - 0.03), 1e-9);
 });
 
 test('nearestWithin:12cm 内取最近的牌,超出取不到,null 跳过', async () => {

@@ -155,13 +155,14 @@ export function forwardLean(eye, hand, boardY) {
 // eye / edge:{ y, z };top / bottom:行中心到上沿 / 下沿的距离(米,已含缩放)。
 // 返回 { y, z, tilt, dist, edgeAngle, topAngle, bottomAngle }(tilt = 手牌行 rotation.x)
 const DEG = Math.PI / 180;
-export const CARD_ROW = { DIST: 0.38, GAP: 2.5 * DEG, EDGE_FRAC: 0.8, MAX_TOP: 80 * DEG };
+// 第八轮批注:牌要贴着棋盘边界、不要悬在眼前 → 行放在近边前 EDGE_PAD 处(上沿仍压在近边视线下方 GAP,不挡棋盘)
+export const CARD_ROW = { EDGE_PAD: 0.03, MIN_DIST: 0.3, GAP: 2.5 * DEG, MAX_TOP: 80 * DEG };
 export function sightAngle(eye, p) {
   return Math.atan2(eye.y - p.y, eye.z - p.z);
 }
 export function cardRowPose(eye, edge, { top, bottom }) {
   const edgeAngle = sightAngle(eye, edge);
-  const dist = Math.min(CARD_ROW.DIST, CARD_ROW.EDGE_FRAC * Math.hypot(eye.y - edge.y, eye.z - edge.z));
+  const dist = Math.max(CARD_ROW.MIN_DIST, Math.hypot(eye.y - edge.y, eye.z - edge.z) - CARD_ROW.EDGE_PAD);
   const up = Math.atan(top / dist), down = Math.atan(bottom / dist);
   const topAngle = Math.max(0, Math.min(edgeAngle + CARD_ROW.GAP, CARD_ROW.MAX_TOP));
   const center = topAngle + up;

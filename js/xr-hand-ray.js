@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import { Stabilizer, SeekDetector, CursorFx, seekAlpha } from './xr-pointer.js';
 
 const COLOR = 0x5ac8ff;
+// 第八轮批注:射线远端往上抬,手放在手牌附近、自然下垂就能指进棋盘,不用把手整个伸到棋盘上方
+export const RAY_PITCH = 15 * Math.PI / 180;
 const RESET_AFTER_S = 0.2;   // 手丢了超过 0.2s 再出现:从头来,免得从旧位置"滑过来"
 const RING_REF_M = 0.5;      // 光标圈在 0.5m 处是原始大小,按距离缩放,看上去一样大
 
@@ -54,7 +56,7 @@ export class HandRay {
     this.lost = 0;
     controller.getWorldPosition(this._p);
     controller.getWorldQuaternion(this._q);
-    this._d.set(0, 0, -1).applyQuaternion(this._q);
+    this._d.set(0, Math.sin(RAY_PITCH), -Math.cos(RAY_PITCH)).applyQuaternion(this._q);
     const o = { x: this._p.x, y: this._p.y, z: this._p.z }, d = { x: this._d.x, y: this._d.y, z: this._d.z };
     const end = this.end ?? { x: o.x + d.x * 2.5, y: o.y + d.y * 2.5, z: o.z + d.z * 2.5 };
     const s = this.stab.update(o, d, end, dt);
