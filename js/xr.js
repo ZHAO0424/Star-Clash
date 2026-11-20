@@ -2,8 +2,9 @@
 // 设计约束(见 plan):只用 Pinch + 拖拽,不依赖手势速度、巧合或空间深度
 //
 // 空间布局(anchor = 进入 XR 时用户头部位置 + 朝向):
-//   战场  :头下 50cm、前方 72cm,约 0.55m × 0.75m 的桌面;己方半场在 44~76cm,坐姿可及
-//   手牌  :以棋盘近边为圆心的弧上,随棋盘高度自适应、正对眼睛(cardRowPose),一排 5 张;能量条在手牌下面
+//   战场  :头下 60cm、前方 85cm(第七轮),「小」档约 0.54m × 0.75m 的桌面
+//   手牌  :眼睛和棋盘近边之间、离眼 38cm,上沿紧贴"眼 → 近边"视线下方 2.5°(绝不挡棋盘),正对眼睛(cardRowPose);
+//           一排 5 张,整行 0.8 倍;能量条在手牌下面
 //   HUD   :战场远端上方
 //   强化/结束面板:手牌上方,需要时出现
 // 重新居中在左手手心菜单里;双手同时空捏保持 0.4 秒 → 拖动旋转 / 升降 / 推拉战场(xr-board-rig.js)
@@ -29,16 +30,20 @@ const PINCH_OFF = 0.038;     // > 3.8cm 视为松开(滞回,防抖)
 const GRAB_RADIUS = 0.06;    // 捏合点离卡牌中心 6cm 内可抓取
 const DROP_MAX_HEIGHT = 0.25;// 捏合点离战场面 25cm 内才算落在战场上
 const CARD_W = 0.072, CARD_H = 0.1, CARD_GAP = 0.082;
-const BOARD_SCALES = { small: 0.044, standard: 0.052, large: 0.060 };
-const BOARD_CENTER_DISTANCE = 0.72;
-const HUD_BASE_DISTANCE = 1.25;
+const BOARD_SCALES = { small: 0.038, standard: 0.046, large: 0.054 };   // 第七轮:原 0.044 / 0.052 / 0.060
+const BOARD_CENTER_DISTANCE = 0.85;   // 战场中心离头的水平距离(第七轮:原 0.72)
+const BOARD_DROP = 0.60;              // 战场中心在头下多少(第七轮:原 0.50)
+const HUD_BASE_DISTANCE = 1.33;       // 标准档 HUD 距离,在远边(0.85 + 0.452)之外约 3cm
 const POSTER_WIDTH = 0.56;
 const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
 const RETURN_SECONDS = 0.18;
 const TRASH_RADIUS = 0.06;   // 拖到回收区 6cm 内松开 = 弃牌
 const CARD_FADE_S = 0.15;    // 抓起一张牌时其余手牌渐隐 / 松手后渐显的时长
-const RIM_ALLOWANCE = 0.3;   // 台面以上边框 / 装饰的高度余量(战场单位),手牌行要高出它
+const RIM_ALLOWANCE = 0.3;   // 台面以上边框 / 装饰的高度余量(战场单位):近边视线瞄的是它的上沿
+const CARD_ROW_SCALE = 0.8;  // 手牌行整体缩放(牌、间距、下一张、回收区、能量条、说明条;Canvas 分辨率不变)
+// 手牌行中心到上沿 / 下沿(说明条底边)的距离,米,已含缩放
+const CARD_ROW_EXTENT = { top: 0.05 * CARD_ROW_SCALE, bottom: 0.127 * CARD_ROW_SCALE };
 const CARD_ROW_SMOOTH = 0.2; // 手牌行自适应位置 / 倾角的平滑时间常数(秒)
 const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
 const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内进入近手戳、抓
@@ -190,6 +195,7 @@ export class XRControls {
     // 初始位置;进 XR 后每帧由 updateCardRow 按棋盘近边和眼睛的相对位置重算(第四轮)
     this.cardRow.position.set(0, -0.42, -0.24);
     this.cardRow.rotation.x = -0.60;
+    this.cardRow.scale.setScalar(CARD_ROW_SCALE);
     this.ui.add(this.cardRow);
     this.cards = [];
     for (let i = 0; i < 5; i++) {
@@ -586,6 +592,7 @@ export class XRControls {
     const shift = Math.max(0, (scale - BOARD_SCALES.standard) * halfDepth);
     this.bs.world.scale.setScalar(scale);
     // 大档保持中档的近边位置，HUD 随远边后移，手牌与回收区留在原来的触及距离。
+    this.bs.world.position.y = -BOARD_DROP;
     this.bs.world.position.z = -BOARD_CENTER_DISTANCE - shift;
     this.hud.mesh.position.z = -HUD_BASE_DISTANCE - shift - (scale - BOARD_SCALES.standard) * halfDepth;
     this.poster.position.set(0, -0.055, this.hud.mesh.position.z - POSTER_GAP);
@@ -1623,14 +1630,14 @@ export class XRControls {
     });
   }
 
-  // 手牌行随棋盘高度自适应(cardRowPose):在 uiInner 坐标(换边之后)里算近边和眼睛;抓着牌时冻结
+  // 手牌行(cardRowPose):在 uiInner 坐标(换边之后)里算近边和眼睛,上沿贴着近边视线下方;抓着牌时冻结
   updateCardRow(dt) {
     if (this.inputs.some(s => s.grab)) return;
     const world = this.bs.world, scale = world.scale.x;
     const half = (this.uiSide.sector % 2 ? ARENA.hx : ARENA.hz) + ARENA.rim;   // 换到侧边时面对的是棋盘侧边
     const edge = { y: world.position.y + (ARENA.top + RIM_ALLOWANCE) * scale, z: world.position.z + half * scale };
     const eye = this.uiInner.worldToLocal(this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()));
-    const pose = cardRowPose({ y: eye.y, z: eye.z }, edge);
+    const pose = cardRowPose({ y: eye.y, z: eye.z }, edge, CARD_ROW_EXTENT);
     const k = this.cardRowPlaced ? 1 - Math.exp(-dt / CARD_ROW_SMOOTH) : 1;
     this.cardRowPlaced = true;
     this.cardRow.position.y += (pose.y - this.cardRow.position.y) * k;

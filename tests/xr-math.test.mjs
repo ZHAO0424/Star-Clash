@@ -124,19 +124,89 @@ test('inPointingZone:手举在头前才算在指', async () => {
   assert.equal(inPointingZone({ x: 0, y: 0.2, z: -0.4 }), false);       // 举过头顶
 });
 
-test('cardRowPose:在近边外侧、高出台面,正对眼睛,棋盘越高手牌越立', async () => {
-  const { cardRowPose, CARD_ARC } = await import('../js/xr-math.js');
-  const eye = { y: 0, z: 0 };
-  for (const below of [0.3, 0.5, 0.8]) {
-    const edge = { y: -below, z: -0.209 };
-    const p = cardRowPose(eye, edge);
-    const s = Math.sin(-p.tilt), c = Math.cos(p.tilt);
-    assert.ok(p.y - 0.127 * c >= edge.y + CARD_ARC.TOP_GAP - 1e-9, `下沿高出台面 @${below}`);
-    assert.ok(p.z - 0.05 * s >= edge.z + CARD_ARC.EDGE_GAP - 1e-9, `上沿在近边外 @${below}`);
-    assert.ok(p.tilt <= CARD_ARC.TILT[1] && p.tilt >= CARD_ARC.TILT[0]);
+// 手牌行(第七轮):上沿在"眼 → 近边"视线下方 2°–6°,对三档棋盘、多种头高、双手挪 / 转过的棋盘都成立。
+// 几何和 xr.js 一致:棋盘中心头下 0.60m、前 0.85m,大档后推保持标准档近边;近边含边框余量(台面 + 0.3 单位)
+const ARENA = { hx: 7.1, hz: 9.4, top: -0.32, rim: 0.42 }, RIM_ALLOWANCE = 0.3;
+const SCALES = { small: 0.038, standard: 0.046, large: 0.054 };
+const ROW = { top: 0.05 * 0.8, bottom: 0.127 * 0.8 };
+function rowCase(size, { eyeY = 0, eyeZ = 0, rig = { y: 0, z: 0 }, sideways = false } = {}) {
+  const scale = SCALES[size];
+  const shift = Math.max(0, (scale - SCALES.standard) * (ARENA.hz + ARENA.rim));
+  // 棋盘偏移 / 旋转都挂在 boardRig 下,UI 跟着一起动:在 UI 坐标里近边永远在中心 +half 处;
+  // 转过 55° 换边后面对的是侧边(half 用 hx)。rig.y / rig.z 等价于眼睛反向移动
+  const half = (sideways ? ARENA.hx : ARENA.hz) + ARENA.rim;
+  const wy = -0.6 + rig.y, wz = -0.85 - shift + rig.z;
+  const edge = { y: wy + (ARENA.top + RIM_ALLOWANCE) * scale, z: wz + half * scale };
+  return { eye: { y: eyeY, z: eyeZ }, edge };
+}
+
+test('cardRowPose:上沿在近边视线下方 2°–6°,正对眼睛,在眼睛和近边之间', async () => {
+  const { cardRowPose, sightAngle } = await import('../js/xr-math.js');
+  const deg = 180 / Math.PI;
+  const cases = [];
+  for (const size of ['small', 'standard', 'large']) {
+    for (const eyeY of [-0.12, 0, 0.1]) {                          // 坐低 / 原位 / 坐直
+      for (const eyeZ of [0.08, 0, -0.06]) cases.push([size, { eyeY, eyeZ }]);   // 往后靠 / 原位 / 前倾
+    }
+    for (const rig of [{ y: 0.2, z: 0 }, { y: -0.2, z: 0 }, { y: 0, z: -0.25 }, { y: 0.1, z: 0.25 }]) cases.push([size, { rig }]);
+    cases.push([size, { sideways: true }], [size, { sideways: true, rig: { y: -0.1, z: 0.1 } }]);   // 转过 90° 换到侧边
   }
-  const high = cardRowPose(eye, { y: -0.3, z: -0.209 }), low = cardRowPose(eye, { y: -0.8, z: -0.209 });
-  assert.ok(high.tilt > low.tilt, '棋盘高时倾角更小(更立)');
+  for (const [size, opt] of cases) {
+    const { eye, edge } = rowCase(size, opt);
+    const p = cardRowPose(eye, edge, ROW);
+    const tag = `${size} ${JSON.stringify(opt)}`;
+    // 实际上沿点(行平面绕 x 轴倾 tilt,上沿沿本地 +y 偏 top)的视线角,独立于函数内部推导再算一遍
+    const c = Math.cos(p.tilt), s = Math.sin(-p.tilt);
+    const topPt = { y: p.y + ROW.top * c, z: p.z - ROW.top * s };
+    const gap = (sightAngle(eye, topPt) - sightAngle(eye, edge)) * deg;
+    assert.ok(gap >= 2 - 1e-9 && gap <= 6, `上沿角缝 ${gap.toFixed(2)}° @${tag}`);
+    // 法线正对眼睛:行中心 → 眼睛的方向角 = −tilt
+    near(-p.tilt, sightAngle(eye, p), 1e-9);
+    // 在眼睛和近边之间:离眼 ≤ DIST,且水平上比近边更靠近眼睛
+    near(Math.hypot(eye.y - p.y, eye.z - p.z), p.dist, 1e-9);
+    assert.ok(p.dist <= 0.38 + 1e-9 && p.dist >= 0.3, `离眼 ${p.dist} @${tag}`);
+    assert.ok(p.z > edge.z && topPt.z > edge.z, `在近边前面 @${tag}`);
+  }
+});
+
+test('cardRowPose:近边在脚下时上沿封顶 80°(约束让位),离眼不超过近边距离的 0.8', async () => {
+  const { cardRowPose, CARD_ROW } = await import('../js/xr-math.js');
+  const p = cardRowPose({ y: 0, z: 0 }, { y: -0.4, z: 0.05 }, ROW);   // 近边在眼睛后下方
+  near(p.topAngle, CARD_ROW.MAX_TOP);
+  assert.ok(p.dist <= 0.8 * Math.hypot(0.4, 0.05) + 1e-9);
+});
+
+test('nearestWithin:12cm 内取最近的牌,超出取不到,null 跳过', async () => {
+  const { nearestWithin, GRAB_RADIUS } = await import('../js/xr-math.js');
+  assert.equal(GRAB_RADIUS, 0.12);
+  const centers = [v(-0.066, 0, 0), v(0, 0, 0), v(0.066, 0, 0)];
+  assert.equal(nearestWithin(centers, v(0.04, 0.03, 0)), 2);        // 捏在两张之间偏右
+  assert.equal(nearestWithin(centers, v(0, 0.11, 0)), 1);           // 牌上方 11cm:磁吸到
+  assert.equal(nearestWithin(centers, v(0, 0.125, 0)), -1);         // 12.5cm:谁都够不着
+  assert.equal(nearestWithin(centers, v(0.2, 0, 0)), -1);
+  assert.equal(nearestWithin([null, v(0, 0, 0)], v(-0.05, 0, 0)), 1);
+});
+
+test('chooseDrop:当前合法 / 150ms 内的旧合法点 / 超时退回 / 追踪丢失 / 射线捏紧快照', async () => {
+  const { chooseDrop, DROP } = await import('../js/xr-math.js');
+  const A = { id: 'a' }, B = { id: 'b' }, C = { id: 'c' };
+  // 当前合法:用当前
+  assert.deepEqual(chooseDrop({ current: { hit: A, valid: true }, lastValid: { hit: B, at: 990 }, now: 1000 }), { hit: A, from: 'current' });
+  // 当前出界(手指张开那一帧抖出去),150ms 内有合法点:用它
+  assert.deepEqual(chooseDrop({ current: null, lastValid: { hit: B, at: 1000 - DROP.GRACE_MS }, now: 1000 }), { hit: B, from: 'recent' });
+  // 当前落点不合法(抖进石头 / 敌方半场),旧合法点还新鲜:用旧的
+  assert.deepEqual(chooseDrop({ current: { hit: C, valid: false }, lastValid: { hit: B, at: 900 }, now: 1000 }), { hit: B, from: 'recent' });
+  // 旧合法点超过 150ms:退回,区分"有落点但不合法"和"出界"
+  assert.deepEqual(chooseDrop({ current: { hit: C, valid: false }, lastValid: { hit: B, at: 849 }, now: 1000 }), { hit: C, from: 'blocked' });
+  assert.deepEqual(chooseDrop({ current: null, lastValid: { hit: B, at: 849 }, now: 1000 }), { hit: null, from: 'outside' });
+  assert.deepEqual(chooseDrop({ now: 1000 }), { hit: null, from: 'outside' });
+  // 追踪丢失 = 没有当前落点:150ms 内有合法点就出,否则退回
+  assert.equal(chooseDrop({ current: null, lastValid: { hit: B, at: 880 }, now: 1000 }).from, 'recent');
+  assert.equal(chooseDrop({ current: null, lastValid: { hit: B, at: 800 }, now: 1000 }).from, 'outside');
+  // 射线:张开手指前(捏紧时)的落点优先于跳过后的当前落点;快照太旧(一直松捏着拖)就用当前
+  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: true, at: 900 }, current: { hit: C, valid: true }, now: 1000 }), { hit: A, from: 'firm' });
+  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: true, at: 1000 - DROP.FIRM_MS - 1 }, current: { hit: C, valid: true }, now: 1000 }), { hit: C, from: 'current' });
+  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: false, at: 990 }, current: { hit: C, valid: true }, now: 1000 }), { hit: C, from: 'current' });
 });
 
 test('forwardLean:贴台面不偏,越高越靠前偏,封顶 0.12m,方向沿眼→手', async () => {
