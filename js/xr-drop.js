@@ -15,9 +15,10 @@
 import { MAP } from './map.js';
 
 // 手牌带:相对手牌行中心,前后 ±12cm、上下 ±10cm、左右超出两端 6cm 以内;相邻切换 1.2cm 滞回
-export const HAND_BAND = { DEPTH: 0.12, HEIGHT: 0.10, SIDE: 0.06, HYSTERESIS: 0.012 };
+// 第十一轮实测:手自然垂在牌下方也要能选 → 向下放宽到 35cm、朝身体一侧放宽到 25cm(上方仍 10cm,往棋盘方向仍 12cm)
+export const HAND_BAND = { DEPTH: 0.12, TOWARD: 0.25, HEIGHT: 0.10, BELOW: 0.35, SIDE: 0.06, HYSTERESIS: 0.012 };
 // 抬起确认 7cm;确认后退回到 6cm 以内算"退回确认线"(1cm 滞回,确认线上手抖不会来回切取消)
-export const LIFT = { CONFIRM: 0.07, CANCEL: 0.06 };
+export const LIFT = { CONFIRM: 0.05, CANCEL: 0.04 };   // 第十一轮实测:7cm 太远 → 5cm(取消线仍低 1cm 防抖)
 // GX:手左右 ±15cm 覆盖场地半宽 4.8 格 → 32 格/米;GD:手前 / 上 20cm 推过部署区纵深 5.2 格 → 26 格/米;
 // UP:往上的位移按 0.8 计入纵深;EDGE:初始落点在近边往里 0.6 格;TAU:落点平滑时间常数(秒)
 export const DROP_GAIN = { GX: 32, GD: 26, UP: 0.8, EDGE: 0.6, TAU: 0.06 };
@@ -33,7 +34,8 @@ export function dropZone(placed, { W = MAP.W, HALF = MAP.HALF, LINE = MAP.DEPLOY
 export function inHandBand(hand, cardXs) {
   const xs = cardXs.filter(x => x != null);
   if (!xs.length) return false;
-  return Math.abs(hand.y) <= HAND_BAND.HEIGHT && Math.abs(hand.z) <= HAND_BAND.DEPTH
+  // 视图坐标:y 向上,+z 朝玩家(身体一侧),-z 朝棋盘
+  return hand.y <= HAND_BAND.HEIGHT && hand.y >= -HAND_BAND.BELOW && hand.z >= -HAND_BAND.DEPTH && hand.z <= HAND_BAND.TOWARD
     && hand.x >= Math.min(...xs) - HAND_BAND.SIDE && hand.x <= Math.max(...xs) + HAND_BAND.SIDE;
 }
 

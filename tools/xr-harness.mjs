@@ -125,11 +125,13 @@ try {
     st.rayActive = false; st.ray = null;
     // 1) 手牌带外不选
     reset();
-    const outs = { above: [0, 0.12, 0], below: [0, -0.12, 0], body: [0, 0.03, 0.14], board: [0, 0.03, -0.14], side: [cardX(4) + 0.07, 0.03, 0] };
+    // 第十一轮:带向下放宽到 35cm、朝身体放宽到 25cm → 带外点改到这两个边界之外;另验证手垂在牌下方 30cm 仍能选
+    const outs = { above: [0, 0.12, 0], below: [0, -0.37, 0], body: [0, 0.03, 0.27], board: [0, 0.03, -0.14], side: [cardX(4) + 0.07, 0.03, 0] };
     const outHover = {};
     for (const [k, o] of Object.entries(outs)) { hand = o; openHand(); outHover[k] = st.hover; }
     hand = [0, 0.03, 0]; openHand(); outHover.center = st.hover;
-    check('wrong band → no selection', Object.entries(outHover).every(([k, h]) => (k === 'center' ? h === 2 : h === -1)), { hover: outHover });
+    hand = [0, -0.3, 0.15]; openHand(); outHover.lowCenter = st.hover;
+    check('wrong band → no selection', Object.entries(outHover).every(([k, h]) => (k === 'center' || k === 'lowCenter' ? h === 2 : h === -1)), { hover: outHover });
     // 2) 左右扫过:按顺序选中 0..4,切换点在交界外约 0.6cm(滞回)
     const seq = [], switches = [];
     for (let x = -0.25; x <= 0.2501; x += 0.002) {
@@ -137,23 +139,23 @@ try {
       if (seq[seq.length - 1] !== st.hover) { seq.push(st.hover); switches.push(r2(x * 100)); }
     }
     check('lateral sweep selects cards in order', seq.join(',') === '-1,0,1,2,3,4,-1', { seq: seq.join(','), switchAtCm: switches.join(','), cardXcm: [0, 1, 2, 3, 4].map(i => r2(cardX(i) * 100)).join(',') });
-    // 3) 捏住抬 <7cm 松手:放回、不出牌、不提示
+    // 3) 捏住抬 <5cm 松手:放回、不出牌、不提示
     reset();
     let i = unitIdx(); let before = handIds();
     hand = [cardX(i), 0.03, 0]; openHand(); moveTo(hand, 1);
     const grabbedShort = st.grab ? { idx: st.grab.idx, want: i, stage: st.grab.stage } : null;
-    moveTo([cardX(i), 0.03 + 0.04, -0.02], 10);
+    moveTo([cardX(i), 0.03 + 0.03, -0.02], 10);   // 合成 3.6cm < 5cm
     const shortStage = st.grab?.stage, shortLift = r2(st.grab?.lift ?? -1);
     step(1);   // 跑一帧 update 看反馈(手部输入是直接喂的,update 不会动这只"手")
     const heldVisuals = { liftHint: xr.liftHint.mesh.visible, ghost: xr.dropGhost.visible, marker: sc.deployMarker.group.visible };
     openHand();
-    check('pinch + lift <7cm + release → returns, no play', grabbedShort?.idx === i && shortStage === 'held' && heldVisuals.liftHint && !heldVisuals.ghost && !played && handIds() === before && !toast() && xr.cards[i].returning,
+    check('pinch + lift <5cm + release → returns, no play', grabbedShort?.idx === i && shortStage === 'held' && heldVisuals.liftHint && !heldVisuals.ghost && !played && handIds() === before && !toast() && xr.cards[i].returning,
       { grabbed: grabbedShort, liftProgress: shortLift, heldVisuals, toast: toast() });
-    // 4) 捏住抬 ≥7cm 确认 → 落点在近边;右移 5cm、前推 5cm → 落点向右、向深;松手在落点出牌
+    // 4) 捏住抬 ≥5cm 确认 → 落点在近边;右移 5cm、前推 5cm → 落点向右、向深;松手在落点出牌
     reset();
     i = unitIdx(); before = handIds();
     hand = [cardX(i), 0.03, 0]; openHand(); moveTo(hand, 1);
-    moveTo([cardX(i), 0.03 + 0.06, -0.04], 12);
+    moveTo([cardX(i), 0.03 + 0.042, -0.03], 12);   // 合成 5.16cm,刚过确认线
     const stage4 = st.grab?.stage; hold(15);
     const m0 = marker();
     moveTo([cardX(i) + 0.05, 0.09, -0.09], 30); hold(30);
@@ -163,7 +165,7 @@ try {
     const visuals = { ghost: xr.dropGhost.visible, ghostAboveMarkerCm: r2((gp.y - hp.y) * 100), arc: xr.dropLink.visible, liftHint: xr.liftHint.mesh.visible,
       heldScale: xr.cards[i].mesh.scale.x, marker: sc.deployMarker.group.visible && sc.deployMarker.state };
     openHand();
-    check('lift ≥7cm confirms; marker starts at near edge', stage4 === 'aiming' && m0 && Math.abs(m0.z - 7.0) < 0.35,
+    check('lift ≥5cm confirms; marker starts at near edge', stage4 === 'aiming' && m0 && Math.abs(m0.z - 7.0) < 0.35,
       { m0, expectX: r2(Math.max(-4.8, Math.min(4.8, cardX(i) * 32))) });
     check('move right/forward → marker right/deeper', m0 && m1 && m1.x > m0.x + 1 && m1.z < m0.z - 1 && visuals.ghost && visuals.arc && !visuals.liftHint, { m0, m1, expectDelta: { x: 1.6, z: -1.3 }, snapped: snapped1, visuals });
     check('release → played at marker', played?.ok && Math.abs(played.x - hit1.x) < 1e-6 && Math.abs(played.z - hit1.z) < 1e-6 && handIds() !== before,

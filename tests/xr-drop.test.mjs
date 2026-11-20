@@ -14,8 +14,9 @@ test('inHandBand / pickCardByHand:手牌带外不选,带内取左右最近', () 
   assert.equal(pickCardByHand(v(0, 0, 0), XS), 2);
   assert.equal(pickCardByHand(v(0.07, 0.05, -0.08), XS), 3);
   assert.equal(pickCardByHand(v(0, HAND_BAND.HEIGHT + 0.005, 0), XS), -1);       // 太高
-  assert.equal(pickCardByHand(v(0, -HAND_BAND.HEIGHT - 0.005, 0), XS), -1);      // 太低
-  assert.equal(pickCardByHand(v(0, 0, HAND_BAND.DEPTH + 0.005), XS), -1);        // 太靠近身体
+  assert.equal(pickCardByHand(v(0, -0.3, 0.15), XS), 2);                          // 第十一轮:手垂在牌下方、靠身体一侧也能选
+  assert.equal(pickCardByHand(v(0, -HAND_BAND.BELOW - 0.005, 0), XS), -1);       // 太低
+  assert.equal(pickCardByHand(v(0, 0, HAND_BAND.TOWARD + 0.005), XS), -1);       // 太靠近身体
   assert.equal(pickCardByHand(v(0, 0, -HAND_BAND.DEPTH - 0.005), XS), -1);       // 伸进棋盘
   assert.equal(pickCardByHand(v(0.164 + HAND_BAND.SIDE - 0.005, 0, 0), XS), 4);  // 右端外 5.5cm 还在带内
   assert.equal(pickCardByHand(v(0.164 + HAND_BAND.SIDE + 0.005, 0, 0), XS), -1);
@@ -34,14 +35,14 @@ test('pickCardByHand:相邻切换有 1.2cm 滞回', () => {
   assert.equal(pickCardByHand(v(mid + 0.004, 0, 0), XS, 0), 3);    // 上一张离得远:直接换到最近
 });
 
-test('liftProgress:往前 / 往上合成 7cm 确认;往后、往下不算', () => {
+test('liftProgress:往前 / 往上合成 5cm 确认;往后、往下不算', () => {
   const h0 = v(0, 0, 0);
-  near(liftProgress(h0, v(0, 0.035, 0)), 0.5);
-  assert.ok(liftProgress(h0, v(0, 0.069, 0)) < 1);
-  assert.equal(liftProgress(h0, v(0, 0.07, 0)), 1);
-  assert.equal(liftProgress(h0, v(0, 0, -0.07)), 1);                     // 往前
-  assert.equal(liftProgress(h0, v(0, 0.05, -0.05)), 1);                  // 斜上前 7.07cm
-  assert.ok(liftProgress(h0, v(0, 0.04, -0.04)) < 1);                    // 5.66cm
+  near(liftProgress(h0, v(0, 0.025, 0)), 0.5);
+  assert.ok(liftProgress(h0, v(0, 0.049, 0)) < 1);
+  assert.equal(liftProgress(h0, v(0, 0.05, 0)), 1);
+  assert.equal(liftProgress(h0, v(0, 0, -0.05)), 1);                     // 往前
+  assert.equal(liftProgress(h0, v(0, 0.036, -0.036)), 1);                // 斜上前 5.09cm
+  assert.ok(liftProgress(h0, v(0, 0.03, -0.03)) < 1);                    // 4.24cm
   assert.equal(liftProgress(h0, v(0.3, 0, 0)), 0);                       // 左右不算
   assert.equal(liftProgress(h0, v(0, -0.1, 0.1)), 0);                    // 往下、往后不算
   near(liftAmount(h0, v(0.2, 0.03, -0.04)), 0.05);
@@ -94,8 +95,8 @@ test('dropFromHand:单位夹在部署区,法术能推到对面半场', () => {
 });
 
 test('dropFromHand:退回确认线以内 = cancel(带 1cm 滞回)', () => {
-  assert.equal(aim(v(0, 0.065, 0)).cancel, false);  // 6.5cm:还在确认线外的滞回带
-  assert.equal(aim(v(0, 0.055, 0)).cancel, true);   // 5.5cm < LIFT.CANCEL
+  assert.equal(aim(v(0, 0.045, 0)).cancel, false);  // 4.5cm:还在确认线外的滞回带
+  assert.equal(aim(v(0, 0.035, 0)).cancel, true);   // 3.5cm < LIFT.CANCEL
   assert.equal(aim(v(0.2, 0.02, 0)).cancel, true);  // 只往旁边挪不算抬起
   assert.equal(aim(v(0, 0.02, -0.08)).cancel, false); // 往前推出去了
   assert.ok(LIFT.CANCEL < LIFT.CONFIRM);

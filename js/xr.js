@@ -1706,7 +1706,8 @@ export class XRControls {
       const hover = this.inputs.find(s => s.hover >= 0 && !s.grab)?.hover ?? -1;
       const guidedId = guide?.step === 'deploy' ? guide.cardId : '';
       const sig = [getLang(), guide?.step, guidedId, hover].join(':') + ':' + game.p.hand.map((c, i) =>
-        c.id + (game.p.mana >= c.cost ? '1' : game.canPlay('p', i) ? 'b' : '0') + (i === hover ? 'h' : '')).join('|');
+        // 签名要含“能不能出”:准备阶段法力已够但不能出(画暗),开战时法力没变,只看法力就不会重画,牌一直暗着
+        c.id + (game.p.mana >= c.cost ? '1' : game.canPlay('p', i) ? 'b' : '0') + (game.canPlay('p', i) ? 'P' : '') + (i === hover ? 'h' : '')).join('|');
       if (sig !== this.cardSig) {
         this.cardSig = sig;
         game.p.hand.forEach((card, i) => drawCard(this.cards[i], card,
