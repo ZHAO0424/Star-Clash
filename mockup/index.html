@@ -18,7 +18,9 @@
   --f-display: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;   /* 全站展示字 = 粗黑体,与字标同一类厚重字形 */
   --f-body: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
   --f-game: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;   /* 主页按钮:粗黑体,呼应字标的厚重卡通字形 */
-  --plum-line: #2b1430;   /* 按钮外描边 / 立体底边,取自字标底板 */
+  --plum-line: #2b1430;
+  --gold-ink: #fffbea;     /* 金底文字:奶白 */
+  --gold-stroke: #6b2e00;  /* 金底文字描边 / 下沿:深棕 */   /* 按钮外描边 / 立体底边,取自字标底板 */
   --t-display: 72px; --t-h1: 44px; --t-h2: 28px; --t-h3: 20px; --t-body: 16px; --t-small: 14px; --t-caption: 12px; --t-over: 13px;
   --ease: cubic-bezier(.2,.7,.2,1);
   /* 金色角饰:L 形金线 + 菱形,用作框的四角 */
@@ -92,15 +94,15 @@ body {
 .g-btn:active { transform: translateY(4px); box-shadow: inset 0 3px 0 #ffffff40, inset 0 -3px 0 #00000038, 0 2px 0 var(--plum-line), 0 6px 12px #000a; }
 .g-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 /* 主:金色珐琅,深棕刻字 */
-.g-gold { height: 96px; font-size: 44px; letter-spacing: .2em; padding-left: .2em; color: #5a2a06;
+.g-gold { height: 96px; font-size: 44px; letter-spacing: .2em; padding-left: .2em; color: var(--gold-ink);
   background: linear-gradient(180deg, #fff1a8cc, #ffc21a99 45%, #e07a0099), url(../assets/ui/materials/gold-enamel.webp) center / cover;
-  text-shadow: 0 2px 0 #fff0b3, 0 -1px 0 #a04e0080; }
+  text-shadow: 2px 0 0 var(--gold-stroke), -2px 0 0 var(--gold-stroke), 0 2px 0 var(--gold-stroke), 0 -2px 0 var(--gold-stroke), 1.5px 1.5px 0 var(--gold-stroke), -1.5px 1.5px 0 var(--gold-stroke), 1.5px -1.5px 0 var(--gold-stroke), -1.5px -1.5px 0 var(--gold-stroke), 0 5px 0 var(--gold-stroke); }
 /* 次:蓝色珐琅,白字深蓝描边 */
 .g-blue { height: 76px; font-size: 34px; letter-spacing: .18em; padding-left: .18em;
   background: linear-gradient(180deg, #8fd0ff99, #2f86ff66 50%, #0b3fb899), url(../assets/ui/materials/blue-enamel.webp) center / cover;
   text-shadow: 0 3px 0 #0b2a6b, 0 0 2px #0b2a6b; }
 /* 小:紫石板 + 金边(同字标底板) */
-.minor-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.minor-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .g-plum { height: 62px; font-size: 22px; letter-spacing: .1em; border-radius: 14px;
   background: linear-gradient(180deg, #6b4a7ad9, #3a2346f2), url(../assets/ui/materials/plum-slate.webp) center / cover;
   box-shadow: inset 0 0 0 2px #e5b573, inset 0 3px 0 #ffffff40, 0 5px 0 var(--plum-line), 0 12px 18px #0009;
@@ -180,30 +182,6 @@ body {
 .board li b { color: var(--ink-1); font-weight: 600; }
 
 /* 卡组 */
-.deck { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; }
-.pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding: 18px; }
-.card { position: relative; padding: 0 0 12px; border: 1px solid #ffffff1f; background: linear-gradient(180deg, #2a2233, #17121d); border-radius: 3px; cursor: pointer; text-align: left; color: var(--ink-1); font: inherit; transition: border-color .12s, transform .12s var(--ease); }
-.card:hover { border-color: #e9c27a99; transform: translateY(-2px); }
-.card.in { border-color: var(--gold); box-shadow: 0 0 0 1px #e9c27a80; }
-.card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: radial-gradient(#3b3045, #17121d 70%); }
-.cost { position: absolute; top: 8px; left: 8px; width: 32px; height: 32px; display: grid; place-items: center; font: 900 var(--t-body)/1 var(--f-display); color: #fff; background: radial-gradient(circle at 35% 30%, #a78bff, #4b2c9a); border: 1px solid #d9ccff; border-radius: 50%; box-shadow: 0 2px 6px #000a; }
-.card .cname { padding: 8px 12px 0; font: 900 var(--t-body)/1.25 var(--f-display); letter-spacing: .04em; }
-.card .meta { padding: 2px 12px 0; color: var(--ink-3); font-size: var(--t-caption); letter-spacing: .04em; }
-.card .desc { padding: 6px 12px 0; color: var(--ink-2); font-size: var(--t-small); line-height: 1.45; }
-.card .tick { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; display: none; place-items: center; background: var(--gold); color: #2a1a0c; border-radius: 50%; font-weight: 900; }
-.card.in .tick { display: grid; }
-.card.spell img { mix-blend-mode: screen; }   /* 法术插图是黑底发光图,滤色去黑 */
-.roster { padding: 18px; align-self: start; position: sticky; top: 16px; }
-.roster ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.roster li { display: grid; grid-template-columns: 32px 36px 1fr; align-items: center; gap: 10px; padding: 6px 8px; background: #0d0a1299; border: 1px solid #ffffff14; border-radius: 2px; font-size: var(--t-small); }
-.roster li img { width: 36px; height: 36px; object-fit: contain; }
-.roster li .mini { width: 26px; height: 26px; font-size: var(--t-small); position: static; }
-.roster li.empty { color: var(--ink-3); grid-template-columns: 1fr; text-align: center; border-style: dashed; }
-.curve { display: grid; grid-template-columns: repeat(6, 1fr); align-items: end; gap: 6px; height: 70px; margin: 16px 0 6px; }
-.curve div { background: linear-gradient(180deg, var(--gold), #8a6332); border-radius: 2px 2px 0 0; min-height: 3px; }
-.curve-x { display: grid; grid-template-columns: repeat(6, 1fr); text-align: center; color: var(--ink-3); font-size: var(--t-caption); }
-.stat { display: flex; justify-content: space-between; margin-top: 12px; color: var(--ink-2); font-size: var(--t-small); }
-.stat b { font: 900 var(--t-h3)/1 var(--f-display); color: var(--ink-1); }
 
 /* 设置 */
 .settings { max-width: 760px; margin: 0 auto; padding: 8px 28px 20px; }
@@ -228,10 +206,8 @@ body {
   .actionbar { padding: 12px 16px 56px; }
   .actionbar .btn-primary { flex: 1; min-width: 0; }
   .actionbar .hint { display: none; }
-  .roster { position: static; }
   .tools { top: 12px; right: 12px; }
   .mock-nav { display: none; }   /* 手机上用页面里的按钮跳转 */
-  .pool { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; }
 }
 
 /* ═════ v0.4 二级页主题:与主页同一套——紫石板底板 + 金边 + 深紫粗描边 + 立体底边,粗黑体 ═════ */
@@ -255,7 +231,7 @@ body {
 .choice.sel .name { color: #ffe3a3; }
 .diff { padding: 0; }
 .diff .name { justify-content: center; padding: 18px 0; font-size: var(--t-h3); background: linear-gradient(180deg, #4a3458, #2a1a36); }
-.choice.diff.sel .name { color: #5a2a06; background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); text-shadow: 0 1px 0 #fff0b3; }
+.choice.diff.sel .name { color: var(--gold-ink); background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); text-shadow: 1.5px 0 0 var(--gold-stroke), -1.5px 0 0 var(--gold-stroke), 0 1.5px 0 var(--gold-stroke), 0 -1.5px 0 var(--gold-stroke), 0 3px 0 var(--gold-stroke); }
 .passive { border-left: 0; border-radius: 12px; background: #1a0f24b3; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fc, #e5b573) 70%, transparent); }
 .passive b { font-size: var(--t-h3); color: #ffe3a3; text-shadow: 0 2px 0 var(--plum-line); }
 .passive p { color: #f2e6d2; font-size: var(--t-body); }
@@ -266,35 +242,77 @@ body {
 .seg { border: 3px solid var(--plum-line); border-radius: 12px; box-shadow: 0 4px 0 var(--plum-line); }
 .seg button { font-size: var(--t-body); padding: 12px 20px; background: linear-gradient(180deg, #4a3458, #2a1a36); color: #f2e6d2; text-shadow: 0 2px 0 var(--plum-line); }
 .seg button + button { border-left: 2px solid var(--plum-line); }
-.seg button.sel { background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); color: #5a2a06; text-shadow: 0 1px 0 #fff0b3; }
+.seg button.sel { background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); color: var(--gold-ink); text-shadow: 1.5px 0 0 var(--gold-stroke), -1.5px 0 0 var(--gold-stroke), 0 1.5px 0 var(--gold-stroke), 0 -1.5px 0 var(--gold-stroke), 0 3px 0 var(--gold-stroke); }
 .input { border: 3px solid var(--plum-line); border-radius: 12px; background: #140a1c; box-shadow: inset 0 0 0 2px #e5b57366; font-size: var(--t-body); }
 .field span { font: 900 var(--t-body)/1 var(--f-display); color: #ffe3a3; letter-spacing: .08em; text-shadow: 0 2px 0 var(--plum-line); }
 .board li { font-size: var(--t-body); }
 .actionbar { background: linear-gradient(transparent, #1a0f24f2 45%); gap: 14px; }
-.card { border: 3px solid var(--plum-line); border-radius: 14px; background: linear-gradient(180deg, #4a3458, #22142c); box-shadow: 0 4px 0 var(--plum-line); }
-.card.in { border-color: #ffd27a; box-shadow: 0 0 0 2px #ffd27a, 0 4px 0 var(--plum-line); }
-.card img { border-radius: 11px 11px 0 0; background: radial-gradient(#5a4068, #22142c 72%); }
-.card .cname { font-size: var(--t-h3); text-shadow: 0 2px 0 var(--plum-line); }
-.card .meta { font-size: var(--t-small); color: #c9b8d6; }
-.card .desc { font-size: var(--t-small); color: #f2e6d2; }
-.cost { border: 2px solid var(--plum-line); box-shadow: 0 2px 0 var(--plum-line); }
-.card .tick { border: 2px solid var(--plum-line); color: #5a2a06; }
-.roster li { border-radius: 10px; background: #1a0f24b3; border: 2px solid #ffffff14; font: 900 var(--t-body)/1.2 var(--f-display); }
-.curve div { background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); border: 2px solid var(--plum-line); border-bottom: 0; border-radius: 6px 6px 0 0; }
-.stat { font-size: var(--t-body); color: #f2e6d2; }
-.stat b { font-size: var(--t-h2); color: #ffe3a3; text-shadow: 0 2px 0 var(--plum-line); }
 .row { border-top: 2px solid #ffffff14; padding: 16px 0; }
 .row b { font: 900 var(--t-h3)/1.2 var(--f-display); color: #fff1cf; letter-spacing: .06em; text-shadow: 0 2px 0 var(--plum-line); }
 .settings { padding: 12px 30px 24px; }
-.roster li { padding: 4px 8px; }
-.roster li img { width: 30px; height: 30px; }
-.curve { height: 56px; margin-top: 12px; }
 @media (max-width: 720px) {
   .g-go { min-width: 0; flex: 1; height: 64px; font-size: 28px; }
   .g-back { height: 44px; font-size: 16px; padding: 0 14px 0 10px; }
   .topbar h1 { letter-spacing: .08em; }
   .settings { padding: 8px 18px 18px; }
   .row { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* ═════ 图鉴(含组卡):左卡牌网格,右详情 + 出战卡组 ═════ */
+.tabs { display: flex; justify-content: center; gap: 12px; margin: -4px 0 18px; }
+.tab { display: inline-flex; align-items: center; gap: 8px; }
+.tab img { width: 26px; height: 26px; }
+.tab.sel { color: var(--gold-ink); background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00);
+  box-shadow: inset 0 0 0 2px #fff3c0, 0 5px 0 var(--plum-line), 0 10px 16px #0009;
+  text-shadow: 1.5px 0 0 var(--gold-stroke), -1.5px 0 0 var(--gold-stroke), 0 1.5px 0 var(--gold-stroke), 0 -1.5px 0 var(--gold-stroke), 0 3px 0 var(--gold-stroke); }
+.codex { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
+.pool-wrap { padding: 16px; }
+.pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 12px; }
+.card { position: relative; padding: 0 0 10px; cursor: pointer; text-align: center; color: var(--ink-1); font: inherit;
+  border: 3px solid var(--plum-line); border-radius: 14px; background: linear-gradient(180deg, #4a3458, #22142c); box-shadow: 0 4px 0 var(--plum-line);
+  transition: transform .12s var(--ease), border-color .12s; }
+.card:hover { transform: translateY(-3px); border-color: #e5b573; }
+.card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 11px 11px 0 0; background: radial-gradient(#5a4068, #22142c 72%); }
+.card.spell img, .detail .art.spell { mix-blend-mode: screen; }   /* 法术插图是黑底发光图,滤色去黑 */
+.card .cname { padding: 8px 6px 0; font: 900 var(--t-body)/1.2 var(--f-display); letter-spacing: .04em; text-shadow: 0 2px 0 var(--plum-line); }
+.card.in { border-color: #ffd27a; box-shadow: 0 0 0 2px #ffd27a, 0 4px 0 var(--plum-line); }
+.card.view { transform: translateY(-3px); box-shadow: 0 0 0 3px #fff, 0 4px 0 var(--plum-line), 0 0 22px #ffffff55; }
+.card.in.view { box-shadow: 0 0 0 2px #ffd27a, 0 0 0 5px #fff, 0 4px 0 var(--plum-line), 0 0 22px #ffffff55; }
+.card .tick { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; display: none; place-items: center; border-radius: 50%;
+  background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); border: 2px solid var(--plum-line); color: var(--gold-ink); font-weight: 900;
+  text-shadow: 0 1px 0 var(--gold-stroke), 0 -1px 0 var(--gold-stroke), 1px 0 0 var(--gold-stroke), -1px 0 0 var(--gold-stroke); }
+.card.in .tick { display: grid; }
+.cost { position: absolute; top: 8px; left: 8px; width: 32px; height: 32px; display: grid; place-items: center; font: 900 var(--t-body)/1 var(--f-display); color: #fff;
+  background: radial-gradient(circle at 35% 30%, #b89bff, #5a2fc0); border: 2px solid var(--plum-line); border-radius: 50%; box-shadow: 0 2px 0 var(--plum-line); text-shadow: 0 1px 0 var(--plum-line); }
+.side { display: grid; gap: 18px; position: sticky; top: 12px; }
+.detail { padding: 16px; display: grid; grid-template-columns: 150px 1fr; gap: 6px 16px; align-items: start; }
+.detail .art-wrap { position: relative; grid-row: span 3; }
+.detail .art { display: block; width: 150px; height: 150px; object-fit: contain; border-radius: 12px; background: radial-gradient(#6a4c7a, #22142c 72%); border: 3px solid var(--plum-line); }
+.detail h3 { margin: 2px 0 0; font: 900 var(--t-h2)/1.15 var(--f-display); letter-spacing: .06em; color: #fff1cf; text-shadow: 0 3px 0 var(--plum-line); }
+.detail .type { color: #ffe3a3; font: 900 var(--t-small)/1 var(--f-display); letter-spacing: .1em; text-shadow: 0 2px 0 var(--plum-line); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 10px; border-radius: 10px; background: #1a0f24b3; border: 2px solid #ffffff1a; font: 900 var(--t-small)/1 var(--f-display); color: #f2e6d2; }
+.chip b { color: #fff; font-size: var(--t-body); margin-left: 4px; }
+.detail .desc { grid-column: 1 / -1; margin: 8px 0 2px; color: #f2e6d2; font-size: var(--t-body); line-height: 1.5; }
+.detail .acts { grid-column: 1 / -1; display: flex; gap: 10px; }
+.detail .acts .g-btn { flex: 1; }
+.roster { padding: 16px; }
+.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 6px 0 0 6px; }
+.dslot { position: relative; display: block; width: 100%; min-width: 0; aspect-ratio: 1; border-radius: 12px; border: 3px solid var(--plum-line); background: radial-gradient(#5a4068, #22142c 72%); box-shadow: 0 3px 0 var(--plum-line); cursor: pointer; padding: 0; }
+.dslot img { width: 100%; height: 100%; object-fit: contain; border-radius: 9px; }
+.dslot.spell img { mix-blend-mode: screen; }
+.dslot .cost { top: -8px; left: -8px; width: 26px; height: 26px; font-size: var(--t-small); }
+.dslot.empty { border-style: dashed; border-color: #e5b57366; background: #1a0f2480; box-shadow: none; cursor: default; }
+.deckstat { display: flex; justify-content: space-between; margin-top: 14px; font: 900 var(--t-body)/1 var(--f-display); color: #f2e6d2; }
+.deckstat b { color: #ffe3a3; font-size: var(--t-h3); text-shadow: 0 2px 0 var(--plum-line); margin-left: 6px; }
+@media (max-width: 720px) {
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .codex { grid-template-columns: 1fr; }
+  .side { position: static; order: -1; }
+  .pool { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .card .cname { font-size: 13px; }
+  .detail { grid-template-columns: 110px 1fr; }
+  .detail .art { width: 110px; height: 110px; }
 }
 </style>
 </head>
@@ -308,8 +326,7 @@ body {
       <button class="g-btn g-gold" data-go="s-setup" data-mode="ai">开始游戏</button>
       <button class="g-btn g-blue" data-go="s-setup" data-mode="online">联机游戏</button>
       <div class="minor-row">
-        <button class="g-btn g-plum" data-go="s-deck">卡组</button>
-        <button class="g-btn g-plum">图鉴</button>
+        <button class="g-btn g-plum" data-go="s-codex">图鉴</button>
         <button class="g-btn g-plum" data-go="s-settings">设置</button>
         <button class="g-btn g-plum g-xr" aria-label="进入空间大厅(XR)">XR</button>
       </div>
@@ -333,7 +350,7 @@ body {
           <h2 class="over">我方</h2>
           <div class="factions" id="factions"></div>
           <div class="passive" id="passive"></div>
-          <div class="deckline"><span id="deckline"></span><button class="g-btn g-plum g-sm" data-go="s-deck">编辑卡组</button></div>
+          <div class="deckline"><span id="deckline"></span><button class="g-btn g-plum g-sm" data-go="s-codex" data-codex-fac="1">编辑卡组</button></div>
         </section>
         <section class="slot frame">
           
@@ -369,35 +386,30 @@ body {
   </div>
 </section>
 
-<!-- ═════════ 卡组 ═════════ -->
-<section class="screen sub" id="s-deck">
+<!-- ═════════ 图鉴(含组卡)═════════ -->
+<section class="screen sub" id="s-codex">
   <div class="page">
     <header class="topbar">
-      <div><button class="g-btn g-plum g-back" data-go="s-setup">‹ 返回</button></div>
-      <h1>卡组</h1>
+      <div><button class="g-btn g-plum g-back" data-back>‹ 返回</button></div>
+      <h1>图鉴</h1>
       <div class="right"><button class="g-btn g-plum round-btn" title="音效">🔊</button></div>
     </header>
-    <div class="deck">
-      <section class="frame" style="padding:0">
-        
-        <div style="padding:18px 18px 0"><h2 class="over">钢铁联盟 · 可用卡牌</h2></div>
-        <div class="pool" id="pool"></div>
-      </section>
-      <aside class="roster frame">
-        
-        <h2 class="over">出战卡组</h2>
-        <ol id="roster"></ol>
-        <div class="curve" id="curve"></div>
-        <div class="curve-x"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6+</span></div>
-        <div class="stat"><span>卡牌数</span><b id="count"></b></div>
-        <div class="stat"><span>平均费用</span><b id="avg"></b></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="codex">
+      <section class="frame pool-wrap"><div class="pool" id="pool"></div></section>
+      <aside class="side">
+        <section class="frame detail" id="detail"></section>
+        <section class="frame roster">
+          <h2 class="over">出战卡组</h2>
+          <div class="slots" id="slots"></div>
+          <div class="deckstat"><span>卡牌<b id="count"></b></span><span>均费<b id="avg"></b></span></div>
+        </section>
       </aside>
     </div>
   </div>
   <div class="actionbar">
     <button class="g-btn g-plum g-sm" id="preset">推荐卡组</button>
-    <button class="g-btn g-plum g-sm" data-go="s-setup">取消</button>
-    <button class="g-btn g-gold g-go" data-go="s-setup">保存</button>
+    <button class="g-btn g-gold g-go" data-back>保存</button>
   </div>
 </section>
 
@@ -427,7 +439,7 @@ body {
 </section>
 
 <nav class="mock-nav" id="mock-nav"><span>视觉稿</span>
-  <button data-go="s-home" class="sel">主页</button><button data-go="s-setup" data-mode="ai">人机设置</button><button data-go="s-setup" data-mode="online">联机设置</button><button data-go="s-deck">卡组</button><button data-go="s-settings">设置</button>
+  <button data-go="s-home" class="sel">主页</button><button data-go="s-setup" data-mode="ai">人机设置</button><button data-go="s-setup" data-mode="online">联机设置</button><button data-go="s-codex">图鉴</button><button data-go="s-settings">设置</button>
 </nav>
 
 <script>
@@ -444,27 +456,31 @@ const MAPS = [
   { id: 'glacier', name: '冰封裂谷', desc: '两侧转线口错开；两条冰路斜穿三路，地面单位踏冰减速。' },
   { id: 'volcano', name: '熔岩锻炉', desc: '熔岩河横贯三路，地面单位涉水会被灼烧；仅星核可安全通过。' },
 ];
-const CARDS = [
-  ['steel_infantry', '联盟步兵', 2, 'unit', '可对空的主力步兵'], ['steel_tank', '重装坦克', 5, 'unit', '重甲前排，推进缓慢'],
-  ['steel_artillery', '火炮哨站', 4, 'unit', '远程炮击，溅射伤害'], ['steel_shield', '护盾兵', 3, 'unit', '自带200护盾，前排抗伤'],
-  ['steel_banner', '军旗手', 3, 'unit', '光环：周围友军攻击+40%、移速+20%'], ['steel_siege', '攻城战车', 5, 'unit', '只打建筑与塔，专职拆塔'],
-  ['steel_turret', '防御炮台', 4, 'building', '防守炮台，可对空'], ['steel_buff_atk', '全员强化', 2, 'spell', '场上友军攻击永久+10'],
-  ['steel_repair', '装甲维修', 2, 'spell', '范围友军回复150生命'], ['steel_strike', '轨道炮击', 4, 'spell', '1.2秒后范围伤害200（建筑40%）'],
-  ['steel_barrier', '紧急护盾', 3, 'spell', '范围友军获得150护盾'],
-].map(([id, name, cost, type, desc]) => ({ id, name, cost, type, desc, img: `../assets/${type === 'spell' ? 'spells' : 'units'}/${id}.webp` }));
-const PRESET = ['steel_infantry', 'steel_tank', 'steel_artillery', 'steel_shield', 'steel_banner', 'steel_siege', 'steel_repair', 'steel_strike'];
+// 全部阵营卡牌(取自 js/cards.js):[id, 名称, 费用, 类型, 攻击, 生命, 射程, 描述]
+const ALL = {"steel": [["steel_infantry", "联盟步兵", 2, "unit", 21, 115, 0.7, "可对空的主力步兵"], ["steel_tank", "重装坦克", 5, "unit", 34, 390, 0.7, "重甲前排，推进缓慢"], ["steel_artillery", "火炮哨站", 4, "unit", 28, 160, 2.8, "远程炮击，溅射伤害"], ["steel_shield", "护盾兵", 3, "unit", 15, 170, 0.7, "自带200护盾，前排抗伤"], ["steel_banner", "军旗手", 3, "unit", 11, 180, 0.7, "光环：周围友军攻击+40%、移速+20%"], ["steel_siege", "攻城战车", 5, "unit", 62, 463, 0.8, "只打建筑与塔，专职拆塔"], ["steel_turret", "防御炮台", 4, "building", 28, 424, 2.6, "防守炮台，可对空"], ["steel_buff_atk", "全员强化", 2, "spell", null, null, null, "场上友军攻击永久+10"], ["steel_repair", "装甲维修", 2, "spell", null, null, null, "范围友军回复150生命"], ["steel_strike", "轨道炮击", 4, "spell", null, null, null, "1.2秒后范围伤害200（建筑40%）"], ["steel_barrier", "紧急护盾", 3, "spell", null, null, null, "范围友军获得150护盾"]], "mecha": [["mecha_drone", "侦察无人机", 2, "unit", 15, 74, 1.5, "高速飞行，骚扰牵制"], ["mecha_sentry", "哨戒炮", 3, "unit", 25, 130, 2.5, "远程火力平台，移动缓慢"], ["mecha_walker", "战术机甲", 5, "unit", 36, 340, 0.8, "攻守均衡的主战机甲"], ["mecha_swarmdrone", "蜂群无人机", 3, "unit", 9, 33, 1.3, "部署3架飞行无人机"], ["mecha_arc", "电弧兵", 4, "unit", 28, 210, 1.8, "攻击连锁3个额外敌人"], ["mecha_sniper", "狙击单元", 4, "unit", 60, 113, 3, "超远射程，单发高伤"], ["mecha_factory", "无人机工厂", 5, "building", 0, 382, 0, "每9秒产出1架侦察无人机"], ["mecha_emp", "EMP脉冲", 2, "spell", null, null, null, "范围伤害45，眩晕2.5秒"], ["mecha_hack", "黑客入侵", 3, "spell", null, null, null, "范围内最强敌人倒戈3秒"], ["mecha_chain", "连锁闪电", 3, "spell", null, null, null, "闪电连锁4次，每次110伤害"], ["mecha_airdrop", "无人机空投", 4, "spell", null, null, null, "我方半场空投2架侦察无人机"]], "swarm": [["swarm_worker", "工兵虫", 1, "unit", 16, 80, 0.6, "存活15秒进化为战斗虫"], ["swarm_warrior", "战斗虫", 3, "unit", 31, 245, 0.6, "虫群主力近战"], ["swarm_devourer", "吞噬者", 5, "unit", 40, 311, 0.7, "击杀时回复目标30%最大生命"], ["swarm_brood", "幼虫群", 2, "unit", 9, 50, 0.5, "孵出4只幼虫"], ["swarm_mother", "孵化母虫", 4, "unit", 18, 264, 0.7, "亡语：孵出4只幼虫"], ["swarm_spitter", "酸液喷吐者", 3, "unit", 21, 121, 2.2, "远程酸液，溅射伤害"], ["swarm_flyer", "飞翼虫", 3, "unit", 22, 111, 0.7, "飞行，可与空中单位缠斗"], ["swarm_hive", "孵化巢", 4, "building", 0, 295, 0, "每6秒孵出1只工兵虫"], ["swarm_convert", "同化孢子", 5, "spell", null, null, null, "永久同化1个≤4费敌军（优先残血）"], ["swarm_evolve", "基因拟态", 3, "spell", null, null, null, "复制范围内最贵敌军（≤5费），生命70%"], ["swarm_parasite", "寄生", 3, "spell", null, null, null, "范围敌军中毒8秒，期间阵亡化为2只幼虫"]], "chaos": [["chaos_warrior", "扭曲战士", 2, "unit", 30, 123, 0.7, "低费近战，攻击凶猛"], ["chaos_wraith", "灵魂体", 3, "unit", 41, 101, 0.7, "虚体：30%闪避攻击"], ["chaos_construct", "恶魔构造体", 6, "unit", 52, 400, 0.8, "重型巨像，免疫眩晕与入侵"], ["chaos_zealot", "自爆邪徒", 2, "unit", 0, 96, 0.4, "冲向塔与建筑自爆，范围伤害135"], ["chaos_berserker", "狂战士", 3, "unit", 31, 190, 0.7, "半血以下狂暴：攻速×2"], ["chaos_soulreaver", "吸魂者", 4, "unit", 33, 225, 1.4, "远程攻击，吸血32%"], ["chaos_bats", "虚空蝠", 3, "unit", 17, 68, 0.7, "2只飞行蝙蝠，吸血20%"], ["chaos_obelisk", "腐化方尖碑", 4, "building", 0, 328, 0, "周围2.2格每秒26腐蚀（含空中）"], ["chaos_rain", "腐化之雨", 3, "spell", null, null, null, "范围每秒22腐蚀，持续4秒"], ["chaos_drain", "灵魂抽取", 2, "spell", null, null, null, "最强敌军受125伤害，核心回复125"], ["chaos_sacrifice", "献祭", 2, "spell", null, null, null, "引爆范围友军，造成其剩余生命120%伤害"], ["chaos_curse", "诅咒", 3, "spell", null, null, null, "范围敌军受到伤害+60%，持续7秒"]]};
+const PRESETS = {"steel": ["steel_infantry", "steel_tank", "steel_artillery", "steel_shield", "steel_banner", "steel_siege", "steel_repair", "steel_strike"], "mecha": ["mecha_drone", "mecha_sentry", "mecha_walker", "mecha_swarmdrone", "mecha_arc", "mecha_sniper", "mecha_emp", "mecha_chain"], "swarm": ["swarm_worker", "swarm_warrior", "swarm_devourer", "swarm_brood", "swarm_mother", "swarm_spitter", "swarm_flyer", "swarm_parasite"], "chaos": ["chaos_warrior", "chaos_wraith", "chaos_construct", "chaos_zealot", "chaos_berserker", "chaos_soulreaver", "chaos_bats", "chaos_rain"]};
+const CARDS = Object.values(ALL).flat().map(([id, name, cost, type, atk, hp, range, desc]) =>
+  ({ id, name, cost, type, atk, hp, range, desc, img: `../assets/${type === 'spell' ? 'spells' : 'units'}/${id}.webp` }));
+const card = id => CARDS.find(c => c.id === id);
 const TYPE = { unit: '单位', building: '建筑', spell: '法术' };
 const $ = s => document.querySelector(s);
-let fac = FACTIONS[0], map = MAPS[0], opp = 'ai', deck = [...PRESET];
+let fac = FACTIONS[0], map = MAPS[0], opp = 'ai';
+const decks = Object.fromEntries(FACTIONS.map(f => [f.id, [...PRESETS[f.id]]]));   // 每个阵营一套出战卡组
+let cfac = 'steel', view = null;   // 图鉴当前阵营 / 正在查看的卡
+const history = [];
 
-function go(id) {
+function go(id, push = true) {
+  const cur = document.querySelector('.screen.on')?.id;
+  if (push && cur && cur !== id) history.push(cur);
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
   document.querySelectorAll('#mock-nav button').forEach(b => b.classList.toggle('sel', b.dataset.go === id && (!b.dataset.mode || b.dataset.mode === opp)));
   scrollTo(0, 0);
 }
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-back]')) { go(history.pop() || 's-home', false); return; }   // 返回 / 保存:回到进来的那一页
   const b = e.target.closest('[data-go]'); if (!b) return;
   if (b.dataset.mode) { opp = b.dataset.mode; renderSetup(); }   // 主页两个入口进同一个设置页,模式不同
+  if (b.dataset.codexFac) { cfac = fac.id; view = null; renderCodex(); }   // 从对局设置进来:切到当前阵营
   go(b.dataset.go);
 });
 
@@ -473,7 +489,8 @@ function renderSetup() {
     <img class="art" src="../assets/ui/factions/${f.id}.webp" alt=""><span class="name"><img src="../assets/emblems/emblem_${f.id}.webp" alt="">${f.name}</span></button>`).join('');
   $('#passive').style.setProperty('--fc', fac.color);
   $('#passive').innerHTML = `<b>阵营特性 · ${fac.passive[0]}</b><p>${fac.passive[1]}</p>`;
-  $('#deckline').textContent = `推荐卡组 · 均费 3.5`;
+  const d = decks[fac.id].map(card);
+  $('#deckline').textContent = `出战卡组 · 均费 ${(d.reduce((a, c) => a + c.cost, 0) / d.length).toFixed(1)}`;
   $('#maps').innerHTML = MAPS.map(m => `<button class="choice${m === map ? ' sel' : ''}" data-m="${m.id}">
     <img class="art" src="${m.img || `../assets/scenes/${m.id}/concept.webp`}" alt=""><span class="name">${m.name}</span></button>`).join('');
   $('#map-img').src = map.img || `../assets/scenes/${map.id}/concept.webp`;
@@ -488,29 +505,43 @@ $('#factions').addEventListener('click', e => { const b = e.target.closest('[dat
 $('#maps').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { map = MAPS.find(m => m.id === b.dataset.m); renderSetup(); } });
 $('#diffs').addEventListener('click', e => { const b = e.target.closest('.diff'); if (b) { document.querySelectorAll('.diff').forEach(d => d.classList.toggle('sel', d === b)); } });
 
-function renderDeck() {
-  $('#pool').innerHTML = CARDS.map(c => `<button class="card${deck.includes(c.id) ? ' in' : ''}${c.type === 'spell' ? ' spell' : ''}" data-c="${c.id}">
-    <img src="${c.img}" alt=""><span class="cost">${c.cost}</span><span class="tick">✓</span>
-    <div class="cname">${c.name}</div><div class="meta">${TYPE[c.type]}</div><div class="desc">${c.desc}</div></button>`).join('');
-  const inDeck = deck.map(id => CARDS.find(c => c.id === id)).sort((a, b) => a.cost - b.cost);
-  $('#roster').innerHTML = inDeck.map(c => `<li><span class="cost mini">${c.cost}</span><img src="${c.img}" alt=""><span>${c.name}</span></li>`).join('')
-    + Array.from({ length: 8 - inDeck.length }, () => '<li class="empty">空位</li>').join('');
-  const bins = [0, 0, 0, 0, 0, 0]; inDeck.forEach(c => bins[Math.min(5, c.cost - 1)]++);
-  $('#curve').innerHTML = bins.map(n => `<div style="height:${n / 4 * 100}%"></div>`).join('');
-  $('#count').textContent = `${deck.length} / 8`;
-  $('#avg').textContent = deck.length ? (inDeck.reduce((a, c) => a + c.cost, 0) / deck.length).toFixed(1) : '–';
+const TYPE_ZH = { unit: '单位', building: '建筑', spell: '法术' };
+function renderCodex() {
+  const deck = decks[cfac], list = ALL[cfac].map(r => card(r[0]));
+  view ??= list[0];
+  $('#tabs').innerHTML = FACTIONS.map(f => `<button class="g-btn g-plum g-sm tab${f.id === cfac ? ' sel' : ''}" data-tab="${f.id}"><img src="../assets/emblems/emblem_${f.id}.webp" alt="">${f.name}</button>`).join('');
+  $('#pool').innerHTML = list.map(c => `<button class="card${deck.includes(c.id) ? ' in' : ''}${c === view ? ' view' : ''}${c.type === 'spell' ? ' spell' : ''}" data-c="${c.id}">
+    <img src="${c.img}" alt="" onerror="this.style.visibility='hidden'"><span class="cost">${c.cost}</span><span class="tick">✓</span><div class="cname">${c.name}</div></button>`).join('');
+  const inDeck = deck.includes(view.id), full = deck.length >= 8;
+  const stats = view.type === 'spell' ? '' : `<div class="chips"><span class="chip">生命<b>${view.hp}</b></span><span class="chip">攻击<b>${view.atk}</b></span>${view.range ? `<span class="chip">射程<b>${view.range}</b></span>` : ''}</div>`;
+  $('#detail').innerHTML = `<div class="art-wrap"><img class="art${view.type === 'spell' ? ' spell' : ''}" src="${view.img}" alt=""><span class="cost">${view.cost}</span></div>
+    <span class="type">${TYPE_ZH[view.type]}</span><h3>${view.name}</h3>${stats}
+    <p class="desc">${view.desc}</p>
+    <div class="acts">${inDeck ? '<button class="g-btn g-plum g-sm" data-toggle>移出卡组</button>'
+      : `<button class="g-btn g-gold g-sm" data-toggle ${full ? 'disabled' : ''}>${full ? '卡组已满' : '加入卡组'}</button>`}
+      ${view.type === 'spell' ? '' : '<button class="g-btn g-blue g-sm">3D 模型</button>'}</div>`;
+  const d = deck.map(card).sort((a, b) => a.cost - b.cost);
+  $('#slots').innerHTML = d.map(c => `<button class="dslot${c.type === 'spell' ? ' spell' : ''}" data-c="${c.id}" title="${c.name}"><img src="${c.img}" alt=""><span class="cost">${c.cost}</span></button>`).join('')
+    + Array.from({ length: 8 - d.length }, () => '<span class="dslot empty"></span>').join('');
+  $('#count').textContent = `${deck.length}/8`;
+  $('#avg').textContent = deck.length ? (d.reduce((a, c) => a + c.cost, 0) / deck.length).toFixed(1) : '–';
 }
-$('#pool').addEventListener('click', e => {
-  const b = e.target.closest('[data-c]'); if (!b) return;
-  const id = b.dataset.c;
-  if (deck.includes(id)) deck = deck.filter(x => x !== id); else if (deck.length < 8) deck.push(id);
-  renderDeck();
+$('#s-codex').addEventListener('click', e => {
+  const tab = e.target.closest('[data-tab]');
+  if (tab) { cfac = tab.dataset.tab; view = null; renderCodex(); return; }
+  const c = e.target.closest('[data-c]');
+  if (c) { view = card(c.dataset.c); renderCodex(); return; }   // 点卡 / 卡组格:查看
+  if (e.target.closest('[data-toggle]')) {
+    const deck = decks[cfac];
+    if (deck.includes(view.id)) decks[cfac] = deck.filter(x => x !== view.id); else if (deck.length < 8) deck.push(view.id);
+    renderCodex(); renderSetup();
+  }
+  if (e.target.closest('#preset')) { decks[cfac] = [...PRESETS[cfac]]; renderCodex(); renderSetup(); }
 });
-$('#preset').addEventListener('click', () => { deck = [...PRESET]; renderDeck(); });
 document.querySelectorAll('#s-settings .seg').forEach(seg => seg.addEventListener('click', e => {
   const b = e.target.closest('button'); if (b) seg.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
 }));
-renderSetup(); renderDeck();
+renderSetup(); renderCodex();
 const q = new URLSearchParams(location.search); if (q.get('m')) { opp = q.get('m'); renderSetup(); } if (q.get('s')) go(q.get('s'));
 </script>
 </body>
