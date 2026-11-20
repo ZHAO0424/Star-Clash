@@ -35,7 +35,7 @@ import { recordResult, leaderboard, claimName } from './ranking.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.wasm': 'application/wasm',
-  '.glb': 'model/gltf-binary', '.css': 'text/css; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
+  '.glb': 'model/gltf-binary', '.woff2': 'font/woff2', '.css': 'text/css; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
 
 // ── 限额 ──
 const MAX_FRAME = 64 * 1024;          // 单帧上限:客户端消息都是几十字节的 JSON
@@ -355,7 +355,7 @@ function housekeeping() {
 const PUBLIC_DIRS = new Set(['js', 'assets', 'vendor']);
 const GZIP_EXT = new Set(['.html', '.js', '.mjs', '.css', '.json', '.md', '.glb', '.wasm']);
 const gzipCache = new Map();   // 路径+etag → gzip 后的内容
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'viewer.html', 'game.css']);   // 根目录只公开页面本身(新增根目录文件要加进这里)
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'viewer.html', 'game.css', 'menu.css']);   // 根目录只公开页面本身(新增根目录文件要加进这里)
 function publicFile(pathname) {
   let rel;
   try { rel = decodeURIComponent(pathname); } catch { return { status: 400 }; }
