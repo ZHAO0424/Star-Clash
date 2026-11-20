@@ -2200,7 +2200,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
   // XR:战场缩成桌面尺寸,挂到 anchor(用户前方)下
   enterXRLayout(anchor, isAR) {
     anchor.add(this.world);
-    this.world.position.set(0, -0.6, -0.85);   // 头部下方 60cm,前方 85cm(xr.js 的 applyBoardSize 随后按尺寸档重设)
+    this.world.position.set(0, -0.65, -0.8);   // 头部下方 65cm,前方 80cm(xr.js 的 applyBoardSize 随后按尺寸档重设)
     this.world.scale.setScalar(0.046);          // 标准档 0.046(第七轮)
     this.renderer.domElement.style.background = '';
     if (isAR) { this.scene.background = null; this.scene.fog = null; }

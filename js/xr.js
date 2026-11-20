@@ -41,10 +41,12 @@ const GHOST_FLY_S = 0.15;    // 确认瞬间牌影从手里飞到落点的时长
 const GHOST_HOVER = 0.035;   // 牌影悬在落点上方 3.5cm
 const ARC_SEGMENTS = 24;     // 手 → 落点弧线的分段数
 const CARD_W = 0.072, CARD_H = 0.1, CARD_GAP = 0.082;
-const BOARD_SCALES = { small: 0.038, standard: 0.046, large: 0.054 };   // 第七轮:原 0.044 / 0.052 / 0.060
-const BOARD_CENTER_DISTANCE = 0.85;   // 战场中心离头的水平距离(第七轮:原 0.72)
-const BOARD_DROP = 0.60;              // 战场中心在头下多少(第七轮:原 0.50)
-const HUD_BASE_DISTANCE = 1.33;       // 标准档 HUD 距离,在远边(0.85 + 0.452)之外约 3cm
+// 第十三轮实测:要更俯视 / 更小 → 缩放各降 0.004,中心更近 5cm、更低 5cm(中心视线俯角 35° → 39°)
+const BOARD_SCALES = { small: 0.034, standard: 0.042, large: 0.050 };   // 第七轮 0.038 / 0.046 / 0.054;更早 0.044 / 0.052 / 0.060
+const BOARD_CENTER_DISTANCE = 0.80;   // 战场中心离头的水平距离(第七轮:原 0.72)
+const BOARD_DROP = 0.65;              // 战场中心在头下多少(第七轮:原 0.50)
+// 标准档 HUD 距离:按中心距离 + 中档半纵深推出远边,再往外 3cm(第十三轮改为推算,调棋盘位置时不用再手改)
+const HUD_BASE_DISTANCE = BOARD_CENTER_DISTANCE + (ARENA.hz + ARENA.rim) * BOARD_SCALES.standard + 0.03;
 const POSTER_WIDTH = 0.56;
 const POSTER_HEIGHT = POSTER_WIDTH * 16 / 9;
 const POSTER_GAP = 0.30;
@@ -1240,12 +1242,13 @@ export class XRControls {
     if (!st.pinched) {
       const band = st.rayActive ? null : this.cardBand(point, st);
       st.hover = band ? pickCardByHand(band.hand, band.xs, st.hover) : -1;
-    }
+    } else if (!st.grab) st.hover = -1;   // 捏着但没抓牌(点按钮 / 菜单):不保留上一张的高亮
   }
 
   // 手牌带(第十轮):在视图坐标(uiInner 本地,UI 换边后仍是玩家视角)里比较手和手牌行。
   // 返回 { hand(手相对手牌行中心), xs(各牌中心 x,不可抓的为 null), inBand };不在出牌阶段 / 手牌行没显示返回 null
   cardBand(point, st) {
+    if (st.side === 'left') return null;   // 第十三轮:右手为主,左手不选牌、不抓牌(也就不会残留高亮)
     const game = this.cb.getGame();
     if (!['battle', 'prep'].includes(game?.phase) || !this.isVisibleForInput(this.cardRow)) return null;
     const center = this.viewPoint(this.cardRow.getWorldPosition(new THREE.Vector3()));
