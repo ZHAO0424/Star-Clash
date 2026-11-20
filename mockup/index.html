@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>星轨对决 · 菜单视觉稿</title>
 <!-- 视觉稿:不接游戏逻辑,只验证设计语言(docs/ui-redesign-plan.md)。字体 OFL,见 fonts/ 下许可 -->
-<link rel="stylesheet" href="fonts-noto-serif-sc-900.css">
 <link rel="stylesheet" href="fonts-noto-sans-sc-900.css">
 <style>
-@font-face { font-family: 'Cinzel'; font-weight: 700; font-display: swap; src: url(fonts/cinzel-latin-700-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Cinzel'; font-weight: 900; font-display: swap; src: url(fonts/cinzel-latin-900-normal.woff2) format('woff2'); }
 
 /* ── 设计 token(plan §1)── */
 :root {
@@ -18,7 +15,7 @@
   --gold: #e9c27a; --gold-hi: #ffe3a3; --gold-deep: #8a6332;
   --ink-1: #f6eedc; --ink-2: #cfc4b2; --ink-3: #8f8597;
   --danger: #e0685a; --ok: #7bc98a; --focus: #fff2a7;
-  --f-display: 'Cinzel', 'Noto Serif SC', 'Songti SC', serif;
+  --f-display: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;   /* 全站展示字 = 粗黑体,与字标同一类厚重字形 */
   --f-body: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
   --f-game: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;   /* 主页按钮:粗黑体,呼应字标的厚重卡通字形 */
   --plum-line: #2b1430;   /* 按钮外描边 / 立体底边,取自字标底板 */
@@ -236,6 +233,69 @@ body {
   .mock-nav { display: none; }   /* 手机上用页面里的按钮跳转 */
   .pool { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; }
 }
+
+/* ═════ v0.4 二级页主题:与主页同一套——紫石板底板 + 金边 + 深紫粗描边 + 立体底边,粗黑体 ═════ */
+.screen.sub { background: linear-gradient(#1a0f24b3, #1a0f24d9), url(../assets/ui/bg_menu.webp) center / cover no-repeat, var(--bg-0); }
+.frame { background: linear-gradient(180deg, #4a3458e6, #2a1a36f2), url(../assets/ui/materials/plum-slate.webp) center / cover;
+  border: 3px solid var(--plum-line); border-radius: 20px;
+  box-shadow: inset 0 0 0 2px #e5b573, inset 0 4px 0 #ffffff26, 0 6px 0 var(--plum-line), 0 18px 30px #000a; }
+.frame.thin { border-width: 3px; box-shadow: inset 0 0 0 2px #e5b57399, 0 5px 0 var(--plum-line), 0 12px 22px #0009; }
+.topbar h1 { font: 900 var(--t-h1)/1.1 var(--f-display); letter-spacing: .16em; padding-left: .16em; color: #fff1cf;
+  text-shadow: 0 3px 0 var(--plum-line), 2px 0 0 var(--plum-line), -2px 0 0 var(--plum-line), 0 -2px 0 var(--plum-line), 0 6px 0 #b9852f, 0 12px 20px #000c; }
+.over { color: #ffe3a3; font-size: var(--t-body); letter-spacing: .14em; text-shadow: 0 2px 0 var(--plum-line); }
+.over::before, .over::after { background: linear-gradient(90deg, transparent, #e5b573cc, transparent); height: 2px; }
+.over::before { background: linear-gradient(90deg, transparent, #e5b573cc); }
+.g-sm { width: auto; height: 46px; padding: 0 20px; font-size: 18px; letter-spacing: .08em; border-radius: 12px; }
+.g-back { width: auto; height: 48px; padding: 0 22px 0 16px; font-size: 18px; letter-spacing: .08em; border-radius: 14px; }
+.g-go { width: auto; min-width: 260px; height: 76px; padding: 0 40px; font-size: 34px; }
+.choice { border: 3px solid var(--plum-line); border-radius: 14px; background: #1c1024; box-shadow: 0 4px 0 var(--plum-line); }
+.choice:hover { border-color: #e5b573; }
+.choice.sel { border-color: #ffd27a; box-shadow: 0 0 0 2px #ffd27a, 0 4px 0 var(--plum-line), 0 0 24px color-mix(in srgb, var(--fc, #ffd27a) 55%, transparent); }
+.choice .name { font-size: var(--t-body); letter-spacing: .06em; padding: 10px 12px 11px; background: linear-gradient(180deg, #3a2448, #24152e); text-shadow: 0 2px 0 var(--plum-line); }
+.choice.sel .name { color: #ffe3a3; }
+.diff { padding: 0; }
+.diff .name { justify-content: center; padding: 18px 0; font-size: var(--t-h3); background: linear-gradient(180deg, #4a3458, #2a1a36); }
+.choice.diff.sel .name { color: #5a2a06; background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); text-shadow: 0 1px 0 #fff0b3; }
+.passive { border-left: 0; border-radius: 12px; background: #1a0f24b3; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fc, #e5b573) 70%, transparent); }
+.passive b { font-size: var(--t-h3); color: #ffe3a3; text-shadow: 0 2px 0 var(--plum-line); }
+.passive p { color: #f2e6d2; font-size: var(--t-body); }
+.deckline { font-size: var(--t-body); color: #f2e6d2; }
+.map .preview { border: 3px solid var(--plum-line); border-radius: 14px; box-shadow: inset 0 0 0 2px #e5b573; }
+.map .preview h2 { font-size: var(--t-h2); letter-spacing: .1em; text-shadow: 0 3px 0 var(--plum-line); }
+.map .preview p { font-size: var(--t-body); color: #f2e6d2; }
+.seg { border: 3px solid var(--plum-line); border-radius: 12px; box-shadow: 0 4px 0 var(--plum-line); }
+.seg button { font-size: var(--t-body); padding: 12px 20px; background: linear-gradient(180deg, #4a3458, #2a1a36); color: #f2e6d2; text-shadow: 0 2px 0 var(--plum-line); }
+.seg button + button { border-left: 2px solid var(--plum-line); }
+.seg button.sel { background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); color: #5a2a06; text-shadow: 0 1px 0 #fff0b3; }
+.input { border: 3px solid var(--plum-line); border-radius: 12px; background: #140a1c; box-shadow: inset 0 0 0 2px #e5b57366; font-size: var(--t-body); }
+.field span { font: 900 var(--t-body)/1 var(--f-display); color: #ffe3a3; letter-spacing: .08em; text-shadow: 0 2px 0 var(--plum-line); }
+.board li { font-size: var(--t-body); }
+.actionbar { background: linear-gradient(transparent, #1a0f24f2 45%); gap: 14px; }
+.card { border: 3px solid var(--plum-line); border-radius: 14px; background: linear-gradient(180deg, #4a3458, #22142c); box-shadow: 0 4px 0 var(--plum-line); }
+.card.in { border-color: #ffd27a; box-shadow: 0 0 0 2px #ffd27a, 0 4px 0 var(--plum-line); }
+.card img { border-radius: 11px 11px 0 0; background: radial-gradient(#5a4068, #22142c 72%); }
+.card .cname { font-size: var(--t-h3); text-shadow: 0 2px 0 var(--plum-line); }
+.card .meta { font-size: var(--t-small); color: #c9b8d6; }
+.card .desc { font-size: var(--t-small); color: #f2e6d2; }
+.cost { border: 2px solid var(--plum-line); box-shadow: 0 2px 0 var(--plum-line); }
+.card .tick { border: 2px solid var(--plum-line); color: #5a2a06; }
+.roster li { border-radius: 10px; background: #1a0f24b3; border: 2px solid #ffffff14; font: 900 var(--t-body)/1.2 var(--f-display); }
+.curve div { background: linear-gradient(180deg, #fff1a8, #ffc21a 55%, #e07a00); border: 2px solid var(--plum-line); border-bottom: 0; border-radius: 6px 6px 0 0; }
+.stat { font-size: var(--t-body); color: #f2e6d2; }
+.stat b { font-size: var(--t-h2); color: #ffe3a3; text-shadow: 0 2px 0 var(--plum-line); }
+.row { border-top: 2px solid #ffffff14; padding: 16px 0; }
+.row b { font: 900 var(--t-h3)/1.2 var(--f-display); color: #fff1cf; letter-spacing: .06em; text-shadow: 0 2px 0 var(--plum-line); }
+.settings { padding: 12px 30px 24px; }
+.roster li { padding: 4px 8px; }
+.roster li img { width: 30px; height: 30px; }
+.curve { height: 56px; margin-top: 12px; }
+@media (max-width: 720px) {
+  .g-go { min-width: 0; flex: 1; height: 64px; font-size: 28px; }
+  .g-back { height: 44px; font-size: 16px; padding: 0 14px 0 10px; }
+  .topbar h1 { letter-spacing: .08em; }
+  .settings { padding: 8px 18px 18px; }
+  .row { grid-template-columns: 1fr; gap: 10px; }
+}
 </style>
 </head>
 <body>
@@ -262,37 +322,37 @@ body {
 <section class="screen sub" id="s-setup">
   <div class="page">
     <header class="topbar">
-      <div><button class="btn btn-text" data-go="s-home">‹ 返回</button></div>
+      <div><button class="g-btn g-plum g-back" data-go="s-home">‹ 返回</button></div>
       <h1 id="setup-title">人机对战</h1>
-      <div class="right"><button class="icon-btn" title="音效">🔊</button></div>
+      <div class="right"><button class="g-btn g-plum round-btn" title="音效">🔊</button></div>
     </header>
     <div class="setup">
       <div>
         <section class="slot frame">
-          <span class="corners"><i></i><i></i><i></i><i></i></span>
+          
           <h2 class="over">我方</h2>
           <div class="factions" id="factions"></div>
           <div class="passive" id="passive"></div>
-          <div class="deckline"><span id="deckline"></span><button class="btn btn-text" data-go="s-deck">编辑卡组 ›</button></div>
+          <div class="deckline"><span id="deckline"></span><button class="g-btn g-plum g-sm" data-go="s-deck">编辑卡组</button></div>
         </section>
         <section class="slot frame">
-          <span class="corners"><i></i><i></i><i></i><i></i></span>
+          
           <h2 class="over" id="opp-title">对手 · 电脑</h2>
-          <p class="muted" id="opp-hint" style="margin:0"></p>
+          
           <div class="diffs" id="diffs">
-            <button class="choice diff"><span class="name">简单</span><small>适合熟悉卡牌</small></button>
-            <button class="choice diff sel"><span class="name">普通</span><small>会补位、会拆塔</small></button>
-            <button class="choice diff"><span class="name">困难</span><small>会算费、会集火</small></button>
+            <button class="choice diff"><span class="name">简单</span></button>
+            <button class="choice diff sel"><span class="name">普通</span></button>
+            <button class="choice diff"><span class="name">困难</span></button>
           </div>
           <div class="online" id="online">
             <label class="field"><span>昵称</span><input class="input" placeholder="留空则随机命名"></label>
-            <div class="field"><span>加入好友的房间</span><div class="join"><input class="input" maxlength="4" placeholder="ABCD"><button class="btn btn-secondary">加入</button></div></div>
+            <div class="field"><span>房号</span><div class="join"><input class="input" maxlength="4" placeholder="ABCD"><button class="g-btn g-blue g-sm">加入</button></div></div>
           </div>
         </section>
       </div>
       <div>
         <section class="map frame">
-          <span class="corners"><i></i><i></i><i></i><i></i></span>
+          
           <h2 class="over">战场</h2>
           <div class="preview"><img id="map-img" alt=""><div class="cap"><h2 id="map-name"></h2><p id="map-desc"></p></div></div>
           <div class="maps" id="maps"></div>
@@ -305,8 +365,7 @@ body {
     </div>
   </div>
   <div class="actionbar">
-    <span class="hint" id="go-hint">钢铁联盟 对阵 随机势力 · 普通</span>
-    <button class="btn btn-primary" id="go">开　战</button>
+        <button class="g-btn g-gold g-go" id="go">开战</button>
   </div>
 </section>
 
@@ -314,18 +373,18 @@ body {
 <section class="screen sub" id="s-deck">
   <div class="page">
     <header class="topbar">
-      <div><button class="btn btn-text" data-go="s-setup">‹ 返回</button></div>
+      <div><button class="g-btn g-plum g-back" data-go="s-setup">‹ 返回</button></div>
       <h1>卡组</h1>
-      <div class="right"><button class="icon-btn" title="音效">🔊</button></div>
+      <div class="right"><button class="g-btn g-plum round-btn" title="音效">🔊</button></div>
     </header>
     <div class="deck">
       <section class="frame" style="padding:0">
-        <span class="corners"><i></i><i></i><i></i><i></i></span>
+        
         <div style="padding:18px 18px 0"><h2 class="over">钢铁联盟 · 可用卡牌</h2></div>
         <div class="pool" id="pool"></div>
       </section>
       <aside class="roster frame">
-        <span class="corners"><i></i><i></i><i></i><i></i></span>
+        
         <h2 class="over">出战卡组</h2>
         <ol id="roster"></ol>
         <div class="curve" id="curve"></div>
@@ -336,9 +395,9 @@ body {
     </div>
   </div>
   <div class="actionbar">
-    <button class="btn btn-text" id="preset">推荐卡组</button>
-    <button class="btn btn-text" data-go="s-setup">取消</button>
-    <button class="btn btn-primary" data-go="s-setup">保　存</button>
+    <button class="g-btn g-plum g-sm" id="preset">推荐卡组</button>
+    <button class="g-btn g-plum g-sm" data-go="s-setup">取消</button>
+    <button class="g-btn g-gold g-go" data-go="s-setup">保存</button>
   </div>
 </section>
 
@@ -346,22 +405,22 @@ body {
 <section class="screen sub" id="s-settings">
   <div class="page">
     <header class="topbar">
-      <div><button class="btn btn-text" data-go="s-home">‹ 返回</button></div>
+      <div><button class="g-btn g-plum g-back" data-go="s-home">‹ 返回</button></div>
       <h1>设置</h1>
       <div class="right"></div>
     </header>
     <div class="settings frame">
-      <span class="corners"><i></i><i></i><i></i><i></i></span>
+      
       <div class="group"><h2 class="over">显示</h2>
-        <div class="row"><div><b>语言</b><small>界面与卡牌文字</small></div><div class="seg"><button class="sel">中文</button><button>English</button></div></div>
+        <div class="row"><div><b>语言</b></div><div class="seg"><button class="sel">中文</button><button>English</button></div></div>
       </div>
       <div class="group"><h2 class="over">声音</h2>
-        <div class="row"><div><b>音效</b><small>出牌、战斗与菜单音效</small></div><div class="seg"><button class="sel">开</button><button>关</button></div></div>
+        <div class="row"><div><b>音效</b></div><div class="seg"><button class="sel">开</button><button>关</button></div></div>
       </div>
       <div class="group"><h2 class="over">XR</h2>
-        <div class="row"><div><b>战场尺寸</b><small>桌面上战场的大小</small></div><div class="seg"><button>小</button><button class="sel">中</button><button>大</button></div></div>
-        <div class="row"><div><b>XR 模式</b><small>自动按设备选择</small></div><div class="seg"><button class="sel">自动</button><button>沉浸 VR</button><button>透视 AR</button></div></div>
-        <div class="row"><div><b>XR 操作教学</b><small>捏合、松手与重新居中</small></div><button class="btn btn-secondary">查看</button></div>
+        <div class="row"><div><b>战场尺寸</b></div><div class="seg"><button>小</button><button class="sel">中</button><button>大</button></div></div>
+        <div class="row"><div><b>XR 模式</b></div><div class="seg"><button class="sel">自动</button><button>沉浸 VR</button><button>透视 AR</button></div></div>
+        <div class="row"><div><b>XR 操作教学</b></div><button class="g-btn g-plum g-sm">查看</button></div>
       </div>
     </div>
   </div>
@@ -414,7 +473,7 @@ function renderSetup() {
     <img class="art" src="../assets/ui/factions/${f.id}.webp" alt=""><span class="name"><img src="../assets/emblems/emblem_${f.id}.webp" alt="">${f.name}</span></button>`).join('');
   $('#passive').style.setProperty('--fc', fac.color);
   $('#passive').innerHTML = `<b>阵营特性 · ${fac.passive[0]}</b><p>${fac.passive[1]}</p>`;
-  $('#deckline').textContent = `卡组：推荐卡组 · 8 张 · 平均 3.5 费`;
+  $('#deckline').textContent = `推荐卡组 · 均费 3.5`;
   $('#maps').innerHTML = MAPS.map(m => `<button class="choice${m === map ? ' sel' : ''}" data-m="${m.id}">
     <img class="art" src="${m.img || `../assets/scenes/${m.id}/concept.webp`}" alt=""><span class="name">${m.name}</span></button>`).join('');
   $('#map-img').src = map.img || `../assets/scenes/${map.id}/concept.webp`;
@@ -423,9 +482,7 @@ function renderSetup() {
   $('#setup-title').textContent = online ? '联机对战' : '人机对战';
   $('#opp-title').textContent = online ? '对手 · 好友' : '对手 · 电脑';
   $('#diffs').hidden = online; $('#online').classList.toggle('on', online); $('#board').hidden = !online;
-  $('#opp-hint').textContent = online ? '建房后把房号发给好友；或者输入好友的房号加入' : '选择电脑难度';
-  $('#go').textContent = online ? '创建房间' : '开　战';
-  $('#go-hint').textContent = online ? `${fac.name} · ${map.name} · 等待好友加入` : `${fac.name} 对阵 随机势力 · ${map.name} · 普通`;
+  $('#go').textContent = online ? '创建房间' : '开战';
 }
 $('#factions').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { fac = FACTIONS.find(f => f.id === b.dataset.f); renderSetup(); } });
 $('#maps').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { map = MAPS.find(m => m.id === b.dataset.m); renderSetup(); } });
