@@ -272,7 +272,7 @@ body {
   border: 3px solid var(--plum-line); border-radius: 14px; background: linear-gradient(180deg, var(--s1), var(--s3)); box-shadow: 0 4px 0 var(--plum-line);
   transition: transform .12s var(--ease), border-color .12s; }
 .card:hover { transform: translateY(-3px); border-color: var(--rim); }
-.card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 11px 11px 0 0; background: radial-gradient(var(--s1), var(--s3) 72%); }
+.card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; padding: 12% 12% 8%; box-sizing: border-box; border-radius: 11px 11px 0 0; }
 .card.spell img, .detail .art.spell { mix-blend-mode: screen; }   /* 法术插图是黑底发光图,滤色去黑 */
 .card .cname { padding: 8px 6px 0; font: 900 var(--t-body)/1.2 var(--f-display); letter-spacing: .04em; text-shadow: 0 2px 0 var(--plum-line); }
 .card.in { border-color: #ffd27a; box-shadow: 0 0 0 2px #ffd27a, 0 4px 0 var(--plum-line); }
@@ -287,7 +287,7 @@ body {
 .side { display: grid; gap: 18px; position: sticky; top: 12px; }
 .detail { padding: 16px; display: grid; grid-template-columns: 150px 1fr; gap: 6px 16px; align-items: start; }
 .detail .art-wrap { position: relative; grid-row: span 3; }
-.detail .art { display: block; width: 150px; height: 150px; object-fit: contain; border-radius: 12px; background: radial-gradient(var(--s1), var(--s3) 72%); border: 3px solid var(--plum-line); }
+.detail .art { display: block; width: 150px; height: 150px; object-fit: contain; padding: 12px; box-sizing: border-box; border-radius: 12px; border: 3px solid var(--plum-line); }
 .detail h3 { margin: 2px 0 0; font: 900 var(--t-h2)/1.15 var(--f-display); letter-spacing: .06em; color: var(--ink-title); text-shadow: 0 3px 0 var(--plum-line); }
 .detail .type { color: var(--label); font: 900 var(--t-small)/1 var(--f-display); letter-spacing: .1em; text-shadow: 0 2px 0 var(--plum-line); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -299,7 +299,7 @@ body {
 .roster { padding: 16px; }
 .slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 6px 0 0 6px; }
 .dslot { position: relative; display: block; width: 100%; min-width: 0; aspect-ratio: 1; border-radius: 12px; border: 3px solid var(--plum-line); background: radial-gradient(var(--s1), var(--s3) 72%); box-shadow: 0 3px 0 var(--plum-line); cursor: pointer; padding: 0; }
-.dslot img { width: 100%; height: 100%; object-fit: contain; border-radius: 9px; }
+.dslot img { width: 100%; height: 100%; object-fit: contain; padding: 12%; box-sizing: border-box; border-radius: 9px; }
 .dslot.spell img { mix-blend-mode: screen; }
 .dslot .cost { top: -8px; left: -8px; width: 26px; height: 26px; font-size: var(--t-small); }
 .dslot.empty { border-style: dashed; border-color: color-mix(in srgb, var(--rim) 40%, transparent); background: color-mix(in srgb, var(--s3) 50%, transparent); box-shadow: none; cursor: default; }
@@ -347,6 +347,10 @@ body.theme-c {   /* C 锻铜:炭灰金属 + 青铜描边,更接近传统 RTS 的
 /* 卡片 / 选项:比面板暗一档的“凹槽”,选中才亮金 */
 .choice, .card { background: var(--s3); }
 .choice .name, .seg button, .diff .name { background: linear-gradient(180deg, var(--s1), var(--s2)); }
+/* 卡图底光放在容器上(不放在 img 上),法术图的滤色去黑才能透到底光 */
+.card { background: radial-gradient(circle at 50% 36%, var(--s1), var(--s3) 58%) !important; }
+.detail .art-wrap { border-radius: 12px; background: radial-gradient(circle at 50% 45%, var(--s1), var(--s3) 70%); }
+.dslot { background: radial-gradient(circle at 50% 45%, var(--s1), var(--s3) 70%); }
 </style>
 </head>
 <body>
