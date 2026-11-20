@@ -1,12 +1,13 @@
-// 菜单界面审计截图:无头 Chrome 依次打开标题 / 主页 / 备战 / 卡组 / 联机 / 图鉴 / 设置,
-// 每屏在桌面(1600×900)和手机(390×844)各截一张,并统计该屏实际渲染出来的字号 / 字重 / 字体
+// 菜单界面审计截图:无头 Chrome 依次打开主页 / 人机设置 / 联机设置 / 图鉴 / 设置,
+// 每屏在桌面(1600×900)和手机(390×844)各截一张(文件名带语言),并统计该屏实际渲染出来的字号 / 字重 / 字体
+// 以及这次页面加载实际下载的 woff2 字节数
 // 用法:PORT=8788 node tools/menu-shots.mjs <输出目录> [--lang=zh|en]
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const outDir = process.argv[2] || 'docs/graphics/ui-audit';
+const outDir = process.argv[2] || 'docs/graphics/ui-v1';
 const lang = (process.argv.find(a => a.startsWith('--lang=')) || '').slice(7) || 'zh';
 mkdirSync(outDir, { recursive: true });
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -32,14 +33,16 @@ const ev = async expr => (await cmd('Runtime.evaluate', { expression: expr, awai
 
 // 每屏:进入方式(在主页上执行的 JS)
 const SCREENS = [
-  ['title', null],
-  ['home', `document.querySelector('#btn-enter-game')?.click()`],
-  ['prepare', `document.querySelector('#btn-prepare').click()`],
-  ['deck', `document.querySelector('#btn-home-deck').click()`],
-  ['online', `document.querySelector('#btn-prepare').click(); setTimeout(()=>document.querySelector('#btn-online').click(), 300)`],
+  ['home', null],
+  ['setup-ai', `document.querySelector('#btn-start').click()`],
+  ['setup-online', `document.querySelector('#btn-home-online').click()`],
   ['codex', `document.querySelector('#btn-codex').click()`],
   ['settings', `document.querySelector('#btn-settings').click()`],
 ];
+// 当前菜单屏有没有横向溢出(手机上不允许横向滚动)
+const OVERFLOW_X = `[...document.querySelectorAll('.menu-screen')].some(s => s.style.display !== 'none' && s.scrollWidth > s.clientWidth + 1)`;
+// 这次页面加载实际下载的字体字节(woff2 切片)
+const FONT_BYTES = `performance.getEntriesByType('resource').filter(e => e.name.endsWith('.woff2')).reduce((a, e) => a + (e.encodedBodySize || e.transferSize), 0)`;
 // 统计当前可见文字的字号分布
 const TYPE_AUDIT = `(() => {
   const sizes = {}, fams = new Set(), weights = {};
@@ -59,19 +62,23 @@ const report = {};
 try {
   await connect();
   await cmd('Runtime.enable'); await cmd('Page.enable');
+  await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `try{localStorage.setItem('sg.lang','${lang}');localStorage.setItem('sg.firstMatchSeen','true');}catch{}` });
+  // 预热:第一次冷加载立绘较慢,先完整加载一遍再截图
+  await cmd('Page.navigate', { url: `http://localhost:${process.env.PORT || 8788}/` });
+  for (let i = 0; i < 480 && !(await ev(`!document.querySelector('#btn-codex')?.disabled`)); i++) await sleep(250);
   for (const [vw, vh, mobile, tag] of [[1600, 900, false, 'desktop'], [390, 844, true, 'mobile']]) {
     await cmd('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 1, mobile });
     for (const [name, open] of SCREENS) {
-      await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `try{localStorage.setItem('sg.lang','${lang}');localStorage.setItem('sg.firstMatchSeen','true');localStorage.setItem('sg.entered', ${name === 'title' ? "'false'" : "'true'"});}catch{}` });
       await cmd('Page.navigate', { url: `http://localhost:${process.env.PORT || 8788}/` });
-      for (let i = 0; i < 40 && !(await ev(`!document.querySelector('#btn-quick')?.disabled || getComputedStyle(document.querySelector('#title-screen')).display !== 'none'`)); i++) await sleep(250);
+      for (let i = 0; i < 160 && !(await ev(`!document.querySelector('#btn-codex')?.disabled`)); i++) await sleep(250);
       await sleep(800);
       if (open) { await ev(open); await sleep(1200); }
+      await ev('document.fonts.ready.then(() => true)');
       const shot = await cmd('Page.captureScreenshot', { format: 'png' });
-      writeFileSync(join(outDir, `${tag}-${name}.png`), Buffer.from(shot.result.data, 'base64'));
-      report[`${tag}-${name}`] = await ev(TYPE_AUDIT);
+      writeFileSync(join(outDir, `${tag}-${name}-${lang}.png`), Buffer.from(shot.result.data, 'base64'));
+      report[`${tag}-${name}`] = { ...await ev(TYPE_AUDIT), fontBytes: await ev(FONT_BYTES), overflowX: await ev(OVERFLOW_X) };
     }
   }
-  writeFileSync(join(outDir, 'type-audit.json'), JSON.stringify(report, null, 1));
-  console.log(Object.entries(report).map(([k, v]) => `${k}: ${Object.keys(v.sizes).length} sizes [${Object.keys(v.sizes).join(',')}] fonts=${v.fams.join('|')}`).join('\n'));
+  writeFileSync(join(outDir, `type-audit-${lang}.json`), JSON.stringify(report, null, 1));
+  console.log(Object.entries(report).map(([k, v]) => `${k}: ${Object.keys(v.sizes).length} sizes [${Object.keys(v.sizes).join(',')}] fonts=${v.fams.join('|')} woff2=${v.fontBytes}B${v.overflowX ? ' OVERFLOW-X' : ''}`).join('\n'));
 } finally { try { ws?.close(); } catch {} proc.kill(); }

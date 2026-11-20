@@ -1,0 +1,194 @@
+{
+ "desktop-home": {
+  "sizes": {
+   "16": 1,
+   "19": 3,
+   "22": 1,
+   "26": 1,
+   "34": 1,
+   "64": 1
+  },
+  "weights": {
+   "400": 1,
+   "900": 7
+  },
+  "fams": [
+   "\"PingFang SC\"",
+   "\"Noto Sans SC\""
+  ],
+  "fontBytes": 129444,
+  "overflowX": false
+ },
+ "desktop-setup-ai": {
+  "sizes": {
+   "16": 17,
+   "20": 4,
+   "22": 1,
+   "28": 2,
+   "44": 1
+  },
+  "weights": {
+   "400": 3,
+   "900": 22
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 318140,
+  "overflowX": false
+ },
+ "desktop-setup-online": {
+  "sizes": {
+   "16": 25,
+   "20": 1,
+   "22": 1,
+   "28": 2,
+   "44": 1
+  },
+  "weights": {
+   "400": 5,
+   "600": 2,
+   "900": 23
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 39520,
+  "overflowX": false
+ },
+ "desktop-codex": {
+  "sizes": {
+   "14": 12,
+   "16": 46,
+   "20": 2,
+   "22": 1,
+   "28": 2,
+   "44": 1
+  },
+  "weights": {
+   "400": 1,
+   "900": 63
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 35632,
+  "overflowX": false
+ },
+ "desktop-settings": {
+  "sizes": {
+   "16": 16,
+   "20": 5,
+   "44": 1
+  },
+  "weights": {
+   "900": 22
+  },
+  "fams": [
+   "\"Noto Sans SC\""
+  ],
+  "fontBytes": 43236,
+  "overflowX": false
+ },
+ "mobile-home": {
+  "sizes": {
+   "15": 1,
+   "17": 3,
+   "20": 1,
+   "22": 1,
+   "28": 1,
+   "64": 1
+  },
+  "weights": {
+   "400": 1,
+   "900": 7
+  },
+  "fams": [
+   "\"PingFang SC\"",
+   "\"Noto Sans SC\""
+  ],
+  "fontBytes": 1500,
+  "overflowX": false
+ },
+ "mobile-setup-ai": {
+  "sizes": {
+   "15": 9,
+   "16": 3,
+   "18": 4,
+   "20": 1,
+   "24": 1,
+   "30": 1
+  },
+  "weights": {
+   "400": 2,
+   "900": 17
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 4500,
+  "overflowX": false
+ },
+ "mobile-setup-online": {
+  "sizes": {
+   "15": 10,
+   "16": 4,
+   "18": 1,
+   "20": 1,
+   "24": 1,
+   "30": 1
+  },
+  "weights": {
+   "400": 2,
+   "900": 16
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 4800,
+  "overflowX": false
+ },
+ "mobile-codex": {
+  "sizes": {
+   "14": 13,
+   "15": 14,
+   "16": 8,
+   "18": 2,
+   "20": 1,
+   "22": 1,
+   "24": 1,
+   "30": 1
+  },
+  "weights": {
+   "400": 1,
+   "900": 40
+  },
+  "fams": [
+   "\"Noto Sans SC\"",
+   "\"PingFang SC\""
+  ],
+  "fontBytes": 4200,
+  "overflowX": false
+ },
+ "mobile-settings": {
+  "sizes": {
+   "15": 13,
+   "16": 3,
+   "18": 5,
+   "30": 1
+  },
+  "weights": {
+   "900": 22
+  },
+  "fams": [
+   "\"Noto Sans SC\""
+  ],
+  "fontBytes": 3300,
+  "overflowX": false
+ }
+}
