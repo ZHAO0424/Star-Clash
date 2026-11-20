@@ -16,12 +16,14 @@ import { MAP } from './map.js';
 
 // 手牌带:相对手牌行中心,前后 ±12cm、上下 ±10cm、左右超出两端 6cm 以内;相邻切换 1.2cm 滞回
 // 第十一轮实测:手自然垂在牌下方也要能选 → 向下放宽到 35cm、朝身体一侧放宽到 25cm(上方仍 10cm,往棋盘方向仍 12cm)
-export const HAND_BAND = { DEPTH: 0.12, TOWARD: 0.25, HEIGHT: 0.10, BELOW: 0.35, SIDE: 0.06, HYSTERESIS: 0.012 };
+// 第十二轮实测:要贴很近才能捏起 → 各方向再放宽(上 18cm、往棋盘 22cm、身体侧 30cm、下 40cm、两端外 12cm)
+export const HAND_BAND = { DEPTH: 0.22, TOWARD: 0.30, HEIGHT: 0.18, BELOW: 0.40, SIDE: 0.12, HYSTERESIS: 0.012 };
 // 抬起确认 7cm;确认后退回到 6cm 以内算"退回确认线"(1cm 滞回,确认线上手抖不会来回切取消)
 export const LIFT = { CONFIRM: 0.05, CANCEL: 0.04 };   // 第十一轮实测:7cm 太远 → 5cm(取消线仍低 1cm 防抖)
 // GX:手左右 ±15cm 覆盖场地半宽 4.8 格 → 32 格/米;GD:手前 / 上 20cm 推过部署区纵深 5.2 格 → 26 格/米;
 // UP:往上的位移按 0.8 计入纵深;EDGE:初始落点在近边往里 0.6 格;TAU:落点平滑时间常数(秒)
-export const DROP_GAIN = { GX: 32, GD: 26, UP: 0.8, EDGE: 0.6, TAU: 0.06 };
+// 第十二轮实测:纵深推得太快、太往前 → GD 26→17、往上抬算纵深的比例 0.8→0.5
+export const DROP_GAIN = { GX: 32, GD: 17, UP: 0.5, EDGE: 0.6, TAU: 0.06 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 

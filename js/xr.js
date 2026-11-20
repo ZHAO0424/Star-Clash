@@ -279,7 +279,7 @@ export class XRControls {
 
     // 强化面板
     this.upgradeGroup = new THREE.Group();
-    this.upgradeGroup.position.set(0, -0.24, -0.5);
+    this.upgradeGroup.position.set(0, -0.34, -0.5);   // 第十二轮实测:再低 10cm
     this.ui.add(this.upgradeGroup);
     this.upgrades = [];
     for (let i = 0; i < 3; i++) {
@@ -1541,7 +1541,9 @@ export class XRControls {
     const held = grab?.hand && grab.stage === 'held' && !grab.trash;
     const aiming = grab?.hand && grab.stage === 'aiming' && grab.hit;
     this.liftHint.mesh.visible = Boolean(held);
-    this.dropGhost.visible = this.dropLink.visible = Boolean(aiming);
+    // 第十二轮实测:落点上不要牌的虚影(只留落点标记 + 弧线);ghost 仍用来算弧线终点,只是不显示
+    this.dropGhost.visible = false;
+    this.dropLink.visible = Boolean(aiming);
     if (!grab?.hand) return;
     const mesh = this.cards[grab.idx].mesh;
     mesh.scale.setScalar(aiming ? HELD_AIM_SCALE : 1);

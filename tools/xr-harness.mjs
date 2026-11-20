@@ -78,6 +78,7 @@ try {
   const r = await ev(`(async () => {
     const { ARENA } = await import('/js/arena-dims.js');
     const { t } = await import('/js/i18n.js');
+    const { DROP_GAIN, HAND_BAND } = await import('/js/xr-drop.js');   // 页面里直接取常量
     const B = window.__bg, xr = B.xr, sc = B.scene;
     const V = xr.cardRow.position.constructor, Ray = xr.inputs[0].pressRay.constructor;
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -126,7 +127,8 @@ try {
     // 1) 手牌带外不选
     reset();
     // 第十一轮:带向下放宽到 35cm、朝身体放宽到 25cm → 带外点改到这两个边界之外;另验证手垂在牌下方 30cm 仍能选
-    const outs = { above: [0, 0.12, 0], below: [0, -0.37, 0], body: [0, 0.03, 0.27], board: [0, 0.03, -0.14], side: [cardX(4) + 0.07, 0.03, 0] };
+    const HB = HAND_BAND;
+    const outs = { above: [0, HB.HEIGHT + 0.02, 0], below: [0, -HB.BELOW - 0.02, 0], body: [0, 0.03, HB.TOWARD + 0.02], board: [0, 0.03, -HB.DEPTH - 0.02], side: [cardX(4) + HB.SIDE + 0.02, 0.03, 0] };
     const outHover = {};
     for (const [k, o] of Object.entries(outs)) { hand = o; openHand(); outHover[k] = st.hover; }
     hand = [0, 0.03, 0]; openHand(); outHover.center = st.hover;
@@ -134,7 +136,8 @@ try {
     check('wrong band → no selection', Object.entries(outHover).every(([k, h]) => (k === 'center' || k === 'lowCenter' ? h === 2 : h === -1)), { hover: outHover });
     // 2) 左右扫过:按顺序选中 0..4,切换点在交界外约 0.6cm(滞回)
     const seq = [], switches = [];
-    for (let x = -0.25; x <= 0.2501; x += 0.002) {
+    const sweep = cardX(4) + HAND_BAND.SIDE + 0.04;
+    for (let x = -sweep; x <= sweep + 1e-4; x += 0.002) {
       hand = [x, 0.03, 0.02]; openHand();
       if (seq[seq.length - 1] !== st.hover) { seq.push(st.hover); switches.push(r2(x * 100)); }
     }
@@ -167,7 +170,7 @@ try {
     openHand();
     check('lift ≥5cm confirms; marker starts at near edge', stage4 === 'aiming' && m0 && Math.abs(m0.z - 7.0) < 0.35,
       { m0, expectX: r2(Math.max(-4.8, Math.min(4.8, cardX(i) * 32))) });
-    check('move right/forward → marker right/deeper', m0 && m1 && m1.x > m0.x + 1 && m1.z < m0.z - 1 && visuals.ghost && visuals.arc && !visuals.liftHint, { m0, m1, expectDelta: { x: 1.6, z: -1.3 }, snapped: snapped1, visuals });
+    check('move right/forward → marker right/deeper', m0 && m1 && m1.x > m0.x + 1 && m1.z < m0.z - 1 && !visuals.ghost && visuals.arc && !visuals.liftHint, { m0, m1, expectDelta: { x: r2(0.05 * DROP_GAIN.GX), z: r2(-(0.06 + 0.018 * DROP_GAIN.UP) * DROP_GAIN.GD) }, snapped: snapped1, visuals });
     check('release → played at marker', played?.ok && Math.abs(played.x - hit1.x) < 1e-6 && Math.abs(played.z - hit1.z) < 1e-6 && handIds() !== before,
       { played: played && { x: r2(played.x), z: r2(played.z) } });
     // 5) 单位夹在己方部署区;退回确认线 = 取消(不出、不提示)
@@ -193,7 +196,7 @@ try {
       hand = [cardX(i), 0.03, 0]; openHand(); moveTo(hand, 1);
       moveTo([cardX(i), 0.11, -0.01], 10);
       const G = st.grab, h0 = G.confirm;
-      const target = new V(h0.x + (rock.x - G.origin.x0) / 32, h0.y, h0.z - (-rock.z - G.origin.d0) / 26);
+      const target = new V(h0.x + (rock.x - G.origin.x0) / DROP_GAIN.GX, h0.y, h0.z - (-rock.z - G.origin.d0) / DROP_GAIN.GD);
       for (let k = 0; k < 40; k++) xr.handInput(st, 0.01, xr.uiInner.localToWorld(target.clone()), 1 / 60);
       step(1);
       const snap = { rock: { x: r2(rock.x), z: r2(rock.z), r: rock.r }, aim: { x: r2(G.aim.x), z: r2(G.aim.z) }, marker: marker(), snapped: G.snapped, markerState: sc.deployMarker.state,
@@ -212,10 +215,10 @@ try {
       const spell = g().p.hand[si].id; before = handIds();
       hand = [cardX(si), 0.03, 0]; openHand(); moveTo(hand, 1);
       moveTo([cardX(si), 0.10, -0.02], 10);
-      moveTo([cardX(si), 0.10, -0.34], 30); hold(30);
+      moveTo([cardX(si), 0.10, -0.54], 40); hold(30);   // 前推 52cm:按 GD 足够推过中线
       const sm = marker(); const sh = { x: st.grab?.hit?.x, z: st.grab?.hit?.z };
       openHand();
-      check('spell can reach enemy half', sm && sm.z < 0 && played?.ok && Math.abs(played.z - sh.z) < 1e-6, { spell, marker: sm, expectZ: r2(7.0 - 0.32 * 26), played: played && { x: r2(played.x), z: r2(played.z) } });
+      check('spell can reach enemy half', sm && sm.z < 0 && played?.ok && Math.abs(played.z - sh.z) < 1e-6, { spell, marker: sm, expectZ: r2(7.0 - 0.52 * DROP_GAIN.GD), played: played && { x: r2(played.x), z: r2(played.z) } });
     } else check('spell can reach enemy half', false, { note: 'no spell in deck' });
     // 7) 回收区:没确认前把牌移到回收图标上松手 = 弃牌
     reset();

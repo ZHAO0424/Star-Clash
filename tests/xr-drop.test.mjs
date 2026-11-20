@@ -23,7 +23,7 @@ test('inHandBand / pickCardByHand:手牌带外不选,带内取左右最近', () 
   assert.equal(inHandBand(v(0, 0, 0), [null, null]), false);                      // 没有可选的牌
   // 不可选的牌(null)跳过,带宽按可选的牌算
   assert.equal(pickCardByHand(v(-0.05, 0, 0), [null, null, 0, 0.082, null]), 2);
-  assert.equal(pickCardByHand(v(-0.07, 0, 0), [null, null, 0, 0.082, null]), -1);
+  assert.equal(pickCardByHand(v(-HAND_BAND.SIDE - 0.005, 0, 0), [null, null, 0, 0.082, null]), -1);
 });
 
 test('pickCardByHand:相邻切换有 1.2cm 滞回', () => {
@@ -70,16 +70,16 @@ test('dropZone:单位夹在己方部署区,法术全场', () => {
   assert.deepEqual(SPELL, { x: [-4.8, 4.8], z: [-7.6, 7.6] });
 });
 
-test('dropFromHand:确认时落点在近边;左右 GX、前 / 上 GD(上 ×0.8)', () => {
+test('dropFromHand:确认时落点在近边;左右 GX、前 / 上 GD(上 × UP)', () => {
   const p0 = aim(v(0, 0.07, 0));
   near(p0.x, 0); near(p0.z, 7.0); assert.equal(p0.cancel, false);
   const r = aim(v(0.05, 0.07, 0));                  // 右 5cm → x + 1.6
   near(r.x, 1.6); near(r.z, 7.0);
-  const f = aim(v(0, 0.07, -0.1));                  // 前 10cm → 深 2.6 格
-  near(f.z, 7.0 - 2.6);
-  const u = aim(v(0, 0.17, 0));                     // 上 10cm → 深 2.08 格
-  near(u.z, 7.0 - 2.08);
-  const back = aim(v(0, 0.07, 0.03));               // 往回拉:落点拉回,但夹在近边
+  const f = aim(v(0, 0.07, -0.1));                  // 前 10cm → 深 0.1 × GD 格
+  near(f.z, 7.0 - 0.1 * DROP_GAIN.GD);
+  const u = aim(v(0, 0.17, 0));                     // 上 10cm → 深 0.1 × GD × UP 格
+  near(u.z, 7.0 - 0.1 * DROP_GAIN.GD * DROP_GAIN.UP);
+  const back = aim(v(0, 0.07, 0.05));               // 往回拉 5cm:落点拉回,但夹在近边
   near(back.z, 7.6);
 });
 
@@ -88,8 +88,8 @@ test('dropFromHand:单位夹在部署区,法术能推到对面半场', () => {
   near(far.x, 4.8); near(far.z, 2.4);               // 单位:夹在部署线
   const left = aim(v(-0.3, 0.07, 0));
   near(left.x, -4.8);
-  const spell = aim(v(0, 0.07, -0.4), SPELL);       // 法术同增益:7.0 − 10.4 = −3.4(敌方半场)
-  near(spell.z, 7.0 - 0.4 * DROP_GAIN.GD);
+  const spell = aim(v(0, 0.07, -0.5), SPELL);       // 法术同增益:前 50cm 推到敌方半场
+  near(spell.z, 7.0 - 0.5 * DROP_GAIN.GD);
   assert.ok(spell.z < 0);
   near(aim(v(0, 0.07, -1), SPELL).z, -7.6);         // 法术也夹在场内
 });
@@ -109,5 +109,5 @@ test('dropFromHand:UI 换到侧边时按 yaw 转回战场坐标再夹紧', () =>
   const p = dropFromHand({ grab, h0, h: h0, ...start, zone: SPELL, yaw });
   near(p.x, 4.2); near(p.z, 0);                     // 侧边(+x)近边往里 0.6 格
   const q = dropFromHand({ grab, h0, h: v(0, 0, -0.17), ...start, zone: SPELL, yaw });
-  near(q.x, 4.2 - 2.6);                             // 往前 = 朝 -x 推
+  near(q.x, 4.2 - 0.1 * DROP_GAIN.GD);               // 往前 = 朝 -x 推
 });
