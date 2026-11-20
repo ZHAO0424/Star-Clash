@@ -22,12 +22,13 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose, forwardLean } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose, forwardLean, nearestWithin, GRAB_RADIUS } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
 const PINCH_OFF = 0.038;     // > 3.8cm 视为松开(滞回,防抖)
-const GRAB_RADIUS = 0.06;    // 捏合点离卡牌中心 6cm 内可抓取
+// GRAB_RADIUS(xr-math.js):捏合点 12cm 内磁吸最近的牌,悬停高亮同一半径(第七轮,原 6cm / 高亮 7.8cm)
+const UPGRADE_PICK_RADIUS = 0.09;   // 强化面板近手点选半径(沿用原 6cm × 1.5)
 const DROP_MAX_HEIGHT = 0.25;// 捏合点离战场面 25cm 内才算落在战场上
 const CARD_W = 0.072, CARD_H = 0.1, CARD_GAP = 0.082;
 const BOARD_SCALES = { small: 0.038, standard: 0.046, large: 0.054 };   // 第七轮:原 0.044 / 0.052 / 0.060
@@ -46,9 +47,9 @@ const CARD_ROW_SCALE = 0.8;  // 手牌行整体缩放(牌、间距、下一张�
 const CARD_ROW_EXTENT = { top: 0.05 * CARD_ROW_SCALE, bottom: 0.127 * CARD_ROW_SCALE };
 const CARD_ROW_SMOOTH = 0.2; // 手牌行自适应位置 / 倾角的平滑时间常数(秒)
 const HAND_OPACITY = { low: 0.2, mid: 0.35, high: 0.55 };
-const RAY_NEAR = 0.15;       // 手离按钮 / 手牌 15cm 内进入近手戳、抓
+const RAY_NEAR = 0.15;       // 手离按钮 15cm 内进入近手戳(手牌改用 GRAB_RADIUS 磁吸,第七轮)
 const RAY_FAR = 0.22;        // 离开 22cm 才回到射线(回差,手在边界晃动时不来回跳)
-const RAY_DWELL = 0.12;      // 射线在可点目标上悬停满 0.12s,捏合才算点击(扫过按钮时顺手一捏不算)
+const RAY_DWELL = 0.12;      // 射线在按钮上悬停满 0.12s,捏合才算点击(扫过按钮时顺手一捏不算);抓手牌不需要(第七轮)
 
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 
@@ -1121,12 +1122,13 @@ export class XRControls {
   }
 
 
-  // 每帧给两只手分配指针:近手(离面板 / 手牌 15cm 内,离开 22cm 才算远)、近手抓着牌、手没举到头前区域的不指;
+  // 每帧给两只手分配指针:近手(离按钮面板 15cm 内,离开 22cm 才算远;或捏合点 12cm 内有手牌可磁吸)、
+  // 近手抓着牌、手没举到头前区域的不指(射线指着手牌时例外:手牌任意距离都能用射线选,第七轮);
   // 剩下的交给 HandArbiter 选一只。只有可点的目标(rayPanels + 手心菜单)才让光标贴上、射线淡入,
   // 信息面板(HUD、提示、说明条)不吸射线;空指时光标圈和射线都隐藏(来回晃"找光标"时例外)
   updatePointers(dt, game) {
     const panels = this.rayPanels(game);
-    const close = [...panels, this.trash];
+    const close = panels.filter(p => !this.cards.includes(p));   // 手牌不走 15/22cm 近手区,改用磁吸半径
     const menuOpen = this.palmMenu.open;
     const camera = this.renderer.xr.getCamera();
     const head = { pos: camera.getWorldPosition(new THREE.Vector3()), q: camera.getWorldQuaternion(new THREE.Quaternion()) };
@@ -1136,10 +1138,11 @@ export class XRControls {
       const menuNear = menuOpen && st.side !== 'left' && st.handPoint
         && this.palmMenu.mesh.position.distanceTo(st.handPoint) < RAY_NEAR;
       const margin = st.near ? RAY_FAR : RAY_NEAR;
+      const magnet = Boolean(st.handPoint) && this.pick(this.cards, st.handPoint) >= 0;   // 磁吸优先于射线
       st.near = st.grab ? !st.grab.viaRay
-        : Boolean(st.handPoint && (this.nearPanels(st.handPoint, close, margin) || menuNear));
+        : Boolean(st.handPoint && (magnet || this.nearPanels(st.handPoint, close, margin) || menuNear));
       const side = st.side === 'left' || st.side === 'right' ? st.side : st.i ? 'right' : 'left';
-      const raised = st.ray && (st.grab?.viaRay
+      const raised = st.ray && (st.grab?.viaRay || this.pick(this.cards, null, st.ray) >= 0
         || inPointingZone(st.ray.origin.clone().sub(head.pos).applyQuaternion(head.q.clone().invert())));
       if (st.ray && raised && !st.near && !this.rayBlocked(st)) {
         const { x, y, z } = st.ray.origin;   // 拷一份:ray 是每帧原地更新的,arbiter 要存上一帧的位置
@@ -1203,7 +1206,11 @@ export class XRControls {
       if (dist > PINCH_OFF) st.waitForOpen = false;
     } else if (!st.pinched && dist < PINCH_ON) {
       st.pinched = true;
-      if (st.rayActive) { if (st.pressDwell >= RAY_DWELL) this.press(st, null, st.pressRay, true); }
+      if (st.rayActive) {
+        // 按钮要悬停满 RAY_DWELL;射线指着手牌直接抓(第七轮),用捏合前一帧的射线快照
+        if (st.pressDwell >= RAY_DWELL) this.press(st, null, st.pressRay, true);
+        else if (this.pick(this.cards, null, st.pressRay) >= 0) this.press(st, null, st.pressRay, true, true);
+      }
       else this.press(st, point, null);
     } else if (st.pinched && dist > PINCH_OFF) {
       st.pinched = false;
@@ -1217,7 +1224,7 @@ export class XRControls {
       const game = this.cb.getGame();
       st.hover = !['battle', 'prep'].includes(game?.phase) ? -1
         : st.rayActive && st.ray ? this.pick(this.cards, null, st.ray)
-        : this.pick(this.cards, point, null, GRAB_RADIUS * 1.3);
+        : this.pick(this.cards, point, null, GRAB_RADIUS);   // 与抓取同半径:亮了就抓得起
     }
   }
 
@@ -1235,30 +1242,26 @@ export class XRControls {
       const hit = this.raycaster.intersectObjects(meshes, false)[0];
       return hit ? hit.object.userData.idx : -1;
     }
-    let best = -1, bestD = radius;
-    for (const m of meshes) {
-      const d = m.getWorldPosition(new THREE.Vector3()).distanceTo(point);
-      if (d < bestD) { bestD = d; best = m.userData.idx; }
-    }
-    return best;
+    const best = nearestWithin(meshes.map(m => m.getWorldPosition(new THREE.Vector3())), point, radius);
+    return best < 0 ? -1 : meshes[best].userData.idx;
   }
 
-  // fromHandRay:手部射线点的(抓到的牌之后跟着射线拖)
-  press(st, point, ray, fromHandRay = false) {
+  // fromHandRay:手部射线点的(抓到的牌之后跟着射线拖);cardsOnly:只抓手牌,不点按钮(射线没悬停够时)
+  press(st, point, ray, fromHandRay = false, cardsOnly = false) {
     if (!this.canUseInput()) return;
     if (st.isHand && st.side === 'left' && this.palmMenu.open) return;   // 菜单出现时左手捏合被菜单吃掉
-    if (fromHandRay) {
+    if (fromHandRay && !cardsOnly) {
       const id = this.palmMenu.pick(ray);
       if (id !== null) { if (id) this.palmAction(id); return; }
     }
-    if (this.settings.visible) {
+    if (this.settings.visible && !cardsOnly) {
       const target = this.lobbyTarget(this.settingsButtons, point, ray);
       if (target) { this.settingsAction(target.action); return; }
     }
     const game = this.cb.getGame();
     if (game && !this.ui.visible) return;
     if (!game) {
-      if (!this.lobby.visible) return;
+      if (!this.lobby.visible || cardsOnly) return;
       if (this.guideIndex >= 0) {
         const action = this.lobbyTarget(this.guideButtons, point, ray)?.action;
         if (action === 'previous' && this.guideIndex > 0) this.guideIndex--;
@@ -1273,12 +1276,13 @@ export class XRControls {
       return;
     }
     if (game.phase === 'upgrade') {
-      if (game.upgrade?.picked?.p) return;
-      const i = this.pick(this.upgrades, point, ray, GRAB_RADIUS * 1.5);
+      if (game.upgrade?.picked?.p || cardsOnly) return;
+      const i = this.pick(this.upgrades, point, ray, UPGRADE_PICK_RADIUS);
       if (i >= 0) this.cb.onUpgrade(i);
       return;
     }
     if (game.phase === 'end') {
+      if (cardsOnly) return;
       if (this.lobbyReturn.mesh.visible && this.lobbyTarget([this.lobbyReturn], point, ray)) {
         this.cb.onLobbyAction('home');
         return;
@@ -1291,7 +1295,7 @@ export class XRControls {
     }
     const guide = this.cb.getFirstMatch?.();
     if (guide && this.firstMatchControls.visible) {
-      const action = this.lobbyTarget(this.firstMatchButtons, point, ray)?.action;
+      const action = cardsOnly ? null : this.lobbyTarget(this.firstMatchButtons, point, ray)?.action;
       if (action === 'skip' || (action === 'start' && guide.step === 'core')) {
         this.pauseInput();
         this.cb.onFirstMatchDone?.();
@@ -1312,7 +1316,7 @@ export class XRControls {
     const idx = this.pick(this.cards, point, ray);
     if (idx < 0 || (guide && game.p.hand[idx]?.type !== 'unit')) return;
     if (this.inputs.some(o => o !== st && o.grab && o.grab.idx === idx)) return;
-    if (game.phase === 'battle' && !game.canPlay('p', idx)) { this.cb.onToast?.(t('tNoMana')); return; }
+    // 买不起的牌也能拿起来比划,落下时 release 再提示「法力不足」并退回(第七轮,批注 C)
     this.cards[idx].returning = null;
     st.grab = { idx, id: game.p.hand[idx].id, game, hit: null, viaRay: fromHandRay };   // 记住所属对局:换局后松手不能在新局里出牌   // 记住卡牌 id:捏住期间手牌可能被快照校正而换位
   }
