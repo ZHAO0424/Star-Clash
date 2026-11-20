@@ -28,6 +28,7 @@
   :root { --t-display: 40px; --t-h1: 30px; --t-h2: 22px; --t-h3: 18px; --t-body: 15px; --t-over: 12px; }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg-0); color: var(--ink-1); font: 400 var(--t-body)/1.55 var(--f-body);
@@ -37,7 +38,7 @@ body {
 
 /* 背景:主视觉 + 压暗(二级页压得更暗,突出内容) */
 .screen { position: fixed; inset: 0; display: none; overflow: auto;
-  background: linear-gradient(90deg, #0d0a12f2 0%, #0d0a12b8 34%, #0d0a1230 60%, #0d0a1200 100%), url(../assets/ui/bg_menu.webp) center / cover no-repeat, var(--bg-0); }
+  background: radial-gradient(ellipse 34% 62% at 50% 56%, #0d0a12cc 0%, #0d0a1299 55%, #0d0a1200 100%), linear-gradient(#0d0a1266, #0d0a1200 30%, #0d0a1200 70%, #0d0a12cc), url(../assets/ui/bg_menu.webp) center / cover no-repeat, var(--bg-0); }
 .screen.sub { background: radial-gradient(ellipse at 50% 0%, #2a223366, #0d0a12f0 70%), linear-gradient(#0d0a12d9, #0d0a12f2), url(../assets/ui/bg_menu.webp) center / cover no-repeat, var(--bg-0); }
 .screen.on { display: block; animation: enter .22s var(--ease); }
 @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
@@ -79,20 +80,25 @@ body {
 .btn-text:hover { color: var(--gold-hi); }
 .btn-text:hover::after { transform: scaleX(1); }
 
-/* ── 主页 ── */
-.home { min-height: 100%; display: grid; grid-template-columns: minmax(340px, 420px) 1fr; padding: 48px 0 40px 72px; }
-.command { align-self: center; padding: 34px 30px 26px; display: grid; gap: 12px; }
-.command .logo { width: 100%; max-width: 340px; margin: -8px auto 10px; display: block; filter: drop-shadow(0 8px 18px #000c); }
-.start { display: grid; gap: 4px; text-align: left; padding: 20px 26px 18px; }
-.start .label { font-size: var(--t-h1); letter-spacing: .14em; display: flex; justify-content: space-between; align-items: center; }
-.start .label::after { content: '▸'; font-size: .7em; }
-.start .config { font: 600 var(--t-small)/1.3 var(--f-body); letter-spacing: 0; color: #4a3318; text-shadow: none; display: flex; align-items: center; gap: 6px; }
-.start .config img { width: 20px; height: 20px; }
-.command .btn-secondary { text-align: left; }
-.divider { height: 1px; background: linear-gradient(90deg, transparent, #e9c27a66, transparent); margin: 6px 0; }
-.xr-row { display: flex; align-items: center; gap: 12px; }
-.xr-row .btn-secondary { flex: 0 0 auto; border-color: #9a86ff99; }
-.xr-row .btn-secondary:hover { color: #d9d0ff; border-color: #b6a8ff; box-shadow: inset 0 0 18px #9a86ff33, 0 0 0 2px #0d0a12; }
+/* ── 主页:居中对称,呼应主视觉的中轴(左右两侧立绘对称、中间是晶石祭坛)── */
+.home { min-height: 100%; display: grid; justify-items: center; align-content: center; gap: 18px; padding: 28px 16px 64px; }
+.home .logo { width: min(520px, 84vw); display: block; filter: drop-shadow(0 10px 24px #000d); margin-bottom: -4px; }
+.command { width: min(440px, 100%); padding: 28px 28px 22px; display: grid; gap: 12px; text-align: center;
+  background: linear-gradient(180deg, #221b2ae6, #15111bf0); backdrop-filter: blur(4px); }
+.mode { display: grid; gap: 4px; justify-items: center; padding: 18px 24px 16px; }
+.mode .label { font-size: var(--t-h1); letter-spacing: .22em; padding-left: .22em; }
+.mode .config { font: 600 var(--t-small)/1.3 var(--f-body); letter-spacing: 0; display: flex; align-items: center; gap: 6px; }
+.mode .config img { width: 20px; height: 20px; }
+.btn-primary.mode .config { color: #4a3318; text-shadow: none; }
+.btn-secondary.mode { padding: 14px 24px 13px; }
+.btn-secondary.mode .label { font-size: var(--t-h2); }
+.btn-secondary.mode .config { color: var(--ink-2); }
+.minor { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.minor .btn-secondary { padding: 12px 0; font-size: var(--t-body); }
+.divider { height: 1px; background: linear-gradient(90deg, transparent, #e9c27a66, transparent); margin: 4px 0; }
+.xr-link { justify-self: center; display: inline-flex; align-items: center; gap: 8px; color: #c9bfff; }
+.xr-link:hover { color: #e6e0ff; }
+.xr-link::after { background: #9a86ff; }
 .muted { color: var(--ink-3); font-size: var(--t-small); }
 .foot { position: fixed; right: 24px; bottom: 14px; color: var(--ink-3); font-size: var(--t-caption); letter-spacing: .08em; }
 .tools { position: fixed; top: 20px; right: 24px; display: flex; gap: 8px; }
@@ -199,8 +205,7 @@ body {
 
 /* ── 手机 ── */
 @media (max-width: 720px) {
-  .home { grid-template-columns: 1fr; padding: 24px 16px 70px; }
-  .command { padding: 26px 18px 20px; }
+  .command { padding: 22px 16px 18px; }
   .page { padding: 16px 16px 140px; }
   .topbar h1 { letter-spacing: .16em; }
   .setup, .deck { grid-template-columns: 1fr; }
@@ -221,26 +226,28 @@ body {
 <!-- ═════════ 主页 ═════════ -->
 <section class="screen on" id="s-home">
   <div class="home">
-    <div class="command frame">
+    <img class="logo" src="../assets/ui/brand/logo-zh.webp" alt="星轨对决">
+    <nav class="command frame" aria-label="主菜单">
       <span class="corners"><i></i><i></i><i></i><i></i></span>
-      <img class="logo" src="../assets/ui/brand/logo-zh.webp" alt="星轨对决">
-      <button class="btn btn-primary start" data-go="s-setup" title="视觉稿:实际为直接开局">
+      <button class="btn btn-primary mode" data-go="s-setup" data-mode="ai">
         <span class="label">开始游戏</span>
-        <span class="config"><img src="../assets/emblems/emblem_steel.webp" alt="">钢铁联盟 · 随机战场 · 普通电脑</span>
+        <span class="config"><img src="../assets/emblems/emblem_steel.webp" alt="">人机对战 · 钢铁联盟 · 普通</span>
       </button>
-      <button class="btn btn-secondary" data-go="s-setup">对局设置</button>
-      <button class="btn btn-secondary" data-go="s-deck">卡组</button>
-      <button class="btn btn-secondary">图鉴</button>
-      <button class="btn btn-secondary" data-go="s-settings">设置</button>
+      <button class="btn btn-secondary mode" data-go="s-setup" data-mode="online">
+        <span class="label">联机游戏</span>
+        <span class="config">和好友对战 · 建房或输入房号</span>
+      </button>
       <div class="divider"></div>
-      <div class="xr-row">
-        <button class="btn btn-secondary">◈ 空间大厅</button>
-        <span class="muted">已检测到 XR 设备</span>
+      <div class="minor">
+        <button class="btn btn-secondary" data-go="s-deck">卡组</button>
+        <button class="btn btn-secondary">图鉴</button>
+        <button class="btn btn-secondary" data-go="s-settings">设置</button>
       </div>
-    </div>
+      <button class="btn btn-text xr-link">◈ 进入空间大厅（XR）</button>
+    </nav>
   </div>
   <div class="tools"><button class="icon-btn" title="音效">🔊</button></div>
-  <div class="foot">STAR CLASH · 视觉稿 v0.1</div>
+  <div class="foot">STAR CLASH · 视觉稿 v0.2</div>
 </section>
 
 <!-- ═════════ 对局设置(原备战 + 联机)═════════ -->
@@ -248,7 +255,7 @@ body {
   <div class="page">
     <header class="topbar">
       <div><button class="btn btn-text" data-go="s-home">‹ 返回</button></div>
-      <h1>对局设置</h1>
+      <h1 id="setup-title">人机对战</h1>
       <div class="right"><button class="icon-btn" title="音效">🔊</button></div>
     </header>
     <div class="setup">
@@ -262,11 +269,8 @@ body {
         </section>
         <section class="slot frame">
           <span class="corners"><i></i><i></i><i></i><i></i></span>
-          <h2 class="over">对手</h2>
-          <div class="opp-row">
-            <div class="seg" id="opp"><button class="sel" data-v="ai">电脑</button><button data-v="online">联机好友</button></div>
-            <span class="muted" id="opp-hint">与电脑对战，难度随时可改</span>
-          </div>
+          <h2 class="over" id="opp-title">对手 · 电脑</h2>
+          <p class="muted" id="opp-hint" style="margin:0"></p>
           <div class="diffs" id="diffs">
             <button class="choice diff"><span class="name">简单</span><small>适合熟悉卡牌</small></button>
             <button class="choice diff sel"><span class="name">普通</span><small>会补位、会拆塔</small></button>
@@ -356,7 +360,7 @@ body {
 </section>
 
 <nav class="mock-nav" id="mock-nav"><span>视觉稿</span>
-  <button data-go="s-home" class="sel">主页</button><button data-go="s-setup">对局设置</button><button data-go="s-deck">卡组</button><button data-go="s-settings">设置</button>
+  <button data-go="s-home" class="sel">主页</button><button data-go="s-setup" data-mode="ai">人机设置</button><button data-go="s-setup" data-mode="online">联机设置</button><button data-go="s-deck">卡组</button><button data-go="s-settings">设置</button>
 </nav>
 
 <script>
@@ -388,10 +392,14 @@ let fac = FACTIONS[0], map = MAPS[0], opp = 'ai', deck = [...PRESET];
 
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
-  document.querySelectorAll('#mock-nav button').forEach(b => b.classList.toggle('sel', b.dataset.go === id));
+  document.querySelectorAll('#mock-nav button').forEach(b => b.classList.toggle('sel', b.dataset.go === id && (!b.dataset.mode || b.dataset.mode === opp)));
   scrollTo(0, 0);
 }
-document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-go]'); if (!b) return;
+  if (b.dataset.mode) { opp = b.dataset.mode; renderSetup(); }   // 主页两个入口进同一个设置页,模式不同
+  go(b.dataset.go);
+});
 
 function renderSetup() {
   $('#factions').innerHTML = FACTIONS.map(f => `<button class="choice${f === fac ? ' sel' : ''}" style="--fc:${f.color}" data-f="${f.id}">
@@ -404,15 +412,15 @@ function renderSetup() {
   $('#map-img').src = map.img || `../assets/scenes/${map.id}/concept.webp`;
   $('#map-name').textContent = map.name; $('#map-desc').textContent = map.desc;
   const online = opp === 'online';
+  $('#setup-title').textContent = online ? '联机对战' : '人机对战';
+  $('#opp-title').textContent = online ? '对手 · 好友' : '对手 · 电脑';
   $('#diffs').hidden = online; $('#online').classList.toggle('on', online); $('#board').hidden = !online;
-  $('#opp-hint').textContent = online ? '建房后把房号发给好友，或输入好友的房号' : '与电脑对战，难度随时可改';
+  $('#opp-hint').textContent = online ? '建房后把房号发给好友；或者输入好友的房号加入' : '选择电脑难度';
   $('#go').textContent = online ? '创建房间' : '开　战';
   $('#go-hint').textContent = online ? `${fac.name} · ${map.name} · 等待好友加入` : `${fac.name} 对阵 随机势力 · ${map.name} · 普通`;
-  document.querySelectorAll('#opp button').forEach(b => b.classList.toggle('sel', b.dataset.v === opp));
 }
 $('#factions').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { fac = FACTIONS.find(f => f.id === b.dataset.f); renderSetup(); } });
 $('#maps').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { map = MAPS.find(m => m.id === b.dataset.m); renderSetup(); } });
-$('#opp').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) { opp = b.dataset.v; renderSetup(); } });
 $('#diffs').addEventListener('click', e => { const b = e.target.closest('.diff'); if (b) { document.querySelectorAll('.diff').forEach(d => d.classList.toggle('sel', d === b)); } });
 
 function renderDeck() {
@@ -438,7 +446,7 @@ document.querySelectorAll('#s-settings .seg').forEach(seg => seg.addEventListene
   const b = e.target.closest('button'); if (b) seg.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
 }));
 renderSetup(); renderDeck();
-const start = new URLSearchParams(location.search).get('s'); if (start) go(start);
+const q = new URLSearchParams(location.search); if (q.get('m')) { opp = q.get('m'); renderSetup(); } if (q.get('s')) go(q.get('s'));
 </script>
 </body>
 </html>
