@@ -22,14 +22,16 @@ import { HandRay } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
-import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose, forwardLean, nearestWithin, GRAB_RADIUS } from './xr-math.js';
+import { RIG, UI_SIDE, uiSector, wrapAngle, inPointingZone, cardRowPose, forwardLean, nearestWithin, GRAB_RADIUS, chooseDrop } from './xr-math.js';
 import { coreStatus, t, getLang, cardName, cardDesc, factionName, tagName, upgradeText } from './i18n.js';
 
 const PINCH_ON = 0.022;      // 指尖距离 < 2.2cm 视为捏合
 const PINCH_OFF = 0.038;     // > 3.8cm 视为松开(滞回,防抖)
 // GRAB_RADIUS(xr-math.js):捏合点 12cm 内磁吸最近的牌,悬停高亮同一半径(第七轮,原 6cm / 高亮 7.8cm)
 const UPGRADE_PICK_RADIUS = 0.09;   // 强化面板近手点选半径(沿用原 6cm × 1.5)
-const DROP_MAX_HEIGHT = 0.25;// 捏合点离战场面 25cm 内才算落在战场上
+const DROP_MAX_HEIGHT = 0.45;// 捏合点离战场面 45cm 内才算落在战场上(第七轮:手牌行抬高到台面上方约 28cm,原 25cm)
+const OUT_HINT_DELAY_MS = 300;  // 拖着牌连续 0.3s 没落点才显示「超出战场」
+const PUT_BACK_RADIUS = 0.06;// 松手时牌(近手)/ 射线离它原来的槽位 6cm 内 = 放回去,静默退回,不提示
 const CARD_W = 0.072, CARD_H = 0.1, CARD_GAP = 0.082;
 const BOARD_SCALES = { small: 0.038, standard: 0.046, large: 0.054 };   // 第七轮:原 0.044 / 0.052 / 0.060
 const BOARD_CENTER_DISTANCE = 0.85;   // 战场中心离头的水平距离(第七轮:原 0.72)
@@ -950,6 +952,13 @@ export class XRControls {
         radius: previewRadius(card), valid: !reason,
       });
       if (reason) this.showPlacementHint(reason, hit.point);
+      // 没有落点(出界 / 太高 / 射线没打到台面):拖离原槽位、连续 0.3s 没落点后提示「超出战场」,不再静默(批注 P2-4);
+      // 等 0.3s 是为了从手牌行伸向棋盘的途中不闪红字
+      const out = !hit && !this.nearHome(grab);
+      grab.outSince = out ? grab.outSince ?? performance.now() : null;
+      if (out && performance.now() - grab.outSince > OUT_HINT_DELAY_MS) {
+        this.showPlacementHint('xrOutOfArena', this.cards[grab.idx].mesh.getWorldPosition(new THREE.Vector3()));
+      }
     } else {
       const guide = this.cb.getFirstMatch?.();
       const starter = guide?.step === 'deploy' && game.p.hand.find(card => card.id === guide.cardId);
@@ -1086,7 +1095,7 @@ export class XRControls {
 
   loseHandTracking(st) {
     st.waitForOpen ||= st.pinched || Boolean(st.grab);
-    this.release(st, true);
+    this.release(st, false, true);   // 不直接取消:150ms 内有合法落点就照出(第七轮,批注 P2-2)
     st.pinched = false;
     st.hover = -1;
     st.handPoint = null;
@@ -1219,6 +1228,9 @@ export class XRControls {
       this.release(st, !ready);
     } else if (st.pinched && st.grab) {
       this.dragHand(st, point);
+      // 射线拖牌:手指还捏紧时记下落点;开始张开(进入 2.2–3.8cm 回差带)后射线会跳,松手优先用这个(批注 P2-3)
+      const g = st.grab;
+      if (g?.viaRay && dist < PINCH_ON) g.firm = { hit: g.hit, valid: g.valid, at: performance.now() };
     }
     if (!st.pinched) {
       const game = this.cb.getGame();
@@ -1341,6 +1353,25 @@ export class XRControls {
     g.from = point.clone();
     const aim = point.clone().add(g.lean);
     g.hit = this.snapPlacement(g, (!g.trash && h > -0.05 && h < DROP_MAX_HEIGHT) ? this.bs.worldPointToField(aim) : null);
+    this.trackDrop(g);
+  }
+
+  // 记录落点是否合法(在战场内且 deployBlockReason 为空;法力不算),合法就刷新"最后合法落点"(批注 P2-1)
+  trackDrop(g) {
+    const game = this.cb.getGame();
+    const card = game?.p.hand.find(c => c.id === g.id);
+    g.valid = Boolean(g.hit && card && !game.deployBlockReason('p', card, g.hit.x, g.hit.z));
+    if (g.valid) g.lastValid = { hit: g.hit, at: performance.now() };
+  }
+
+  // 牌是不是被放回了原来的槽位附近(近手看牌的位置,射线看射线离槽位多近):是就当"不出了",静默退回
+  nearHome(g) {
+    const p = this.cards[g.idx];
+    const home = this.cardRow.localToWorld(p.home.clone());
+    const at = g.lastRay   // 射线 / 手柄拖过的牌有 lastRay
+      ? g.lastRay.closestPointToPoint(home, new THREE.Vector3())
+      : p.mesh.getWorldPosition(new THREE.Vector3());
+    return at.distanceTo(home) < PUT_BACK_RADIUS;
   }
 
   // 落点吸附:单位 / 建筑被岩石、墙、建筑挡住时就近找空位(game.nearestDeploySpot);装甲维修吸附受伤单位
@@ -1370,6 +1401,8 @@ export class XRControls {
     const mesh = this.cards[g.idx].mesh;
     g.trash = this.trash.mesh.visible && this.rayHits(this.trash.mesh, ray);
     g.hit = g.trash ? null : this.snapPlacement(g, this.bs.rayToField(ray));
+    g.lastRay = ray.clone();
+    this.trackDrop(g);
     const target = g.hit
       ? g.hit.point.clone().add(new THREE.Vector3(0, 0.03, 0))
       : ray.origin.clone().addScaledVector(ray.direction, 0.4);
@@ -1383,15 +1416,19 @@ export class XRControls {
     return new THREE.Ray(origin, direction);
   }
 
-  release(st, cancel = false) {
+  // lost:手部追踪丢失(手指张开时关节常短暂丢失)——不当取消,按 chooseDrop 的宽限规则决定出不出
+  release(st, cancel = false, lost = false) {
     const g = st.grab;
     if (!g) return;
     st.grab = null;
     const p = this.cards[g.idx];
     const game = this.cb.getGame();
-    if (!cancel && this.canUseInput() && game === g.game && game?.phase === 'prep') {   // 准备阶段:松手不出牌,牌飞回并提示
+    const back = key => {   // 牌飞回手牌行;不出牌一定说明原因(放回原槽位除外)
       p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
-      if (g.hit) this.cb.onToast?.(t('tPrep'));
+      if (key) this.cb.onToast?.(t(key));
+    };
+    if (!cancel && this.canUseInput() && game === g.game && game?.phase === 'prep') {   // 准备阶段:松手不出牌,牌飞回并提示
+      back(g.hit ? 'tPrep' : lost ? 'tHandLost' : this.nearHome(g) ? null : 'tOutOfArena');
       return;
     }
     if (cancel || !this.canUseInput() || game !== g.game || game?.phase !== 'battle') {
@@ -1400,20 +1437,23 @@ export class XRControls {
     }
     const idx = game.p.hand.findIndex(c => c.id === g.id);   // 按 id 重新定位;牌已不在手里就取消
     const card = game.p.hand[idx];
+    if (card && g.trash && lost) { back('tHandLost'); return; }   // 追踪丢失时不弃牌(弃牌要花费)
     if (!card || g.trash) {
       p.mesh.position.copy(p.home);
       if (card) this.cb.onDiscard?.(idx);
       this.cardSig = '';
       return;
     }
-    if (!g.hit) {   // 落在战场外 = 取消出牌:牌飞回手牌行
-      p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
+    // 松手用哪个落点:射线捏紧快照 → 当前合法 → 150ms 内最后合法 → 不出(xr-math.js chooseDrop,批注 P2)
+    const drop = chooseDrop({ current: lost ? null : { hit: g.hit, valid: g.valid }, firm: g.firm, lastValid: g.lastValid, now: performance.now() });
+    const hit = drop.hit;
+    if (!hit) {   // 落在战场外 = 取消出牌:牌飞回手牌行
+      back(lost ? 'tHandLost' : this.nearHome(g) ? null : 'tOutOfArena');
       return;
     }
-    const reason = !game.canPlay('p', idx) ? 'tNoMana' : game.deployBlockReason('p', card, g.hit.x, g.hit.z);
-    if (reason || !this.cb.onPlay(idx, g.hit.x, g.hit.z)) {
-      p.returning = { from: p.mesh.position.clone(), elapsed: 0 };
-      if (reason) this.cb.onToast?.(t(reason));
+    const reason = !game.canPlay('p', idx) ? 'tNoMana' : game.deployBlockReason('p', card, hit.x, hit.z);
+    if (reason || drop.from === 'blocked' || !this.cb.onPlay(idx, hit.x, hit.z)) {
+      back(reason ?? (drop.from === 'blocked' ? 'tOutOfArena' : null));
       return;
     }
     p.mesh.position.copy(p.home);
