@@ -41,3 +41,53 @@
 - 单测：选牌滞回、手牌带外不选、确认阈值、映射增益与夹紧（单位 / 法术）、取消（确认前松手 / 退回确认线）。
 - `tools/xr-harness.mjs` 增加新流程的脚本化检查（模拟手位序列 → 断言出牌位置）。
 - 眼镜实测（用户）：连续 20 张，记录误选、取消、落点偏差的手感；GX / GD / 7cm 阈值按反馈调。
+
+## 6. 落地（2026-11-20）
+
+### 实现了什么
+- **纯函数** `js/xr-drop.js`（单测 `tests/xr-drop.test.mjs`，9 项）：`dropZone` / `inHandBand` / `pickCardByHand` / `liftAmount` / `liftProgress` / `viewToField` / `dropStart` / `dropFromHand`。
+- **坐标系**：手位、手牌行都在 `uiInner` 本地坐标（"视图坐标"，UI 换边后跟着转，永远是玩家视角）里比较；落点先在"视图对齐的战场坐标"（u 左右、v 纵深，远离玩家为正）里算，再按 `uiSide.angle`（`viewToField`）转回战场坐标、夹紧。换到侧边时近边取战场半宽。
+- **`js/xr.js` 手部状态机**：idle → select（`cardBand` + `pickCardByHand`，`st.hover`）→ held（`grabCard(st, idx, true)`，`grab.stage = 'held'`，牌跟手、可拖到回收区）→ aiming（`holdCard`：抬起 ≥7cm 确认，记下确认手位、`dropStart`、`dropZone`；之后每帧 `dropFromHand` → τ 平滑 → `nearestDeploySpot` / 治疗吸附 → `trackDrop`）→ `release`。
+  - 确认前松手、确认后退回确认线以内松手：静默放回（不提示）。确认前牌在回收图标 6cm 内松手：弃牌（与原逻辑相同；追踪丢失时不弃、提示）。
+  - 松手那一帧手指已张开、捏合点会偏，所以松手帧不再更新落点，按上一帧出牌。
+  - 追踪丢失：沿用 `chooseDrop` 的 150ms 最后合法落点兜底；确认前丢失静默放回，确认后超时提示「手部追踪丢失」。
+  - 手在手牌带里时不出射线（`st.near`），手部射线只点按钮 / 面板（`rayPanels` 去掉手牌）。手柄：射线抓放原逻辑不变（`press` → `grabCard(st, idx)` → `dragRay` → `release`）。
+- **反馈**：选中牌沿牌面抬起 1.5cm（`liftSelectedCards`，τ 0.05s）+ 原有高亮描边；held 时牌上方「抬起出牌 / Lift to play」+ 抬起进度条（`liftHint`）；确认后手里的牌缩到 0.6、落点上方 3.5cm 悬半透明牌影（0.15s 从手里飞过去，`dropGhost`）、牌 → 牌影虚线弧（`dropLink`，24 段二次贝塞尔）；落点标记沿用部署法阵 / 范围圈，被吸附到附近空位（或治疗吸附到受伤单位）时变琥珀色 `0xffc95a`（`deploy-fx.js` 新 state `'snap'`，`scene.showPlacement` 新参数 `snapped`）；确认后退回确认线以内时标记、牌影、弧线都消失（看得出"松手会放回"）。
+- **移除（死代码）**：`DRAG_PITCH` 与 `HandRay.aim` 的上抬参数、`forwardLean` / `LEAN`、`DROP_MAX_HEIGHT`、`dragPoint` / `dragHand`、`GRAB_RADIUS`（`nearestWithin` 保留给强化面板近手点选，半径改为必传）、射线捏紧快照 `firm` / `DROP.FIRM_MS`、`press` 的 `cardsOnly`、`grab.viaRay` / `grab.from`。
+- **文案（中英）**：`firstDeployXRText`、`guideDesc_pinch`、`guideDesc_release`、`tXRHelp` 改成新手势；新增 `xrLiftToPlay`。
+
+### 常量（全部在 `js/xr-drop.js` 顶部，xr.js 顶部是反馈参数）
+| 名称 | 值 | 说明 |
+|-|-|-|
+| `HAND_BAND` | DEPTH 0.12 / HEIGHT 0.10 / SIDE 0.06 / HYSTERESIS 0.012 | 手牌带（米，相对手牌行中心，重力对齐的视图坐标） |
+| `LIFT` | CONFIRM 0.07 / CANCEL 0.06 | 确认 7cm；确认后退回到 6cm 以内算退回确认线 |
+| `DROP_GAIN` | GX 32 / GD 26 / UP 0.8 / EDGE 0.6 / TAU 0.06 | 格/米；往上位移 ×0.8 计入纵深；初始落点近边往里 0.6 格；平滑 τ 秒 |
+| `CARD_LIFT` / `CARD_LIFT_TAU` | 0.015 / 0.05 | 选中抬起 |
+| `HELD_AIM_SCALE` / `GHOST_FLY_S` / `GHOST_HOVER` / `ARC_SEGMENTS` | 0.6 / 0.15 / 0.035 / 24 | 确认后反馈 |
+
+### 与方案的偏差
+1. **退回确认线带 1cm 滞回**（取消线 6cm，确认线 7cm）：方案写"退回到确认线以内"，没有滞回时手停在 7cm 附近抖动会让标记闪烁、松手结果不确定。
+2. **抬起量的定义**：`liftAmount = hypot(max(0, 往前), max(0, 往上))`，往后 / 往下 / 左右不算；方案只说"合成位移"。
+3. **函数签名**：`liftProgress(h0, h)` 不带 `rowNormal`（直接在视图坐标里取 -z / +y）；`dropFromHand` 多了 `grab`（判断取消用抓起点）和 `yaw`（UI 换边角）。
+4. **"牌脱手飞到近边"** 落成：牌影从手里 0.15s 飞到落点，手里的牌缩到 0.6 继续跟手（弧线需要起点）。
+5. **手牌带的"前后 / 上下"** 用重力对齐的视图坐标（不是倾斜的手牌行平面坐标）。
+6. 落点标记的"吸附变色"只对确认后的手部出牌和手柄都生效（手柄也走 `snapPlacement`）；桌面版不传 `snapped`，外观不变。
+7. XR 教学的两张配图（`assets/ui/guide/pinch.webp`、`release.webp`）是旧手势的图，文案已改，图没改。
+
+### 验证
+- `npm test`：115 项全过（原 107 − forwardLean 1 + xr-drop 9）。
+- `PORT=8799 node tools/xr-harness.mjs`（无头 Chrome，直接逐帧喂手位）：15 项全 PASS，控制台 0 错误，桌面对局（非 XR）跑 8s 正常。关键数值：
+  - 手牌带外（上 / 下 12cm、贴身 / 伸进棋盘 14cm、右端外 7cm）都不选；左右扫 −25 → +25cm 依次选 0..4，切换点 −11.6 / −3.4 / 4.8 / 13cm（牌交界 ±4.1 / ±12.3cm，滞回约 0.7cm）。
+  - 抬起 4.5cm 松手：进度 0.64，放回、不出牌、无提示，显示「抬起出牌」、无牌影。
+  - 抬起 7.2cm 确认：落点 (−4.8, 7.0)（近边；手在最左牌 → x 夹到 −4.8）；右 5cm 前 5cm → (−3.65, 5.7)（Δx +1.6 / Δz −1.3，与 GX / GD 一致）；牌影在标记上方 3.5cm、弧线可见、手里牌 0.6；松手出牌坐标 = 标记坐标。
+  - 单位右 40cm / 左 30cm、前 45cm：(4.8, 2.4) / (−4.8, 2.4)（夹在部署区）；退回到抬起 3cm：cancel、标记消失、不出牌、无提示。
+  - 瞄到石头 (1.12, 2.35)：吸附到 (1.12, 3.0)，标记 state = `snap`。
+  - 法术前推 32cm：(2.62, −1.32)（预期 −1.32），在敌方半场出牌。
+  - 回收区弃牌、追踪丢失 <150ms 照出、买不起提示「法力不足」并退回、UI 换到侧边（sector 1）后落点在玩家这一侧近边且前推 / 左移与视图方向一致、手柄射线抓放出牌：全过。
+
+### 待眼镜实测
+- 连续 20 张：误选率（手牌带 12/10/6cm 是否太宽 / 太窄、1.2cm 滞回够不够）、7cm 确认是否太容易误触发或太费劲、GX 32 / GD 26 手感、落点平滑 τ 0.06s 是否发飘。
+- 松手瞬间捏合点漂移（真机张开手指时）是否让落点偏；追踪抖动下 150ms 兜底是否够。
+- 手在手牌带里不出射线后，首局引导按钮（手牌行上方）用射线点是否受影响。
+- 「抬起出牌」提示、牌影、弧线在光学透视下的可读性；琥珀色吸附标记和合法蓝色是否分得清。
+- UI 换到侧边时（站在棋盘侧面）的映射手感。
