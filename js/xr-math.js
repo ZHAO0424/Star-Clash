@@ -130,20 +130,6 @@ export function inPointingZone(local) {
     && forward >= POINT_ZONE.FORWARD[0] && forward <= POINT_ZONE.FORWARD[1];
 }
 
-// ── 近手拖牌的落点前倾(第四轮)──
-// 原来落点 = 捏合点竖直投影到台面,要放远处就得把手伸到远处正上方。改为沿"眼睛 → 手"的水平方向再前推
-//   offset = min(CAP, λ · h · d / (yEye − yHand))
-// h = 手离台面的高度,d = 眼到手的水平距离:相当于把"眼睛穿过指尖"的视线与台面的交点按 λ 混合进来;
-// 手贴着台面时 offset → 0(和原来一样),手越高越靠前偏得越多,封顶 CAP 米。返回世界坐标里的水平偏移 { x, z }
-export const LEAN = { K: 0.6, CAP: 0.12 };
-export function forwardLean(eye, hand, boardY) {
-  const h = hand.y - boardY, rise = eye.y - hand.y;
-  const dx = hand.x - eye.x, dz = hand.z - eye.z, d = Math.hypot(dx, dz);
-  if (h <= 0 || rise <= 1e-3 || d <= 1e-3) return { x: 0, z: 0 };
-  const offset = Math.min(LEAN.CAP, LEAN.K * h * d / rise);
-  return { x: dx / d * offset, z: dz / d * offset };
-}
-
 // ── 手牌行:抬进视野,但绝不挡棋盘(第七轮,批注 A)──
 // 硬约束:手牌行上沿必须在"眼睛 → 棋盘近边(含边框余量)"这条视线的下方,留 GAP 的角度缝,并尽量贴着这条线,
 // 一眼能同时看到牌和战场。手牌行放在眼睛和近边之间、离眼 DIST,平面法线正对眼睛。
@@ -172,11 +158,9 @@ export function cardRowPose(eye, edge, { top, bottom }) {
   };
 }
 
-// ── 磁吸抓牌(第七轮,批注 P1)──
-// 捏合点 GRAB_RADIUS 内离它最近的牌;悬停高亮用同一个函数同一个半径,亮了就一定抓得起。
-// centers:各牌中心(不可选的传 null);返回下标,没有返回 -1
-export const GRAB_RADIUS = 0.12;
-export function nearestWithin(centers, point, radius = GRAB_RADIUS) {
+// ── 近手点选:radius 内离点最近的中心(强化面板用;第七轮的 12cm 磁吸抓牌已被第十轮的手牌带取代)──
+// centers:各面板中心(不可选的传 null);返回下标,没有返回 -1
+export function nearestWithin(centers, point, radius) {
   let best = -1, bestD = radius;
   centers.forEach((c, i) => {
     if (!c) return;
@@ -188,14 +172,13 @@ export function nearestWithin(centers, point, radius = GRAB_RADIUS) {
 
 // ── 松手必出:松手时用哪个落点(第七轮,批注 P2)──
 // current:松手这一帧的落点 { hit, valid } 或 null(出界 / 追踪丢失);
-// firm:射线拖牌时"手指还捏紧(< PINCH_ON)"最后一帧的落点 { hit, valid, at }(张开手指时射线会跳);
 // lastValid:拖动中最后一次合法落点 { hit, at };now:毫秒。
-// 优先级:FIRM_MS 内的 firm(合法)→ 当前合法 → GRACE_MS 内的 lastValid → 不出牌。
-// 返回 { hit, from }:from = 'firm' | 'current' | 'recent' 时 hit 就是出牌点;
+// 优先级:当前合法 → GRACE_MS 内的 lastValid(追踪抖动兜底)→ 不出牌。
+// 返回 { hit, from }:from = 'current' | 'recent' 时 hit 就是出牌点;
 // 'blocked'(当前有落点但不合法,hit = 当前落点,由调用方提示原因)/ 'outside'(无落点,hit = null)
-export const DROP = { GRACE_MS: 150, FIRM_MS: 300 };
-export function chooseDrop({ current = null, firm = null, lastValid = null, now }) {
-  if (firm?.hit && firm.valid && now - firm.at <= DROP.FIRM_MS) return { hit: firm.hit, from: 'firm' };
+// (第七轮的"射线捏紧快照 firm"随第十轮手部射线不再拖牌一起删掉)
+export const DROP = { GRACE_MS: 150 };
+export function chooseDrop({ current = null, lastValid = null, now }) {
   if (current?.hit && current.valid) return { hit: current.hit, from: 'current' };
   if (lastValid?.hit && now - lastValid.at <= DROP.GRACE_MS) return { hit: lastValid.hit, from: 'recent' };
   return current?.hit ? { hit: current.hit, from: 'blocked' } : { hit: null, from: 'outside' };

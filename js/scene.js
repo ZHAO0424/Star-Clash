@@ -981,7 +981,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       const f = opts.card?.faction;
       const fx = deployFxRadius(opts.card);
       this.deployMarker.set({ x: opts.x, z: opts.z, radius: fx, faction: f, color: FACTIONS[f]?.color,
-        state: !opts.valid ? 'bad' : here ? 'rift' : 'ok' });
+        state: !opts.valid ? 'bad' : here ? 'rift' : opts.snapped ? 'snap' : 'ok' });
       // 射程另画一条细环(射程不比法阵大时不画)
       this.placeRing.visible = opts.radius > fx + 0.1;
       if (!this.placeRing.visible) return;
@@ -992,7 +992,7 @@ void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_Fr
       this.placeRing.material.opacity = 0.35;
       return;
     }
-    const color = opts.valid ? (here ? 0xd1a6ff : 0x5ac8ff) : 0xff4444;
+    const color = opts.valid ? (here ? 0xd1a6ff : opts.snapped ? 0xffc95a : 0x5ac8ff) : 0xff4444;   // snapped:吸附到了附近位置 / 受伤单位
     for (const m of [this.placeRing, this.placeArea, this.placeDot]) {
       m.position.x = opts.x; m.position.z = opts.z;
     }

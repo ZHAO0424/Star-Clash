@@ -176,18 +176,17 @@ test('cardRowPose:近边在脚下时上沿封顶 80°(约束让位),离眼不少
   near(p.dist, Math.max(0.3, Math.hypot(0.4, 0.05) - 0.03), 1e-9);
 });
 
-test('nearestWithin:12cm 内取最近的牌,超出取不到,null 跳过', async () => {
-  const { nearestWithin, GRAB_RADIUS } = await import('../js/xr-math.js');
-  assert.equal(GRAB_RADIUS, 0.12);
+test('nearestWithin:半径内取最近的中心,超出取不到,null 跳过', async () => {
+  const { nearestWithin } = await import('../js/xr-math.js');
   const centers = [v(-0.066, 0, 0), v(0, 0, 0), v(0.066, 0, 0)];
-  assert.equal(nearestWithin(centers, v(0.04, 0.03, 0)), 2);        // 捏在两张之间偏右
-  assert.equal(nearestWithin(centers, v(0, 0.11, 0)), 1);           // 牌上方 11cm:磁吸到
-  assert.equal(nearestWithin(centers, v(0, 0.125, 0)), -1);         // 12.5cm:谁都够不着
-  assert.equal(nearestWithin(centers, v(0.2, 0, 0)), -1);
-  assert.equal(nearestWithin([null, v(0, 0, 0)], v(-0.05, 0, 0)), 1);
+  assert.equal(nearestWithin(centers, v(0.04, 0.03, 0), 0.12), 2);  // 两个之间偏右
+  assert.equal(nearestWithin(centers, v(0, 0.11, 0), 0.12), 1);
+  assert.equal(nearestWithin(centers, v(0, 0.125, 0), 0.12), -1);   // 超出半径
+  assert.equal(nearestWithin(centers, v(0, 0.08, 0), 0.09), 1);     // 强化面板 9cm
+  assert.equal(nearestWithin([null, v(0, 0, 0)], v(-0.05, 0, 0), 0.12), 1);
 });
 
-test('chooseDrop:当前合法 / 150ms 内的旧合法点 / 超时退回 / 追踪丢失 / 射线捏紧快照', async () => {
+test('chooseDrop:当前合法 / 150ms 内的旧合法点 / 超时退回 / 追踪丢失', async () => {
   const { chooseDrop, DROP } = await import('../js/xr-math.js');
   const A = { id: 'a' }, B = { id: 'b' }, C = { id: 'c' };
   // 当前合法:用当前
@@ -203,19 +202,4 @@ test('chooseDrop:当前合法 / 150ms 内的旧合法点 / 超时退回 / 追踪
   // 追踪丢失 = 没有当前落点:150ms 内有合法点就出,否则退回
   assert.equal(chooseDrop({ current: null, lastValid: { hit: B, at: 880 }, now: 1000 }).from, 'recent');
   assert.equal(chooseDrop({ current: null, lastValid: { hit: B, at: 800 }, now: 1000 }).from, 'outside');
-  // 射线:张开手指前(捏紧时)的落点优先于跳过后的当前落点;快照太旧(一直松捏着拖)就用当前
-  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: true, at: 900 }, current: { hit: C, valid: true }, now: 1000 }), { hit: A, from: 'firm' });
-  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: true, at: 1000 - DROP.FIRM_MS - 1 }, current: { hit: C, valid: true }, now: 1000 }), { hit: C, from: 'current' });
-  assert.deepEqual(chooseDrop({ firm: { hit: A, valid: false, at: 990 }, current: { hit: C, valid: true }, now: 1000 }), { hit: C, from: 'current' });
-});
-
-test('forwardLean:贴台面不偏,越高越靠前偏,封顶 0.12m,方向沿眼→手', async () => {
-  const { forwardLean, LEAN } = await import('../js/xr-math.js');
-  const eye = { x: 0, y: 0, z: 0 }, boardY = -0.5;
-  const at = h => forwardLean(eye, { x: 0, y: boardY + h, z: -0.35 }, boardY);
-  assert.deepEqual(at(0), { x: 0, z: 0 });
-  assert.ok(at(0.05).z < 0 && at(0.1).z < at(0.05).z);          // 往前(−z)偏,越高越多
-  assert.ok(Math.abs(at(0.3).z) <= LEAN.CAP + 1e-9);
-  const side = forwardLean(eye, { x: 0.3, y: -0.4, z: -0.3 }, boardY);
-  assert.ok(Math.abs(side.x - side.z * -1) < 1e-9);               // 45° 方向:x 与 −z 等量
 });

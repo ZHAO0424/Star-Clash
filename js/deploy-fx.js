@@ -189,7 +189,7 @@ export function deployTextures() {
 
 const LOCK_H = 3;            // 锁定光束从落点上方多高垂下(格)
 const PULSE_PERIOD = 0.8;    // 收缩脉冲周期(秒)
-const BAD = 0xff4444, RIFT = 0xd1a6ff, WHITE = new THREE.Color(0xffffff);
+const BAD = 0xff4444, RIFT = 0xd1a6ff, SNAP = 0xffc95a, WHITE = new THREE.Color(0xffffff);
 
 function groundPlane(map, order, segs = 16) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, segs, segs), new THREE.MeshBasicMaterial({ map, transparent: true,
@@ -228,7 +228,7 @@ export class DeployMarker {
     this.at = { x: NaN, z: NaN, r: 0 };   // 上次贴地时的位置 / 半径
   }
 
-  // x, z 落点;radius 部署半径;faction 势力 id;color 势力色;state:'ok' 合法 / 'rift' 裂隙内 / 'bad' 不合法
+  // x, z 落点;radius 部署半径;faction 势力 id;color 势力色;state:'ok' 合法 / 'snap' 合法且被吸附到附近空位 / 'rift' 裂隙内 / 'bad' 不合法
   set({ x, z, radius, faction, color = 0x5ac8ff, state }) {
     this.group.visible = true;
     this.state = state;
@@ -237,7 +237,7 @@ export class DeployMarker {
       this.runes.material.map = T.runes[f].clone();
       this.runes.material.needsUpdate = true;
     }
-    const col = state === 'bad' ? BAD : state === 'rift' ? RIFT : null;
+    const col = state === 'bad' ? BAD : state === 'rift' ? RIFT : state === 'snap' ? SNAP : null;
     this.base.material.color.setHex(col ?? 0xbfefff);
     this.runes.material.color.setHex(col ?? color);
     this.cross.material.color.setHex(col ?? 0xffffff);
