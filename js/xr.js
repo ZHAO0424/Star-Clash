@@ -18,7 +18,7 @@ import { XR_POSE_INTERVAL, XR_POSE_TIMEOUT, xrPartInSeat } from './net.js';
 import { XROpponentAvatar } from './xr-avatar.js';
 import { createHandVisual } from './xr-hand-visual.js';
 import { autoTargets, healSnap } from './heal-snap.js';
-import { HandRay } from './xr-hand-ray.js';
+import { HandRay, DRAG_PITCH } from './xr-hand-ray.js';
 import { HandArbiter } from './xr-pointer.js';
 import { PalmMenu } from './xr-palm-menu.js';
 import { BoardRig } from './xr-board-rig.js';
@@ -1118,7 +1118,7 @@ export class XRControls {
     st.tracked = true;
     st.pinchDist = a.distanceTo(b);
     st.pinchPoint.copy(a.add(b).multiplyScalar(0.5));
-    st.ray = st.handRay.aim(st.ctrl, dt);
+    st.ray = st.handRay.aim(st.ctrl, dt, st.grab?.viaRay ? DRAG_PITCH : 0);   // 射线拖牌时落点往前推
   }
 
   // ── 手部射线 ──

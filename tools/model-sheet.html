@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- 模型检查页(开发用,不对外):按 ?ids=a,b,c&clip=attack&t=0.5 把单位模型排成一排,播到指定动作的指定进度截图。
+     武器:按 models.json 挂上;?ov={"id":[spec...]} 覆盖某单位的武器;spec 没写 rot 时按 aim 自动摆正(在 idle 首帧),结果写进页面标题
+     用法:Chrome 以 --allow-file-access-from-files 打开 file:///.../tools/model-sheet.html?ids=... -->
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#2a2f45;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.min.js","three/addons/":"../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { attachWeapon, applySpec, autoAim } from '../js/weapons.js';
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids') || '').split(',').filter(Boolean);
+const clipName = q.get('clip') || 'idle', t = +(q.get('t') ?? 0.5), yaw = +(q.get('yaw') ?? 0);
+const W = 300 * ids.length, H = 360;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2));
+const key = new THREE.DirectionalLight(0xffffff, 2); key.position.set(2, 4, 3); scene.add(key);
+const cam = new THREE.OrthographicCamera(-ids.length * 0.75, ids.length * 0.75, 0.9, -0.9, 0.1, 50);
+cam.position.set(0, 0.55, 6); cam.lookAt(0, 0.55, 0);
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const meta = await (await fetch('../assets/models/models.json')).json();
+const ov = JSON.parse(q.get('ov') || '{}');
+const wCache = {};
+const weaponScene = id => (wCache[id] ??= loader.loadAsync(`../assets/models/weapons/${id}.glb`).then(g => g.scene).catch(() => null));
+const report = [];
+await Promise.all(ids.map(async (id, i) => {
+  const g = await loader.loadAsync(`../assets/models/${meta[id]?.file || id + '.glb'}`);
+  const root = g.scene;
+  root.rotation.y = -Math.PI / 2 + yaw;   // Tripo 正面朝 +X,转到朝镜头
+  scene.add(root);
+  const clip = g.animations.find(a => a.name === clipName) || g.animations.find(a => /attack|slash/.test(a.name)) || g.animations[0];
+  // 武器:和游戏一样用"未摆姿态时的身高"做尺度;没给 rot 的在 idle 首帧按 aim 自动摆正
+  root.updateMatrixWorld(true);
+  const charH = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y;
+  const idle = g.animations.find(a => a.name === 'idle');
+  const mix = new THREE.AnimationMixer(root);
+  if (idle) { mix.clipAction(idle).play(); mix.setTime(0); root.updateMatrixWorld(true); }
+  for (const spec of ov[id] || meta[id]?.weapons || []) {
+    const src = spec.fx ? null : await weaponScene(spec.id);
+    const mount = attachWeapon(root, charH, spec, src);
+    if (mount && !spec.rot && spec.aim) {
+      const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()));   // Tripo 正面 = 本地 +X
+      spec.rot = autoAim(mount, fwd, spec.aim, spec.flip);
+      applySpec(mount, spec);
+      report.push(`${id}.${spec.hand}.rot=${JSON.stringify(spec.rot)}`);
+    }
+  }
+  mix.stopAllAction();
+  if (clip) { mix.clipAction(clip).play(); mix.setTime(clip.duration * t); }
+  // 先摆好动作姿态再量包围盒(蒙皮模型要用 precise=true 才按骨骼变形后的顶点算)
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
+  const k = 1.15 / Math.max(size.y, size.x, size.z);
+  root.scale.multiplyScalar(k);
+  const c = box.getCenter(new THREE.Vector3()).multiplyScalar(k);
+  root.position.set((i - (ids.length - 1) / 2) * 1.5 - c.x, -box.min.y * k, -c.z);
+  report.push(`${id}:${clip?.name}`);
+}));
+renderer.render(scene, cam);
+document.title = 'READY ' + report.join(' ');
+</script>

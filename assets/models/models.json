@@ -134,7 +134,45 @@
    "die"
   ],
   "yaw": 0,
-  "source": "meshy"
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "walker_fist",
+    "fx": "orb",
+    "color": 16742954,
+    "hand": "R",
+    "len": 0.27,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "aim": "up"
+   },
+   {
+    "id": "walker_fist",
+    "fx": "orb",
+    "color": 16742954,
+    "hand": "L",
+    "len": 0.27,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "aim": "up"
+   }
+  ]
  },
  "swarm_larva": {
   "file": "swarm_larva.glb",
@@ -161,7 +199,45 @@
    "die"
   ],
   "yaw": 0,
-  "source": "meshy"
+  "source": "meshy",
+  "weapons": [
+   {
+    "id": "arc_orb",
+    "fx": "orb",
+    "color": 4188415,
+    "hand": "R",
+    "len": 0.26,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "aim": "up"
+   },
+   {
+    "id": "arc_orb",
+    "fx": "orb",
+    "color": 4188415,
+    "hand": "L",
+    "len": 0.26,
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "aim": "up"
+   }
+  ]
  },
  "swarm_mother": {
   "file": "swarm_mother.glb",
