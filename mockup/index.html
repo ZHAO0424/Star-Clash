@@ -351,6 +351,31 @@ body.theme-c {   /* C 锻铜:炭灰金属 + 青铜描边,更接近传统 RTS 的
 .card { background: radial-gradient(circle at 50% 36%, var(--s1), var(--s3) 58%) !important; }
 .detail .art-wrap { border-radius: 12px; background: radial-gradient(circle at 50% 45%, var(--s1), var(--s3) 70%); }
 .dslot { background: radial-gradient(circle at 50% 45%, var(--s1), var(--s3) 70%); }
+
+/* ═════ A2 墨蓝 · 金 · 青(纯审美调整,现为默认;?theme=a 看原 A)═════
+   只留两个强调色:金 = 主操作 / 选中,青 = 次操作(联机、加入、3D 模型);其余全部中性墨蓝
+   面板半透明磨砂,透出背后的主视觉,不再是一整块平涂的蓝 */
+body.theme-d {
+  --s1: #2b3163; --s2: #181c3d; --s3: #0c0f26; --plum-line: #05071a; --rim: #e8c070;
+  --label: #f5d48a; --ink-soft: #dfe3f5; --ink-title: #fff8ea; --ink-dim: #9aa2c8; --tex: none;
+  --tint-a: #070a1eb8; --tint-b: #070a1ee6; --home-tint: #060819;
+  --teal-top: #6ff2e0; --teal-mid: #1fb5bf; --teal-bot: #0b6d84; --teal-ink: #04323d;
+}
+body.theme-d .frame {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--s1) 78%, transparent), color-mix(in srgb, var(--s2) 86%, transparent));
+  backdrop-filter: blur(10px) saturate(1.15); -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rim) 90%, transparent), inset 0 0 0 1px #ffffff14, 0 4px 0 var(--plum-line), 0 22px 40px #000b;
+}
+body.theme-d .g-blue {
+  background: linear-gradient(180deg, var(--teal-top), var(--teal-mid) 52%, var(--teal-bot));
+  text-shadow: 2px 0 0 var(--teal-ink), -2px 0 0 var(--teal-ink), 0 2px 0 var(--teal-ink), 0 -2px 0 var(--teal-ink), 0 4px 0 var(--teal-ink);
+}
+body.theme-d .g-blue.g-sm { text-shadow: 1.5px 0 0 var(--teal-ink), -1.5px 0 0 var(--teal-ink), 0 1.5px 0 var(--teal-ink), 0 -1.5px 0 var(--teal-ink), 0 3px 0 var(--teal-ink); }
+body.theme-d .g-xr { color: inherit; background: linear-gradient(180deg, color-mix(in srgb, var(--s1) 100%, white 12%), var(--s2)); }
+body.theme-d .g-plum { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--rim) 60%, transparent), inset 0 2px 0 #ffffff26, 0 4px 0 var(--plum-line), 0 10px 16px #0008; }
+body.theme-d .choice, body.theme-d .card { border-color: #05071a; }
+body.theme-d .choice.sel, body.theme-d .card.in { border-color: #ffd27a; }
+body.theme-d .cost { background: radial-gradient(circle at 35% 30%, #8fe9ff, #2a7fd6); }
 </style>
 </head>
 <body>
@@ -580,7 +605,9 @@ document.querySelectorAll('#s-settings .seg').forEach(seg => seg.addEventListene
 }));
 renderSetup(); renderCodex();
 const q = new URLSearchParams(location.search);
-if (q.get('theme')) document.body.classList.add('theme-' + q.get('theme')); if (q.get('m')) { opp = q.get('m'); renderSetup(); } if (q.get('s')) go(q.get('s'));
+// 默认 A2(theme-d)
+document.body.classList.add('theme-' + (q.get('theme') || 'd'));
+if (q.get('m')) { opp = q.get('m'); renderSetup(); } if (q.get('s')) go(q.get('s'));
 </script>
 </body>
 </html>
