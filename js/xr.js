@@ -650,7 +650,7 @@ export class XRControls {
       this.settingsOpen = !this.settingsOpen;
       this.settingsSignature = '';
     } else if (id === 'exitxr') this.cb.onBattleAction('exitxr');
-    } else if (id === 'leave' && game) this.requestLeave(game);
+    else if (id === 'leave' && game) this.requestLeave(game);
   }
 
   // 退出对局(手心菜单):结算阶段直接回大厅;其它阶段两段确认——第一次点按钮变红,3 秒内再点才离开(联机离开 = 判负)
